@@ -16,7 +16,8 @@ type InkButtonVariant = ComponentProps<typeof InkButton>['variant'];
 export interface MapNodeDetailAction {
   key: string;
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
+  href?: string;
   variant?: InkButtonVariant;
 }
 
@@ -42,7 +43,11 @@ export function MapNodeDetail({
   const dungeonConfig = resolveDungeonMapConfig(node);
 
   return (
-    <div className="bg-background absolute right-4 bottom-16 left-4 z-40 md:right-8 md:left-auto md:w-96">
+    <div
+      className="bg-background pointer-events-auto absolute right-4 bottom-16 left-4 z-40 touch-manipulation md:right-8 md:left-auto md:w-96"
+      onPointerDown={(event) => event.stopPropagation()}
+      onTouchStart={(event) => event.stopPropagation()}
+    >
       <div className="p-3">
         <div className="mb-2 flex items-start justify-between">
           <h2 className="text-xl font-bold">{node.name}</h2>
@@ -102,6 +107,7 @@ export function MapNodeDetail({
                 key={action.key}
                 variant={action.variant || 'secondary'}
                 className="w-full justify-center"
+                href={action.href}
                 onClick={action.onClick}
               >
                 {action.label}

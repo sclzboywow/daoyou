@@ -22,23 +22,27 @@ export function buildNodeActions(
 
   if (intent === 'dungeon') {
     if (ctx.isMainNode) return [];
+    const href = `/game/dungeon?nodeId=${encodeURIComponent(ctx.selectedNodeId)}`;
     return [
       {
         key: 'enter-dungeon',
         label: '前往历练',
         variant: 'primary',
-        onClick: () => navigate(`/game/dungeon?nodeId=${ctx.selectedNodeId}`),
+        href,
+        onClick: () => navigate(href),
       },
     ];
   }
 
   const actions: MapNodeDetailAction[] = [];
   if (!ctx.isMainNode) {
+    const href = `/game/dungeon?nodeId=${encodeURIComponent(ctx.selectedNodeId)}`;
     actions.push({
       key: 'enter-dungeon',
       label: '前往历练',
       variant: 'secondary',
-      onClick: () => navigate(`/game/dungeon?nodeId=${ctx.selectedNodeId}`),
+      href,
+      onClick: () => navigate(href),
     });
   }
   if (ctx.isMainNode && ctx.marketEnabled) {
