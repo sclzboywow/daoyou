@@ -39,6 +39,7 @@ export function GameMailBroadcastForm() {
   const [createdTo, setCreatedTo] = useState('');
   const [realmMin, setRealmMin] = useState('');
   const [realmMax, setRealmMax] = useState('');
+  const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GameMailBroadcastResult | null>(null);
   const [templates, setTemplates] = useState<GameMailTemplateOption[]>([]);
@@ -67,6 +68,10 @@ export function GameMailBroadcastForm() {
   const submit = async (dryRun: boolean) => {
     if (!templateId && (!title.trim() || !content.trim())) {
       pushToast({ message: '请填写标题和内容，或选择模板', tone: 'warning' });
+      return;
+    }
+    if (!dryRun && reason.trim().length < 3) {
+      pushToast({ message: '请填写本次发送原因', tone: 'warning' });
       return;
     }
 
@@ -110,6 +115,8 @@ export function GameMailBroadcastForm() {
             realmMax: realmMax || undefined,
           },
           dryRun,
+          reason: dryRun ? undefined : reason.trim(),
+          idempotencyKey: dryRun ? undefined : crypto.randomUUID(),
         }),
       });
 
@@ -120,7 +127,7 @@ export function GameMailBroadcastForm() {
 
       setResult(data);
       pushToast({
-        message: dryRun ? '预览完成' : '游戏邮件同步群发完成',
+        message: dryRun ? '预览完成' : '游戏邮件已加入批处理队列',
         tone: 'success',
       });
     } catch (error) {
@@ -214,6 +221,14 @@ export function GameMailBroadcastForm() {
         />
       </div>
 
+      <InkInput
+        label="操作原因（正式发送必填）"
+        value={reason}
+        onChange={setReason}
+        placeholder="例如：移动端探索异常补偿"
+        disabled={loading}
+      />
+
       <div className="grid gap-3 md:grid-cols-2">
         <InkSelect
           label="境界下限"
@@ -256,7 +271,7 @@ export function GameMailBroadcastForm() {
           onClick={() => submit(false)}
           disabled={loading}
         >
-          {loading ? '执行中...' : '确认同步群发游戏邮件'}
+          {loading ? '提交中...' : '提交游戏邮件任务'}
         </InkButton>
       </div>
 

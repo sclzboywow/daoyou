@@ -71,6 +71,31 @@ export const adminNavItems: AdminNavItem[] = [
     href: '/admin/online-users',
   },
   {
+    title: '运营数据',
+    description: '查看新手漏斗、经济与材料供给',
+    href: '/admin/operations',
+  },
+  {
+    title: '活动配置中心',
+    description: '活动开关、时间窗、奖励与投放',
+    href: '/admin/activities',
+  },
+  {
+    title: '玩家检索与补发',
+    description: '查找玩家、核对状态并定向补发',
+    href: '/admin/players',
+  },
+  {
+    title: '批处理任务',
+    description: '追踪群发、补发与定时任务',
+    href: '/admin/jobs',
+  },
+  {
+    title: '操作审计',
+    description: '后台变更记录与责任追溯',
+    href: '/admin/audit',
+  },
+  {
     title: '对战模拟器',
     description: '验证角色对战与数值样本',
     href: '/admin/battle-simulator',

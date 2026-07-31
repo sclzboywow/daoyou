@@ -1,6 +1,7 @@
 import type { AppEnv } from '@server/lib/hono/types';
 import { getRedisHealthStatus } from '@server/lib/redis';
 import accountRouter from '@server/routes/api/account.router';
+import activitiesRouter from '@server/routes/api/activities.router';
 import adminRouter from '@server/routes/api/admin';
 import alchemyFormulasRouter from '@server/routes/api/alchemy-formulas.router';
 import auctionRouter from '@server/routes/api/auction.router';
@@ -57,6 +58,7 @@ apiRouter.get('/health-check', async (c) => {
 
 apiRouter.route('/player', playerRouter);
 apiRouter.route('/account', accountRouter);
+apiRouter.route('/activities', activitiesRouter);
 apiRouter.route('/admin', adminRouter);
 apiRouter.route('/alchemy', alchemyFormulasRouter);
 apiRouter.route('/auction', auctionRouter);

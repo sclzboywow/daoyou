@@ -134,6 +134,13 @@
       "when": 1785317825510,
       "tag": "0018_odd_warbound",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785480683296,
+      "tag": "0019_sturdy_jazinda",
+      "breakpoints": true
     }
   ]
 }

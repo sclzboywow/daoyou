@@ -11,11 +11,15 @@ export const MQ_KEYS = {
   queues: {
     /** 宗门设施建设进度异步结算队列。 */
     sectFacilityConstruction: 'sect-facility-construction',
+    /** 后台群发、补发与活动投递队列。 */
+    adminBatch: 'admin-batch',
   },
   /** 作业名称：用于区分同一队列中的不同消息处理类型。 */
   jobs: {
     /** 将一条已完成玩家结算的建设事件应用到宗门设施。 */
     applySectFacilityConstruction: 'apply-construction',
+    /** 执行一条持久化后台批处理任务。 */
+    processAdminBatch: 'process-admin-batch',
   },
   /** 本地事务消息类型：作为数据库消息与 MQ 路由之间的稳定标识。 */
   messages: {

@@ -928,6 +928,7 @@ export const mails = pgTable(
     content: text('content').notNull(),
     type: varchar('type', { length: 20 }).notNull().default('system'), // system | reward
     attachments: jsonb('attachments'), // Array of { type, id?, name, quantity, data? }
+    deduplicationKey: varchar('deduplication_key', { length: 180 }),
     isRead: boolean('is_read').notNull().default(false),
     isClaimed: boolean('is_claimed').notNull().default(false),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -942,6 +943,9 @@ export const mails = pgTable(
       table.isRead,
       table.createdAt,
     ),
+    uniqueIndex('mails_deduplication_key_unique')
+      .on(table.deduplicationKey)
+      .where(sql`${table.deduplicationKey} is not null`),
   ],
 );
 
@@ -1059,6 +1063,197 @@ export const appSettings = pgTable('wanjiedaoyou_app_settings', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   updatedBy: uuid('updated_by'),
 });
+
+export const adminAuditLogs = pgTable(
+  'wanjiedaoyou_admin_audit_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    actorUserId: uuid('actor_user_id').notNull(),
+    actorEmail: varchar('actor_email', { length: 320 }).notNull(),
+    action: varchar('action', { length: 160 }).notNull(),
+    targetType: varchar('target_type', { length: 80 }),
+    targetId: varchar('target_id', { length: 180 }),
+    reason: text('reason'),
+    requestId: varchar('request_id', { length: 128 }),
+    ipAddress: varchar('ip_address', { length: 128 }),
+    status: varchar('status', { length: 20 }).notNull(),
+    requestSummary: jsonb('request_summary'),
+    responseSummary: jsonb('response_summary'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('admin_audit_actor_created_idx').on(
+      table.actorUserId,
+      table.createdAt,
+    ),
+    index('admin_audit_action_created_idx').on(table.action, table.createdAt),
+    index('admin_audit_target_created_idx').on(
+      table.targetType,
+      table.targetId,
+      table.createdAt,
+    ),
+    index('admin_audit_status_created_idx').on(table.status, table.createdAt),
+  ],
+);
+
+export const adminBatchJobs = pgTable(
+  'wanjiedaoyou_admin_batch_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    jobType: varchar('job_type', { length: 64 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('queued'),
+    idempotencyKey: varchar('idempotency_key', { length: 180 }).notNull(),
+    requestedBy: uuid('requested_by').notNull(),
+    requestedByEmail: varchar('requested_by_email', { length: 320 }).notNull(),
+    reason: text('reason'),
+    payload: jsonb('payload').notNull(),
+    totalCount: integer('total_count').notNull().default(0),
+    succeededCount: integer('succeeded_count').notNull().default(0),
+    failedCount: integer('failed_count').notNull().default(0),
+    skippedCount: integer('skipped_count').notNull().default(0),
+    errorSummary: text('error_summary'),
+    startedAt: timestamp('started_at'),
+    finishedAt: timestamp('finished_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('admin_batch_jobs_idempotency_unique').on(
+      table.idempotencyKey,
+    ),
+    index('admin_batch_jobs_status_created_idx').on(
+      table.status,
+      table.createdAt,
+    ),
+    index('admin_batch_jobs_type_created_idx').on(
+      table.jobType,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const adminBatchJobItems = pgTable(
+  'wanjiedaoyou_admin_batch_job_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    jobId: uuid('job_id')
+      .references(() => adminBatchJobs.id, { onDelete: 'cascade' })
+      .notNull(),
+    targetKey: varchar('target_key', { length: 320 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    error: text('error'),
+    result: jsonb('result'),
+    startedAt: timestamp('started_at'),
+    finishedAt: timestamp('finished_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('admin_batch_job_items_target_unique').on(
+      table.jobId,
+      table.targetKey,
+    ),
+    index('admin_batch_job_items_status_idx').on(table.jobId, table.status),
+  ],
+);
+
+export const systemJobRuns = pgTable(
+  'wanjiedaoyou_system_job_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    jobName: varchar('job_name', { length: 96 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('running'),
+    processedCount: integer('processed_count').notNull().default(0),
+    skipped: boolean('skipped').notNull().default(false),
+    reason: text('reason'),
+    error: text('error'),
+    startedAt: timestamp('started_at').defaultNow().notNull(),
+    finishedAt: timestamp('finished_at'),
+    durationMs: integer('duration_ms'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('system_job_runs_name_created_idx').on(
+      table.jobName,
+      table.createdAt,
+    ),
+    index('system_job_runs_status_created_idx').on(
+      table.status,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const adminActivities = pgTable(
+  'wanjiedaoyou_admin_activities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: varchar('code', { length: 80 }).notNull(),
+    name: varchar('name', { length: 160 }).notNull(),
+    activityType: varchar('activity_type', { length: 40 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('draft'),
+    startsAt: timestamp('starts_at').notNull(),
+    endsAt: timestamp('ends_at'),
+    audience: jsonb('audience').notNull().default({}),
+    config: jsonb('config').notNull(),
+    version: integer('version').notNull().default(1),
+    publishedAt: timestamp('published_at'),
+    createdBy: uuid('created_by').notNull(),
+    updatedBy: uuid('updated_by').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('admin_activities_code_unique').on(table.code),
+    index('admin_activities_status_window_idx').on(
+      table.status,
+      table.startsAt,
+      table.endsAt,
+    ),
+    index('admin_activities_type_created_idx').on(
+      table.activityType,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const activityClaims = pgTable(
+  'wanjiedaoyou_activity_claims',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    activityId: uuid('activity_id')
+      .references(() => adminActivities.id, { onDelete: 'cascade' })
+      .notNull(),
+    cultivatorId: uuid('cultivator_id')
+      .references(() => cultivators.id, { onDelete: 'cascade' })
+      .notNull(),
+    mailId: uuid('mail_id').references(() => mails.id, {
+      onDelete: 'set null',
+    }),
+    claimedAt: timestamp('claimed_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('activity_claims_activity_cultivator_unique').on(
+      table.activityId,
+      table.cultivatorId,
+    ),
+    index('activity_claims_cultivator_created_idx').on(
+      table.cultivatorId,
+      table.claimedAt,
+    ),
+  ],
+);
 
 export const itemLibrary = pgTable(
   'wanjiedaoyou_item_library',
