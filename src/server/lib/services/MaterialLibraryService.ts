@@ -88,6 +88,52 @@ function normalizePositiveCount(countValue: number) {
   return Math.max(0, Math.floor(Number.isFinite(countValue) ? countValue : 0));
 }
 
+const CORE_MATERIAL_DAILY_TARGET: Record<Quality, number> = {
+  凡品: 5,
+  灵品: 5,
+  玄品: 8,
+  真品: 8,
+  地品: 8,
+  天品: 8,
+  仙品: 8,
+  神品: 8,
+};
+
+const TCDB_DAILY_TARGET: Record<Quality, number> = {
+  凡品: 3,
+  灵品: 3,
+  玄品: 8,
+  真品: 8,
+  地品: 8,
+  天品: 8,
+  仙品: 8,
+  神品: 8,
+};
+
+const MANUAL_DAILY_TARGET: Record<Quality, number> = {
+  凡品: 2,
+  灵品: 2,
+  玄品: 8,
+  真品: 8,
+  地品: 8,
+  天品: 8,
+  仙品: 8,
+  神品: 8,
+};
+
+export const DAILY_MATERIAL_LIBRARY_TARGETS: Record<
+  MaterialType,
+  Record<Quality, number>
+> = {
+  herb: CORE_MATERIAL_DAILY_TARGET,
+  ore: CORE_MATERIAL_DAILY_TARGET,
+  monster: CORE_MATERIAL_DAILY_TARGET,
+  aux: CORE_MATERIAL_DAILY_TARGET,
+  tcdb: TCDB_DAILY_TARGET,
+  gongfa_manual: MANUAL_DAILY_TARGET,
+  skill_manual: MANUAL_DAILY_TARGET,
+};
+
 const DAILY_MARKET_QUALITY_WEIGHTS: Array<{
   quality: Quality;
   weight: number;

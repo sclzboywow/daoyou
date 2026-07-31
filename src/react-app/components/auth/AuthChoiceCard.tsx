@@ -27,13 +27,15 @@ export function AuthChoiceCard({
 
   const content = (
     <div className="flex items-start justify-between gap-3">
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="text-ink text-xl">{title}</p>
         <p className="text-ink-secondary mt-1 text-sm leading-6">
           {description}
         </p>
       </div>
-      <span className="text-crimson/80 text-sm">[进入]</span>
+      <span className="text-crimson/80 shrink-0 whitespace-nowrap text-sm">
+        [进入]
+      </span>
     </div>
   );
 
