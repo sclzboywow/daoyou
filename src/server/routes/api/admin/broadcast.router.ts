@@ -3,16 +3,16 @@ import {
   resolveEmailRecipients,
   resolveGameMailRecipients,
 } from '@server/lib/admin/recipient-resolver';
-import { sendViaSmtp } from '@server/lib/admin/smtp';
 import {
   normalizeTemplatePayload,
   renderTemplate,
 } from '@server/lib/admin/template';
 import { getExecutor } from '@server/lib/drizzle/db';
-import { adminMessageTemplates, mails } from '@server/lib/drizzle/schema';
+import { adminMessageTemplates } from '@server/lib/drizzle/schema';
 import { requireAdmin } from '@server/lib/hono/middleware';
 import type { AppEnv } from '@server/lib/hono/types';
 import { findPublishedItemLibraryForSelections } from '@server/lib/repositories/itemLibraryRepository';
+import { createAdminBatchJob } from '@server/lib/services/AdminBatchJobService';
 import type { MailAttachment } from '@server/lib/services/MailService';
 import { REALM_VALUES } from '@shared/types/constants';
 import {
@@ -43,6 +43,8 @@ const EmailBroadcastSchema = z
       })
       .default({}),
     dryRun: z.boolean().optional().default(false),
+    idempotencyKey: z.string().trim().min(8).max(180).optional(),
+    reason: z.string().trim().min(3).max(2_000).optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.templateId && (!value.subject || !value.content)) {
@@ -50,6 +52,20 @@ const EmailBroadcastSchema = z
         code: 'custom',
         path: ['subject'],
         message: '未使用模板时，subject/content 必填',
+      });
+    }
+    if (!value.dryRun && !value.idempotencyKey) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['idempotencyKey'],
+        message: '正式发送必须提供幂等键',
+      });
+    }
+    if (!value.dryRun && !value.reason) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['reason'],
+        message: '正式发送必须填写操作原因',
       });
     }
   });
@@ -73,6 +89,8 @@ const GameMailBroadcastSchema = z
       })
       .default({}),
     dryRun: z.boolean().optional().default(false),
+    idempotencyKey: z.string().trim().min(8).max(180).optional(),
+    reason: z.string().trim().min(3).max(2_000).optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.templateId && (!value.title || !value.content)) {
@@ -80,6 +98,20 @@ const GameMailBroadcastSchema = z
         code: 'custom',
         path: ['title'],
         message: '未使用模板时，title/content 必填',
+      });
+    }
+    if (!value.dryRun && !value.idempotencyKey) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['idempotencyKey'],
+        message: '正式发送必须提供幂等键',
+      });
+    }
+    if (!value.dryRun && !value.reason) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['reason'],
+        message: '正式发送必须填写操作原因',
       });
     }
   });
@@ -138,42 +170,26 @@ router.post('/email', requireAdmin(), async (c) => {
     finalContent = renderTemplate(template.contentTemplate, mergedPayload);
   }
 
-  const recipients = resolvedRecipients.recipients.map(
-    (item) => item.recipientKey,
-  );
-  const batchSize = Number(process.env.ADMIN_BROADCAST_BATCH_SIZE ?? 20);
-
-  let sent = 0;
-  let failed = 0;
-  const errors: string[] = [];
-
-  for (let i = 0; i < recipients.length; i += batchSize) {
-    const batch = recipients.slice(i, i + batchSize);
-    const results = await Promise.allSettled(
-      batch.map((email) => sendViaSmtp(email, finalSubject, finalContent)),
-    );
-
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        sent += 1;
-      } else {
-        failed += 1;
-        if (errors.length < 20) {
-          errors.push(
-            `${batch[index]}: ${result.reason?.message ?? 'unknown'}`,
-          );
-        }
-      }
-    });
-  }
-
-  return c.json({
-    success: failed === 0,
-    totalRecipients: recipients.length,
-    sent,
-    failed,
-    errors,
+  const user = c.get('user')!;
+  const result = await createAdminBatchJob({
+    jobType: 'email_broadcast',
+    idempotencyKey: parsed.data.idempotencyKey!,
+    requestedBy: user.id,
+    requestedByEmail: user.email,
+    reason: parsed.data.reason!,
+    payload: {
+      kind: 'email',
+      subject: finalSubject,
+      content: finalContent,
+    },
+    targetKeys: resolvedRecipients.recipients.map(
+      (item) => item.recipientKey,
+    ),
   });
+  return c.json(
+    { success: true, queued: true, created: result.created, job: result.job },
+    202,
+  );
 });
 
 router.post('/game-mail', requireAdmin(), async (c) => {
@@ -244,7 +260,7 @@ router.post('/game-mail', requireAdmin(), async (c) => {
     }
   }
 
-  let attachments: MailAttachment[] = [];
+  let attachments: MailAttachment[];
 
   try {
     const itemLibraryEntries = await findPublishedItemLibraryForSelections(
@@ -268,28 +284,33 @@ router.post('/game-mail', requireAdmin(), async (c) => {
     );
   }
 
-  const type = attachments.length > 0 ? 'reward' : 'system';
-  const rows = resolvedRecipients.recipients.map((recipient) => ({
-    cultivatorId: recipient.recipientKey,
-    title: finalTitle,
-    content: finalContent,
-    type,
-    attachments,
-    isRead: false,
-    isClaimed: false,
-  }));
-
-  const batchSize = Number(process.env.ADMIN_BROADCAST_BATCH_SIZE ?? 500);
-  for (let i = 0; i < rows.length; i += batchSize) {
-    await q.insert(mails).values(rows.slice(i, i + batchSize));
-  }
-
-  return c.json({
-    success: true,
-    totalRecipients: rows.length,
-    mailType: type,
-    rewardSummary: summarizeMailAttachments(attachments),
+  const user = c.get('user')!;
+  const result = await createAdminBatchJob({
+    jobType: 'game_mail_broadcast',
+    idempotencyKey: parsed.data.idempotencyKey!,
+    requestedBy: user.id,
+    requestedByEmail: user.email,
+    reason: parsed.data.reason!,
+    payload: {
+      kind: 'game_mail',
+      title: finalTitle,
+      content: finalContent,
+      attachments,
+    },
+    targetKeys: resolvedRecipients.recipients.map(
+      (recipient) => recipient.recipientKey,
+    ),
   });
+  return c.json(
+    {
+      success: true,
+      queued: true,
+      created: result.created,
+      job: result.job,
+      rewardSummary: summarizeMailAttachments(attachments),
+    },
+    202,
+  );
 });
 
 export default router;

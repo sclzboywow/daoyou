@@ -1,5 +1,6 @@
 import {
   runAuctionExpireJob,
+  runActivityDispatchJob,
   runBetBattleExpireJob,
   runExpiredDataCleanupJob,
   runMarketRefreshCronJob,
@@ -59,6 +60,10 @@ async function handleCronRequest(
 }
 
 const router = new Hono<AppEnv>();
+
+router.get('/activity-dispatch', (c) =>
+  handleCronRequest(c.req.raw, runActivityDispatchJob),
+);
 
 router.get('/auction-expire', (c) =>
   handleCronRequest(c.req.raw, runAuctionExpireJob),

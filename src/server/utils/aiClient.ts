@@ -1,9 +1,12 @@
-import { createDeepSeek, deepSeek } from '@ai-sdk/deepseek';
+import { createAlibaba } from '@ai-sdk/alibaba';
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { getCurrentContext } from '@server/lib/http/context';
 import { recordLlmCallMetric } from '@server/lib/llm/metricsStore';
 import type {
   LlmCallAttemptMetrics,
   LlmCallMetrics,
+  LlmMetricsProvider,
   LlmSceneId,
   LlmStructuredFailureKind,
 } from '@server/lib/llm/types';
@@ -19,6 +22,7 @@ import {
   Output,
   streamText,
   TypeValidationError,
+  type LanguageModel,
   type LanguageModelCallOptions,
   type LanguageModelUsage,
 } from 'ai';
@@ -56,6 +60,7 @@ export interface AiArrayOptions<ELEMENT, RESULT = ELEMENT[]>
 
 type MetricContext = {
   sceneId: LlmSceneId;
+  provider: LlmMetricsProvider;
   model: string;
   systemChars: number;
   userChars: number;
@@ -63,8 +68,9 @@ type MetricContext = {
 };
 
 type ResolvedModel = {
-  model: ReturnType<typeof deepSeek>;
+  model: LanguageModel;
   modelName: string;
+  providerName: LlmMetricsProvider;
 };
 
 type StructuredFailureDetails = {
@@ -87,19 +93,133 @@ function getRequestConfig() {
   }
 }
 
+function getChosenProvider(): LlmMetricsProvider {
+  return (process.env.PROVIDER_CHOOSE?.trim() ||
+    'openai-compatible') as LlmMetricsProvider;
+}
+
+function getArkRandomModel(): string {
+  const models = (process.env.ARK_MODEL_USE ?? '').split(',').filter(Boolean);
+  if (models.length === 0) {
+    throw new Error('ARK_MODEL_USE is required when PROVIDER_CHOOSE=ark');
+  }
+  return models[Math.floor(Math.random() * models.length)]!;
+}
+
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is required for the selected LLM provider`);
+  }
+  return value;
+}
+
+/**
+ * Server-side provider factory driven by PROVIDER_CHOOSE.
+ * Request-context BYOK DeepSeek is handled in resolveModel before this runs.
+ */
+function getProvider(providerName: LlmMetricsProvider) {
+  if (providerName === 'ark') {
+    return createDeepSeek({
+      baseURL: process.env.ARK_BASE_URL,
+      apiKey: process.env.ARK_API_KEY,
+    });
+  }
+  if (providerName === 'kimi') {
+    return createDeepSeek({
+      apiKey: process.env.KIMI_API_KEY,
+      baseURL: process.env.KIMI_BASE_URL,
+    });
+  }
+  if (providerName === 'openrouter') {
+    return createOpenRouter({
+      apiKey: process.env.OPENROUTER_API_KEY,
+    });
+  }
+  if (providerName === 'deepseek') {
+    return createDeepSeek({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: process.env.DEEPSEEK_BASE_URL,
+    });
+  }
+  return createDeepSeek({
+    apiKey: process.env.OPENAI_API_KEY,
+    baseURL: process.env.OPENAI_BASE_URL,
+  });
+}
+
 function resolveModel(): ResolvedModel {
   const requestConfig = getRequestConfig();
-  const modelName =
-    requestConfig?.model ||
-    process.env.DEEPSEEK_MODEL?.trim() ||
-    DEEPSEEK_DEFAULT_MODEL;
-  const provider = requestConfig
-    ? createDeepSeek({ apiKey: requestConfig.apiKey })
-    : deepSeek;
 
+  // Upstream BYOK: request-context DeepSeek only (apiKey + model).
+  if (requestConfig) {
+    const modelName = requestConfig.model;
+    return {
+      model: createDeepSeek({ apiKey: requestConfig.apiKey })(modelName),
+      modelName,
+      providerName: 'deepseek',
+    };
+  }
+
+  const providerName = getChosenProvider();
+
+  if (providerName === 'ark') {
+    const modelName = getArkRandomModel();
+    return {
+      model: getProvider(providerName)(modelName),
+      modelName,
+      providerName,
+    };
+  }
+
+  if (providerName === 'kimi') {
+    const modelName = requireEnv('KIMI_MODEL_USE');
+    return {
+      model: getProvider(providerName)(modelName),
+      modelName,
+      providerName,
+    };
+  }
+
+  if (providerName === 'alibaba') {
+    const modelName = requireEnv('ALIBABA_MODEL_USE');
+    const alibabaProvider = createAlibaba({
+      apiKey: process.env.ALIBABA_API_KEY,
+      baseURL: process.env.ALIBABA_BASE_URL,
+    });
+    return {
+      model: alibabaProvider.languageModel(modelName),
+      modelName,
+      providerName,
+    };
+  }
+
+  if (providerName === 'openrouter') {
+    const modelName = requireEnv('OPENROUTER_MODEL_USE');
+    return {
+      model: getProvider(providerName)(modelName),
+      modelName,
+      providerName,
+    };
+  }
+
+  if (providerName === 'deepseek') {
+    const modelName =
+      process.env.DEEPSEEK_MODEL_USE?.trim() ||
+      process.env.DEEPSEEK_MODEL?.trim() ||
+      DEEPSEEK_DEFAULT_MODEL;
+    return {
+      model: getProvider(providerName)(modelName),
+      modelName,
+      providerName,
+    };
+  }
+
+  const modelName = requireEnv('OPENAI_MODEL');
   return {
-    model: provider(modelName),
+    model: getProvider(providerName)(modelName),
     modelName,
+    providerName: 'openai-compatible',
   };
 }
 
@@ -169,7 +289,7 @@ function recordMetrics(
 ): void {
   const metrics: LlmCallMetrics = {
     sceneId: context.sceneId,
-    provider: 'deepseek',
+    provider: context.provider,
     model: context.model,
     systemChars: context.systemChars,
     userChars: context.userChars,
@@ -192,10 +312,12 @@ function recordMetrics(
 function createMetricContext(
   options: AiTextOptions,
   model: string,
+  provider: LlmMetricsProvider,
   schemaChars = 0,
 ): MetricContext {
   return {
     sceneId: options.sceneId,
+    provider,
     model,
     systemChars: options.system.length,
     userChars: options.prompt.length,
@@ -360,8 +482,8 @@ function getStructuredRetryMaxOutputTokens(
 }
 
 export async function generateAiText(options: AiTextOptions) {
-  const { model, modelName } = resolveModel();
-  const metrics = createMetricContext(options, modelName);
+  const { model, modelName, providerName } = resolveModel();
+  const metrics = createMetricContext(options, modelName, providerName);
 
   try {
     const result = await generateText({
@@ -384,8 +506,8 @@ export async function generateAiText(options: AiTextOptions) {
 }
 
 export function streamAiText(options: AiTextOptions) {
-  const { model, modelName } = resolveModel();
-  const metrics = createMetricContext(options, modelName);
+  const { model, modelName, providerName } = resolveModel();
+  const metrics = createMetricContext(options, modelName, providerName);
   let terminalMetricRecorded = false;
 
   const recordTerminalMetric = (
@@ -534,10 +656,11 @@ async function generateStructured<
 export async function generateAiObject<GENERATED, RESULT = GENERATED>(
   options: AiObjectOptions<GENERATED, RESULT>,
 ) {
-  const { model, modelName } = resolveModel();
+  const { model, modelName, providerName } = resolveModel();
   const metrics = createMetricContext(
     options,
     modelName,
+    providerName,
     getSchemaChars(options.schema),
   );
   const output = Output.object({
@@ -572,10 +695,11 @@ export async function generateAiObject<GENERATED, RESULT = GENERATED>(
 export async function generateAiArray<ELEMENT, RESULT = ELEMENT[]>(
   options: AiArrayOptions<ELEMENT, RESULT>,
 ) {
-  const { model, modelName } = resolveModel();
+  const { model, modelName, providerName } = resolveModel();
   const metrics = createMetricContext(
     options,
     modelName,
+    providerName,
     getSchemaChars(z.array(options.elementSchema)),
   );
   const output = Output.array({

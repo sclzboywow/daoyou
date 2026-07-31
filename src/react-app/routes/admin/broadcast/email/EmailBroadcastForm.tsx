@@ -31,6 +31,7 @@ export function EmailBroadcastForm() {
   const [hasActiveCultivator, setHasActiveCultivator] = useState('');
   const [realmMin, setRealmMin] = useState('');
   const [realmMax, setRealmMax] = useState('');
+  const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EmailBroadcastResult | null>(null);
   const [templates, setTemplates] = useState<EmailTemplateOption[]>([]);
@@ -59,6 +60,10 @@ export function EmailBroadcastForm() {
   const submit = async (dryRun: boolean) => {
     if (!templateId && (!subject.trim() || !content.trim())) {
       pushToast({ message: '请填写标题和内容，或选择模板', tone: 'warning' });
+      return;
+    }
+    if (!dryRun && reason.trim().length < 3) {
+      pushToast({ message: '请填写本次群发原因', tone: 'warning' });
       return;
     }
 
@@ -91,6 +96,8 @@ export function EmailBroadcastForm() {
             realmMax: realmMax || undefined,
           },
           dryRun,
+          reason: dryRun ? undefined : reason.trim(),
+          idempotencyKey: dryRun ? undefined : crypto.randomUUID(),
         }),
       });
 
@@ -101,7 +108,7 @@ export function EmailBroadcastForm() {
 
       setResult(data);
       pushToast({
-        message: dryRun ? '预览完成' : '邮件同步群发完成',
+        message: dryRun ? '预览完成' : '邮件已加入批处理队列',
         tone: 'success',
       });
     } catch (error) {
@@ -117,7 +124,7 @@ export function EmailBroadcastForm() {
   return (
     <div className="space-y-5">
       <InkNotice tone="info">
-        可选模板 + 人群筛选。当前为同步执行，建议先 dry run 预估人数。
+        可选模板 + 人群筛选。正式发送进入任务中心，可追踪、取消和失败重试。
       </InkNotice>
 
       <InkSelect
@@ -217,6 +224,14 @@ export function EmailBroadcastForm() {
         </InkSelect>
       </div>
 
+      <InkInput
+        label="操作原因（正式发送必填）"
+        value={reason}
+        onChange={setReason}
+        placeholder="例如：7 月版本更新通知"
+        disabled={loading}
+      />
+
       <div className="flex flex-wrap gap-3">
         <InkButton
           variant="secondary"
@@ -230,7 +245,7 @@ export function EmailBroadcastForm() {
           onClick={() => submit(false)}
           disabled={loading}
         >
-          {loading ? '执行中...' : '确认同步群发邮件'}
+          {loading ? '提交中...' : '提交批量邮件任务'}
         </InkButton>
       </div>
 
