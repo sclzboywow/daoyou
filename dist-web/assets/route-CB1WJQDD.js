@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-oxZg3LDB.js";import{t}from"./AlchemyScene-CnZ-u75k.js";var n=e();function r(){return(0,n.jsx)(t,{})}export{r as default};

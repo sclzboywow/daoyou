@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@app/*": ["./src/react-app/*"],
+      "@server/*": ["./src/server/*"],
+      "@shared/*": ["./src/shared/*"]
+    }
+  },
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

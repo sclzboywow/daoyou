@@ -1,0 +1,1 @@
+import{r as e,t}from"./react-CYuo-Lgd.js";import{l as n,y as r}from"./player-DD8KHF39.js";var i=e(t(),1);function a(e,t){let a=n(r,(0,i.useMemo)(()=>({status:t}),[t]),!!e);return{tasks:a.data,loading:a.loading,error:a.error,reload:a.reload}}export{a as t};

@@ -1,0 +1,128 @@
+<!DOCTYPE html><html lang="zh-CN"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-REHSYPCDGK"></script><script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag("js", new Date());
+  gtag("config", "G-REHSYPCDGK");
+</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"><meta name="generator" content="Astro v7.0.2"><title>首批宗门资料（一）：红尘剑宗 | 万界道友</title><meta name="description" content="红尘剑宗以剑意为核心，在照影游尘的连击剑痕与守拙藏锋的护盾重击之间，走出两条截然不同的剑途。"><link rel="canonical" href="index.html"><meta property="og:site_name" content="万界道友"><meta property="og:type" content="website"><meta property="og:title" content="首批宗门资料（一）：红尘剑宗 | 万界道友"><meta property="og:description" content="红尘剑宗以剑意为核心，在照影游尘的连击剑痕与守拙藏锋的护盾重击之间，走出两条截然不同的剑途。"><meta property="og:url" content="/guides/sect-hongchen-sword/"><meta property="og:image" content="/assets/daoyou_logo.png"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="首批宗门资料（一）：红尘剑宗 | 万界道友"><meta name="twitter:description" content="红尘剑宗以剑意为核心，在照影游尘的连击剑痕与守拙藏锋的护盾重击之间，走出两条截然不同的剑途。"><meta name="twitter:image" content="/assets/daoyou_logo.png"><meta name="theme-color" content="#f8f3e6"><link rel="stylesheet" href="../../_astro/Layout.DLsRdcaP.css"></head><body><div class="site-shell"><header class="site-header fixed top-0 right-0 left-0 z-50 transition-all duration-300 nav-glass is-scrolled py-2" data-site-header data-home="false"><div class="mx-auto flex max-w-7xl items-center justify-between px-4"><a href="../../index.html" class="group flex items-center gap-2 no-underline"><div class="relative h-8 w-8 transition-transform group-hover:rotate-12 md:h-10 md:w-10"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" class="absolute inset-0 h-full w-full object-contain"></div><span class="font-heading text-ink text-xl transition-opacity md:text-2xl">万界道友</span></a><nav class="hidden items-center gap-7 md:flex"><a class="nav-link text-ink hover:text-crimson" href="../../index.html">首页</a><a class="nav-link text-ink hover:text-crimson" href="../../intro/index.html">游戏介绍</a><a class="nav-link text-ink hover:text-crimson" href="../index.html" aria-current="page">玩法资料</a><a class="nav-link text-ink hover:text-crimson" href="../../updates/index.html">版本动态</a><a class="nav-link text-ink hover:text-crimson" href="../../search/index.html">搜索</a><a class="nav-link text-ink hover:text-crimson" href="../../community/index.html">社区</a><a class="nav-link text-ink hover:text-crimson" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta">立即游玩</a></nav><button class="text-ink p-2 md:hidden" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="打开菜单" data-menu-toggle><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button></div><div id="mobile-nav" class="site-mobile-menu border-ink/10 absolute top-full right-0 left-0 hidden flex-col gap-4 border-b p-4 shadow-lg backdrop-blur-md md:hidden" data-mobile-menu><a class="text-ink py-2 text-center text-lg" href="../../index.html">首页</a><a class="text-ink py-2 text-center text-lg" href="../../intro/index.html">游戏介绍</a><a class="text-ink py-2 text-center text-lg" href="../index.html" aria-current="page">玩法资料</a><a class="text-ink py-2 text-center text-lg" href="../../updates/index.html">版本动态</a><a class="text-ink py-2 text-center text-lg" href="../../search/index.html">搜索</a><a class="text-ink py-2 text-center text-lg" href="../../community/index.html">社区</a><a class="text-ink py-2 text-center text-lg" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta site-mobile-cta">立即游玩</a></div></header><script>
+  const header = document.querySelector("[data-site-header]");
+  const toggle = header?.querySelector("[data-menu-toggle]");
+  const mobileMenu = header?.querySelector("[data-mobile-menu]");
+  const isHome = header?.getAttribute("data-home") === "true";
+
+  const syncHeaderState = () => {
+    if (!header) return;
+    const scrolled = !isHome || window.scrollY > 50;
+    header.classList.add("nav-glass");
+    header.classList.toggle("is-scrolled", scrolled);
+    header.classList.toggle("py-2", scrolled);
+    header.classList.toggle("py-4", !scrolled);
+  };
+
+  syncHeaderState();
+  window.addEventListener("scroll", syncHeaderState, { passive: true });
+
+  toggle?.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+    mobileMenu?.classList.toggle("hidden", expanded);
+    mobileMenu?.classList.toggle("flex", !expanded);
+  });
+
+  mobileMenu?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => {
+      toggle?.setAttribute("aria-expanded", "false");
+      mobileMenu?.classList.add("hidden");
+      mobileMenu?.classList.remove("flex");
+    });
+  });
+</script><main data-pagefind-body><article class="content-page-shell article-shell px-4 pb-20 pt-32 md:pt-36"><div class="mx-auto max-w-3xl"><a href="../index.html" class="content-back-link">返回玩法资料</a><header class="content-card article-header"><div class="flex flex-wrap items-center gap-3"><span class="post-badge post-badge-announcement">系统说明</span></div><h1 class="font-heading article-title">首批宗门资料（一）：红尘剑宗</h1><p class="article-description">红尘剑宗以剑意为核心，在照影游尘的连击剑痕与守拙藏锋的护盾重击之间，走出两条截然不同的剑途。</p></header><div class="content-card article-body"><blockquote>
+<p>从红尘中学剑，向红尘中还剑。</p>
+</blockquote>
+<p>红尘剑宗建在山中，山门却朝向山下城郭。门人不以斩断尘缘证明道心，而是在一次次上山问剑、下山行剑与归宗记剑中，明白自己为何出剑、又该在何时归鞘。</p>
+<p><img src="../../assets/sect/onboarding/lingxiao.webp" alt="红尘剑宗山门与通向山下城郭的石阶"></p>
+<h2 id="战斗定位">战斗定位</h2>
+<ul>
+<li><strong>核心资源</strong>：剑意，上限 6 点。</li>
+<li><strong>默认剑式</strong>：《问剑式》。</li>
+<li><strong>终结神通</strong>：《此剑平生》。</li>
+<li><strong>道途一</strong>：照影游尘，快剑、身法、连击、剑痕、多段收束。</li>
+<li><strong>道途二</strong>：守拙藏锋，护盾、承势、反击、裂甲、单段重击。</li>
+</ul>
+<p>红尘剑宗的基础神通同时具备进攻、身法、驱散与防守能力。选择道途后，同一门剑招会被重新组织：快剑将《剑荡山河》化为五段连击，重剑则把它压成带有护盾的单段重击。</p>
+<h2 id="六卷心法">六卷心法</h2>
+<table>
+<thead>
+<tr>
+<th>心法</th>
+<th>长期成长</th>
+<th>代表神通</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>《红尘剑录》</td>
+<td>宗门总纲，限制分卷等级</td>
+<td>《问剑式》《此剑平生》</td>
+</tr>
+<tr>
+<td>《观微剑意》</td>
+<td>每级提高命中</td>
+<td>《一剑破妄》</td>
+</tr>
+<tr>
+<td>《剑气长歌》</td>
+<td>每级提高物理攻击</td>
+<td>《剑起沧澜》《剑荡山河》</td>
+</tr>
+<tr>
+<td>《凌虚步》</td>
+<td>每级提高闪避率</td>
+<td>《藏锋听雷》《踏雪无痕》</td>
+</tr>
+<tr>
+<td>《澄心剑诀》</td>
+<td>每级提高法术防御</td>
+<td>《剑心通明》</td>
+</tr>
+<tr>
+<td>《不灭剑体》</td>
+<td>每级提高物理防御</td>
+<td>《人剑合一》</td>
+</tr>
+</tbody>
+</table>
+<p>《一剑破妄》负责驱散敌方护持，《剑心通明》与《人剑合一》提供不同方向的自保。《藏锋听雷》则是两条道途都很重视的节奏技能：快剑借它制造闪避反击，重剑用它承受来势并蓄积后发一击。</p>
+<h2 id="道途一照影游尘">道途一：照影游尘</h2>
+<p>照影游尘让剑随身走、身随势变。它通过迅疾剑式施加“剑痕”，再让《此剑平生》随剑意追加斩击。</p>
+<p>主要机制包括：</p>
+<ul>
+<li>《剑起沧澜》在身法高于目标时追加追击。</li>
+<li>《剑荡山河》变为五段连击，获得更多剑意并施加剑痕。</li>
+<li>《藏锋听雷》改为先攻后守，短暂提高闪避；首次闪避时反击并积势。</li>
+<li>《踏雪无痕》进一步强化身法、闪避与首次闪避后的积势。</li>
+<li>《此剑平生》由单段爆发改为随剑意增加段数的连续斩击。</li>
+</ul>
+<p>照影游尘提供三套自动战术：<strong>追风</strong> 倾向尽早收割低血目标，<strong>连势</strong> 会先补足剑痕与剑意，<strong>回燕</strong> 则围绕身法与闪避反击保持攻势。</p>
+<p>这条道途适合喜欢主动抢节奏、观察速度关系，并通过多段攻击放大收益的玩家。</p>
+<h2 id="道途二守拙藏锋">道途二：守拙藏锋</h2>
+<p>守拙藏锋不争一时之快。它以护盾吸收伤害并积蓄剑意，通过承势与反击施加“裂甲”，最后将剑意汇入一记重锋。</p>
+<p>主要机制包括：</p>
+<ul>
+<li>《剑起沧澜》提高威力并获得护盾，但冷却更长。</li>
+<li>《剑荡山河》由连击变为单段重击，并同时获得护盾。</li>
+<li>《藏锋听雷》进一步提高直接伤害减免，保留先守后攻的结构。</li>
+<li>《踏雪无痕》不再强调闪避，改为提供护盾、物防与积势。</li>
+<li>护盾吸收直接伤害后，每回合可由“大巧不工”获得一点剑意。</li>
+<li>《此剑平生》获得更高的剑意转化，成为高倍率单段爆发。</li>
+</ul>
+<p>守拙藏锋提供 <strong>后发、极势、守山</strong> 三套战术。后发重视尽早架起《藏锋听雷》，极势会先补裂甲再满势收束，守山则优先维持护盾与血线。</p>
+<p>这条道途适合喜欢稳住局面、以防守换资源，并等待一剑定局的玩家。</p>
+<h2 id="山门舆图">山门舆图</h2>
+<p><img src="../../assets/sect/lingxiao-map.webp" alt="红尘剑宗殿阁、试剑台、工坊、矿场与药田沿山路展开的舆图"></p>
+<p>红尘剑宗的主要设施包括问剑堂、剑录阁、照影崖、试剑台、执事堂与宗门宝库。山中还有铸剑坊、矿场、药田和弟子院。所有道路最终都能回到那条通往山下的石阶——因为这座剑宗从不把离开人间视为修行的终点。</p>
+<h2 id="选择建议">选择建议</h2>
+<p>如果你希望构筑围绕命中、身法、连击与闪避展开，优先关注照影游尘；如果你更在意护盾、物防、后发反击与高倍率单击，守拙藏锋会更合适。</p>
+<p>两条道途共享同一套心法基础，已习得后可以免费切换。前期研习心法时，仍建议先围绕自己最常用的主动神通分配资源。</p>
+</div></div></article></main><footer class="border-ink/10 border-t px-4 py-10"><div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row"><div class="text-center md:text-left"><div class="mb-2 flex items-center justify-center gap-2 md:justify-start"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" width="24" height="24"><span class="font-heading text-lg">万界道友</span></div><p class="text-ink-muted text-xs">© 2026 daoyou.org. GPL-3.0 Licensed.</p></div><div class="text-ink-secondary flex flex-wrap justify-center gap-6 text-sm"><a href="../../intro/index.html" class="hover:text-crimson transition-colors footer-link">游戏介绍</a><a href="../index.html" class="hover:text-crimson transition-colors footer-link text-crimson">玩法资料</a><a href="../../updates/index.html" class="hover:text-crimson transition-colors footer-link">版本动态</a><a href="../../community/index.html" class="hover:text-crimson transition-colors footer-link">社区</a><a href="../../support/index.html" class="hover:text-crimson transition-colors footer-link">支持</a><a href="/game" class="footer-link hover:text-crimson transition-colors">立即游玩</a></div></div></footer></div></body></html>

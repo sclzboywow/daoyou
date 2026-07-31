@@ -1,0 +1,1 @@
+var e=(e,t)=>({method:e,headers:{"Content-Type":`application/json`,"Idempotency-Key":crypto.randomUUID()},...t===void 0?{}:{body:JSON.stringify(t)}});export{e as t};

@@ -1,0 +1,1 @@
+import{n as e}from"./components-DlV-vxvi.js";import{t}from"./jsx-runtime-oxZg3LDB.js";import{t as n}from"./loaders-BizxokYB.js";import{n as r}from"./authContext-DH1SG7sd.js";var i=t(),a=n;function o(){return(0,i.jsx)(r,{children:(0,i.jsx)(e,{})})}export{o as default,a as loader};

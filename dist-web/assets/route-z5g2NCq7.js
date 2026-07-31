@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-oxZg3LDB.js";import{t}from"./ItemExchangeShopAdminPage-DWAqjJfz.js";var n=e();function r(){return(0,n.jsx)(t,{endpoint:`/api/admin/sect-shop`,eyebrow:`SECT TREASURY`,title:`宗门宝库管理`,priceLabel:`贡献价格`,currencyLabel:`宗门贡献`,emptyText:`暂未配置宗门宝库商品。`,successText:`宗门宝库商品已保存`})}export{r as default};

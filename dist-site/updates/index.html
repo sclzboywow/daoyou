@@ -1,0 +1,63 @@
+<!DOCTYPE html><html lang="zh-CN"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-REHSYPCDGK"></script><script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag("js", new Date());
+  gtag("config", "G-REHSYPCDGK");
+</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><link rel="icon" type="image/svg+xml" href="../favicon.svg"><meta name="generator" content="Astro v7.0.2"><title>版本动态 | 万界道友</title><meta name="description" content="查看《万界道友》的官方公告与更新日志。"><link rel="canonical" href="index.html"><meta property="og:site_name" content="万界道友"><meta property="og:type" content="website"><meta property="og:title" content="版本动态 | 万界道友"><meta property="og:description" content="查看《万界道友》的官方公告与更新日志。"><meta property="og:url" content="/updates/"><meta property="og:image" content="/assets/daoyou_logo.png"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="版本动态 | 万界道友"><meta name="twitter:description" content="查看《万界道友》的官方公告与更新日志。"><meta name="twitter:image" content="/assets/daoyou_logo.png"><meta name="theme-color" content="#f8f3e6"><link rel="stylesheet" href="../_astro/Layout.DLsRdcaP.css"></head><body><div class="site-shell"><header class="site-header fixed top-0 right-0 left-0 z-50 transition-all duration-300 nav-glass is-scrolled py-2" data-site-header data-home="false"><div class="mx-auto flex max-w-7xl items-center justify-between px-4"><a href="../index.html" class="group flex items-center gap-2 no-underline"><div class="relative h-8 w-8 transition-transform group-hover:rotate-12 md:h-10 md:w-10"><img src="../assets/daoyou_logo.png" alt="万界道友 Logo" class="absolute inset-0 h-full w-full object-contain"></div><span class="font-heading text-ink text-xl transition-opacity md:text-2xl">万界道友</span></a><nav class="hidden items-center gap-7 md:flex"><a class="nav-link text-ink hover:text-crimson" href="../index.html">首页</a><a class="nav-link text-ink hover:text-crimson" href="../intro/index.html">游戏介绍</a><a class="nav-link text-ink hover:text-crimson" href="../guides/index.html">玩法资料</a><a class="nav-link text-ink hover:text-crimson" href="index.html" aria-current="page">版本动态</a><a class="nav-link text-ink hover:text-crimson" href="../search/index.html">搜索</a><a class="nav-link text-ink hover:text-crimson" href="../community/index.html">社区</a><a class="nav-link text-ink hover:text-crimson" href="../support/index.html">支持</a><a href="/game" class="site-header-cta">立即游玩</a></nav><button class="text-ink p-2 md:hidden" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="打开菜单" data-menu-toggle><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button></div><div id="mobile-nav" class="site-mobile-menu border-ink/10 absolute top-full right-0 left-0 hidden flex-col gap-4 border-b p-4 shadow-lg backdrop-blur-md md:hidden" data-mobile-menu><a class="text-ink py-2 text-center text-lg" href="../index.html">首页</a><a class="text-ink py-2 text-center text-lg" href="../intro/index.html">游戏介绍</a><a class="text-ink py-2 text-center text-lg" href="../guides/index.html">玩法资料</a><a class="text-ink py-2 text-center text-lg" href="index.html" aria-current="page">版本动态</a><a class="text-ink py-2 text-center text-lg" href="../search/index.html">搜索</a><a class="text-ink py-2 text-center text-lg" href="../community/index.html">社区</a><a class="text-ink py-2 text-center text-lg" href="../support/index.html">支持</a><a href="/game" class="site-header-cta site-mobile-cta">立即游玩</a></div></header><script>
+  const header = document.querySelector("[data-site-header]");
+  const toggle = header?.querySelector("[data-menu-toggle]");
+  const mobileMenu = header?.querySelector("[data-mobile-menu]");
+  const isHome = header?.getAttribute("data-home") === "true";
+
+  const syncHeaderState = () => {
+    if (!header) return;
+    const scrolled = !isHome || window.scrollY > 50;
+    header.classList.add("nav-glass");
+    header.classList.toggle("is-scrolled", scrolled);
+    header.classList.toggle("py-2", scrolled);
+    header.classList.toggle("py-4", !scrolled);
+  };
+
+  syncHeaderState();
+  window.addEventListener("scroll", syncHeaderState, { passive: true });
+
+  toggle?.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+    mobileMenu?.classList.toggle("hidden", expanded);
+    mobileMenu?.classList.toggle("flex", !expanded);
+  });
+
+  mobileMenu?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => {
+      toggle?.setAttribute("aria-expanded", "false");
+      mobileMenu?.classList.add("hidden");
+      mobileMenu?.classList.remove("flex");
+    });
+  });
+</script><main data-pagefind-body><section class="page-hero px-4 pb-14 pt-32 md:pb-18 md:pt-36"><div class="mx-auto max-w-6xl"><p class="page-eyebrow">UPDATES</p><h1 class="font-heading text-ink mt-3 text-5xl leading-tight md:text-7xl">版本动态</h1><p class="text-ink-secondary mt-6 max-w-3xl text-base leading-8 md:text-lg">公告与更新日志统一收录在这里。后续正式发布内容后，玩家可以在同一个页面完成版本追踪。</p></div></section><section class="px-4 pb-20 md:pb-28"><div class="mx-auto max-w-5xl" data-updates-tabs><div class="updates-tabs mb-8" role="tablist" aria-label="版本动态分类"><button class="updates-tab updates-tab-active" type="button" role="tab" aria-selected="true" aria-controls="updates-panel-announcement" data-updates-tab="announcement">公告</button><button class="updates-tab" type="button" role="tab" aria-selected="false" aria-controls="updates-panel-update" data-updates-tab="update">更新日志</button></div><div id="updates-panel-announcement" data-updates-panel="announcement"><div class="post-list"><article class="content-card post-card"><div class="flex flex-wrap items-center gap-3"><span class="post-badge post-badge-announcement">公告</span><span class="post-tag">置顶</span><span class="post-tag">重大更新</span><span class="post-tag">《宗门》资料片</span><span class="post-date">2026-07-28</span></div><h2 class="mt-4 text-2xl font-semibold text-ink"><a href="sect-expansion-preview/index.html" class="transition-colors hover:text-crimson">《宗门》资料片前瞻公告：择一方传承，走自己的道</a></h2><p class="mt-3 text-sm leading-7 text-ink-secondary md:text-base">《万界道友》最新资料片《宗门》即将到来。首批开放红尘剑宗、天衍圣地、无相禅宗与幽都，带来宗门身份、心法神通、双道途参悟、宗门事务与专属山门。</p><div class="mt-5 flex flex-wrap gap-2"><span class="post-tag">版本前瞻</span><span class="post-tag">宗门</span><span class="post-tag">新玩法</span></div></article><article class="content-card post-card"><div class="flex flex-wrap items-center gap-3"><span class="post-badge post-badge-announcement">公告</span><span class="post-tag">置顶</span><span class="post-tag">重大更新</span><span class="post-date">2026-06-25</span></div><h2 class="mt-4 text-2xl font-semibold text-ink"><a href="announcement-placeholder/index.html" class="transition-colors hover:text-crimson">《万界道友》官网重构完成公告</a></h2><p class="mt-3 text-sm leading-7 text-ink-secondary md:text-base">《万界道友》官网已完成信息架构、资料库、版本动态、媒体相册、社区支持与站点设置重构，后续内容将通过官网持续更新。</p><div class="mt-5 flex flex-wrap gap-2"><span class="post-tag">公告</span><span class="post-tag">官网</span></div></article></div></div><div id="updates-panel-update" class="hidden" data-updates-panel="update"><div class="post-list"><article class="content-card post-card"><div class="flex flex-wrap items-center gap-3"><span class="post-badge post-badge-update">更新日志</span><span class="post-tag">置顶</span><span class="post-tag">重大更新</span><span class="post-tag">6 月玩法与平衡迭代</span><span class="post-date">2026-06-23</span></div><h2 class="mt-4 text-2xl font-semibold text-ink"><a href="june-gameplay-balance-update/index.html" class="transition-colors hover:text-crimson">6 月玩法、平衡与体验优化更新日志</a></h2><p class="mt-3 text-sm leading-7 text-ink-secondary md:text-base">汇总 6 月 2 日至 6 月 23 日期间《万界道友》在闭关修炼、天地灵气、声望宝阁、炼丹炼体、排行榜、道友名录、副本战斗与界面体验等方面的更新。</p><div class="mt-5 flex flex-wrap gap-2"><span class="post-tag">更新日志</span><span class="post-tag">玩法调整</span><span class="post-tag">平衡优化</span></div></article></div></div></div></section><script>
+    const updatesTabs = document.querySelector("[data-updates-tabs]");
+    const tabButtons = updatesTabs?.querySelectorAll("[data-updates-tab]");
+    const tabPanels = updatesTabs?.querySelectorAll("[data-updates-panel]");
+
+    tabButtons?.forEach((button) => {
+      button.addEventListener("click", () => {
+        const activeTab = button.getAttribute("data-updates-tab");
+
+        tabButtons.forEach((item) => {
+          const selected = item === button;
+          item.classList.toggle("updates-tab-active", selected);
+          item.setAttribute("aria-selected", selected ? "true" : "false");
+        });
+
+        tabPanels?.forEach((panel) => {
+          panel.classList.toggle(
+            "hidden",
+            panel.getAttribute("data-updates-panel") !== activeTab,
+          );
+        });
+      });
+    });
+  </script></main><footer class="border-ink/10 border-t px-4 py-10"><div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row"><div class="text-center md:text-left"><div class="mb-2 flex items-center justify-center gap-2 md:justify-start"><img src="../assets/daoyou_logo.png" alt="万界道友 Logo" width="24" height="24"><span class="font-heading text-lg">万界道友</span></div><p class="text-ink-muted text-xs">© 2026 daoyou.org. GPL-3.0 Licensed.</p></div><div class="text-ink-secondary flex flex-wrap justify-center gap-6 text-sm"><a href="../intro/index.html" class="hover:text-crimson transition-colors footer-link">游戏介绍</a><a href="../guides/index.html" class="hover:text-crimson transition-colors footer-link">玩法资料</a><a href="index.html" class="hover:text-crimson transition-colors footer-link text-crimson">版本动态</a><a href="../community/index.html" class="hover:text-crimson transition-colors footer-link">社区</a><a href="../support/index.html" class="hover:text-crimson transition-colors footer-link">支持</a><a href="/game" class="footer-link hover:text-crimson transition-colors">立即游玩</a></div></div></footer></div></body></html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#141918" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="万界道友" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <style>
+      html,
+      body,
+      #root {
+        min-height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background: #f8f3e6;
+      }
+
+      .app-boot-screen {
+        box-sizing: border-box;
+        display: grid;
+        min-height: 100vh;
+        min-height: 100dvh;
+        place-items: center;
+        padding-top: calc(env(safe-area-inset-top, 0px) + 1rem);
+        padding-right: calc(env(safe-area-inset-right, 0px) + 1rem);
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+        padding-left: calc(env(safe-area-inset-left, 0px) + 1rem);
+        color: #2c1810;
+        background:
+          radial-gradient(
+            circle at 50% 42%,
+            rgba(139, 69, 19, 0.08),
+            transparent 34%
+          ),
+          #f8f3e6;
+        font-family:
+          'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif;
+        text-align: center;
+      }
+
+      .app-boot-content {
+        display: flex;
+        width: min(18rem, 80vw);
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .app-boot-seal {
+        display: grid;
+        width: 3.75rem;
+        height: 3.75rem;
+        place-items: center;
+        border: 1px solid rgba(193, 18, 31, 0.48);
+        color: #a20f19;
+        font-family: serif;
+        font-size: 1.8rem;
+        line-height: 1;
+        transform: rotate(-2deg);
+      }
+
+      .app-boot-title {
+        margin: 1rem 0 0;
+        font-family: serif;
+        font-size: 1.5rem;
+        letter-spacing: 0.22em;
+      }
+
+      .app-boot-progress {
+        position: relative;
+        width: 10rem;
+        height: 2px;
+        margin-top: 1.25rem;
+        overflow: hidden;
+        background: rgba(44, 24, 16, 0.12);
+      }
+
+      .app-boot-progress::after {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 38%;
+        content: '';
+        background: #8b4513;
+        animation: app-boot-flow 1.35s ease-in-out infinite;
+      }
+
+      .app-boot-message {
+        margin: 0.85rem 0 0;
+        color: #5a4a42;
+        font-size: 0.875rem;
+        letter-spacing: 0.08em;
+      }
+
+      @keyframes app-boot-flow {
+        from {
+          transform: translateX(-120%);
+        }
+        to {
+          transform: translateX(365%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .app-boot-progress::after {
+          width: 64%;
+          animation: none;
+        }
+      }
+    </style>
+    <title>加载中... | 万界道友</title>
+  </head>
+
+  <body>
+    <div id="root">
+      <div
+        class="app-boot-screen"
+        role="status"
+        aria-live="polite"
+        aria-label="万界道友正在加载"
+      >
+        <div class="app-boot-content">
+          <div class="app-boot-seal" aria-hidden="true">道</div>
+          <p class="app-boot-title">万界道友</p>
+          <div class="app-boot-progress" aria-hidden="true"></div>
+          <p class="app-boot-message">正在载入天地……</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/react-app/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html><html lang="zh-CN"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-REHSYPCDGK"></script><script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag("js", new Date());
+  gtag("config", "G-REHSYPCDGK");
+</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"><meta name="generator" content="Astro v7.0.2"><title>基础设定一览 | 万界道友</title><meta name="description" content="快速了解道具品阶、境界层次、角色设定和主要玩法入口。"><link rel="canonical" href="index.html"><meta property="og:site_name" content="万界道友"><meta property="og:type" content="website"><meta property="og:title" content="基础设定一览 | 万界道友"><meta property="og:description" content="快速了解道具品阶、境界层次、角色设定和主要玩法入口。"><meta property="og:url" content="/guides/basic-settings/"><meta property="og:image" content="/assets/daoyou_logo.png"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="基础设定一览 | 万界道友"><meta name="twitter:description" content="快速了解道具品阶、境界层次、角色设定和主要玩法入口。"><meta name="twitter:image" content="/assets/daoyou_logo.png"><meta name="theme-color" content="#f8f3e6"><link rel="stylesheet" href="../../_astro/Layout.DLsRdcaP.css"></head><body><div class="site-shell"><header class="site-header fixed top-0 right-0 left-0 z-50 transition-all duration-300 nav-glass is-scrolled py-2" data-site-header data-home="false"><div class="mx-auto flex max-w-7xl items-center justify-between px-4"><a href="../../index.html" class="group flex items-center gap-2 no-underline"><div class="relative h-8 w-8 transition-transform group-hover:rotate-12 md:h-10 md:w-10"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" class="absolute inset-0 h-full w-full object-contain"></div><span class="font-heading text-ink text-xl transition-opacity md:text-2xl">万界道友</span></a><nav class="hidden items-center gap-7 md:flex"><a class="nav-link text-ink hover:text-crimson" href="../../index.html">首页</a><a class="nav-link text-ink hover:text-crimson" href="../../intro/index.html">游戏介绍</a><a class="nav-link text-ink hover:text-crimson" href="../index.html" aria-current="page">玩法资料</a><a class="nav-link text-ink hover:text-crimson" href="../../updates/index.html">版本动态</a><a class="nav-link text-ink hover:text-crimson" href="../../search/index.html">搜索</a><a class="nav-link text-ink hover:text-crimson" href="../../community/index.html">社区</a><a class="nav-link text-ink hover:text-crimson" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta">立即游玩</a></nav><button class="text-ink p-2 md:hidden" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="打开菜单" data-menu-toggle><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button></div><div id="mobile-nav" class="site-mobile-menu border-ink/10 absolute top-full right-0 left-0 hidden flex-col gap-4 border-b p-4 shadow-lg backdrop-blur-md md:hidden" data-mobile-menu><a class="text-ink py-2 text-center text-lg" href="../../index.html">首页</a><a class="text-ink py-2 text-center text-lg" href="../../intro/index.html">游戏介绍</a><a class="text-ink py-2 text-center text-lg" href="../index.html" aria-current="page">玩法资料</a><a class="text-ink py-2 text-center text-lg" href="../../updates/index.html">版本动态</a><a class="text-ink py-2 text-center text-lg" href="../../search/index.html">搜索</a><a class="text-ink py-2 text-center text-lg" href="../../community/index.html">社区</a><a class="text-ink py-2 text-center text-lg" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta site-mobile-cta">立即游玩</a></div></header><script>
+  const header = document.querySelector("[data-site-header]");
+  const toggle = header?.querySelector("[data-menu-toggle]");
+  const mobileMenu = header?.querySelector("[data-mobile-menu]");
+  const isHome = header?.getAttribute("data-home") === "true";
+
+  const syncHeaderState = () => {
+    if (!header) return;
+    const scrolled = !isHome || window.scrollY > 50;
+    header.classList.add("nav-glass");
+    header.classList.toggle("is-scrolled", scrolled);
+    header.classList.toggle("py-2", scrolled);
+    header.classList.toggle("py-4", !scrolled);
+  };
+
+  syncHeaderState();
+  window.addEventListener("scroll", syncHeaderState, { passive: true });
+
+  toggle?.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+    mobileMenu?.classList.toggle("hidden", expanded);
+    mobileMenu?.classList.toggle("flex", !expanded);
+  });
+
+  mobileMenu?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => {
+      toggle?.setAttribute("aria-expanded", "false");
+      mobileMenu?.classList.add("hidden");
+      mobileMenu?.classList.remove("flex");
+    });
+  });
+</script><main data-pagefind-body><article class="content-page-shell article-shell px-4 pb-20 pt-32 md:pt-36"><div class="mx-auto max-w-3xl"><a href="../index.html" class="content-back-link">返回玩法资料</a><header class="content-card article-header"><div class="flex flex-wrap items-center gap-3"><span class="post-badge post-badge-announcement">系统说明</span></div><h1 class="font-heading article-title">基础设定一览</h1><p class="article-description">快速了解道具品阶、境界层次、角色设定和主要玩法入口。</p></header><div class="content-card article-body"><p>这篇资料适合刚入世的道友快速查阅。你可以先不用记住所有细节，只要知道每个设定大概影响什么，后续看到装备、丹药、功法、境界和玩法入口时就不会迷路。</p>
+<h2 id="道具品阶">道具品阶</h2>
+<p>游戏中常见道具会用“品阶”表示稀有度和大致价值。品阶从低到高通常为：</p>
+<p><strong>凡品 -&gt; 灵品 -&gt; 玄品 -&gt; 真品 -&gt; 地品 -&gt; 天品 -&gt; 仙品 -&gt; 神品</strong></p>
+<p>品阶越高，通常代表潜力、数值或稀有度越高，但不等于一定适合当前角色。新手尤其要注意三点：</p>
+<ul>
+<li><strong>看用途</strong>：突破丹、恢复丹、炼体材料、炼器材料的价值不在同一个维度。</li>
+<li><strong>看阶段</strong>：高品道具可能很强，但当前境界未必能完全发挥。</li>
+<li><strong>看构筑</strong>：与你灵根、功法、神通方向契合的道具，往往比单纯高品更有用。</li>
+</ul>
+<p>功法和神通还可能使用另一套阶位表达，例如黄阶、玄阶、地阶、天阶，并细分上品、中品、下品。理解方式类似：阶位代表基础评价，最终仍要看效果是否适合你。</p>
+<h2 id="境界一览">境界一览</h2>
+<p>角色修行从低到高依次经历：</p>
+<p><strong>炼气 -&gt; 筑基 -&gt; 金丹 -&gt; 元婴 -&gt; 化神 -&gt; 炼虚 -&gt; 合体 -&gt; 大乘 -&gt; 渡劫</strong></p>
+<p>每个大境界又分为：</p>
+<p><strong>初期 -&gt; 中期 -&gt; 后期 -&gt; 圆满</strong></p>
+<p>境界决定角色所处的成长阶段。境界提升后，角色可以承受更高难度挑战，也会接触更高价值的资源、丹药、法宝和副本目标。</p>
+<p>突破前建议先确认修为、感悟、当前状态和辅助丹药。准备不足时强行冲关，可能会浪费资源，也可能让角色进入不利状态。</p>
+<h2 id="角色有哪些设定">角色有哪些设定</h2>
+<p>角色不是只有等级和战力。下面这些设定会共同决定你的修仙路线。</p>
+<h3 id="名号性别出身与性格">名号、性别、出身与性格</h3>
+<p>这些更偏角色扮演和叙事表达，会影响你对角色的代入感，也会出现在角色介绍、背景描述或生成文本中。</p>
+<h3 id="境界与阶段">境界与阶段</h3>
+<p>境界是最直观的成长层级。它决定你当前属于哪个修行阶段，也影响副本选择、榜单分组和资源规划。</p>
+<h3 id="年龄与寿元">年龄与寿元</h3>
+<p>年龄记录角色修行经历，寿元代表可继续修行的时间余量。长期闭关、突破和成长节奏都要考虑寿元压力。</p>
+<h3 id="五项基础属性">五项基础属性</h3>
+<ul>
+<li><strong>体魄</strong>：影响耐久、承伤和气血相关表现。</li>
+<li><strong>灵力</strong>：影响法术强度、法力和神通释放基础。</li>
+<li><strong>悟性</strong>：影响理解、命中、暴击和参悟方向。</li>
+<li><strong>速度</strong>：影响出手节奏、闪避和战斗先机。</li>
+<li><strong>神识</strong>：影响抗性、暴击对抗和精神层面的稳定性。</li>
+</ul>
+<p>这五项是角色最核心的基础属性。很多战斗表现会由它们进一步体现出来，所以不要只看一个总战力数字。</p>
+<h3 id="灵根">灵根</h3>
+<p>灵根代表角色与金、木、水、火、土、风、雷、冰等属性的契合程度。灵根越贴合你的主要神通和功法，越容易形成稳定路线。</p>
+<h3 id="先天命格">先天命格</h3>
+<p>命格是角色开局携带的气运。它可能提升闭关、突破、恢复、炼丹、炼器或灵石收益，也可能带来代价。选择命格时，不要只看名字华丽，要看收益和负担是否适合你的玩法。</p>
+<h3 id="功法与神通">功法与神通</h3>
+<p>功法偏长期根基和被动加成，神通偏战斗中的实际手段。角色强不强，往往取决于功法、神通、灵根和属性是否互相配合。</p>
+<h3 id="法宝丹药材料与灵石">法宝、丹药、材料与灵石</h3>
+<p>法宝用于提升战斗或提供特殊能力；丹药用于恢复、修炼、突破、炼体等关键节点；材料用于炼丹炼器和其他造物；灵石则是交易、炼制和许多玩法的基础资源。</p>
+<h3 id="声望与排行榜">声望与排行榜</h3>
+<p>声望体现角色在修仙界中的名望，也和榜单、奖励、宝阁等目标相关。想追求竞争和展示，可以关注天骄榜与物品榜。</p>
+<h3 id="当前状态">当前状态</h3>
+<p>角色会记录当前气血、法力、丹毒、伤势或其他长期状态。副本、战斗、丹药和恢复都会影响状态。状态不好时，先恢复再挑战通常更稳。</p>
+<h2 id="有哪些主要玩法">有哪些主要玩法</h2>
+<h3 id="修炼与闭关">修炼与闭关</h3>
+<p>修炼是推进境界的主线。通过闭关积累修为和感悟，准备充分后尝试突破。</p>
+<h3 id="境界突破">境界突破</h3>
+<p>突破用于进入更高阶段。它需要修为、感悟和状态配合，也可以借助丹药等手段提高把握。</p>
+<h3 id="悟道与功法神通">悟道与功法神通</h3>
+<p>悟道用于获取或推演功法神通。你可以围绕灵根和战斗目标，逐步形成自己的构筑。</p>
+<h3 id="炼丹">炼丹</h3>
+<p>炼丹把药材和其他材料转化为丹药。丹药可以恢复气血法力、辅助修炼突破、推进炼体或处理特殊状态，但也要注意丹毒和使用限制。</p>
+<h3 id="炼器">炼器</h3>
+<p>炼器把材料转化为法宝。法宝会影响角色战斗表现，适合用来补输出、防护、速度、抗性或特殊效果。</p>
+<h3 id="副本探索">副本探索</h3>
+<p>副本是获取材料、灵石、修为、感悟和奇遇的重要来源。进入前要看境界门槛、难度和角色状态。</p>
+<h3 id="坊市交易">坊市交易</h3>
+<p>坊市用于购买材料、珍宝和神秘货物，也可以通过鉴宝与回收处理背包资源。缺什么资源时，坊市往往是最直接的补齐入口。</p>
+<h3 id="排行榜与挑战">排行榜与挑战</h3>
+<p>排行榜提供阶段性目标。天骄榜看角色战力，物品榜展示优秀法宝、功法、神通和丹药。想检验构筑时，可以关注榜单和挑战入口。</p>
+<h3 id="任务传音与社区">任务、传音与社区</h3>
+<p>任务中心帮助你明确当前目标；传音玉简承接系统消息和奖励；世界传音与玩家交流群则用于交流心得、反馈问题和分享构筑。</p>
+<h3 id="ai-奇遇">AI 奇遇</h3>
+<p>AI 会参与角色设定、命格命名、功法神通描述、副本场景和战斗播报，让文字体验更有变化。核心资源和数值仍以游戏规则为准。</p>
+<h2 id="新手阅读建议">新手阅读建议</h2>
+<p>第一次游玩时，不必一次理解所有系统。建议先按这个顺序熟悉：</p>
+<ol>
+<li>创建角色，了解灵根、命格和五项基础属性。</li>
+<li>闭关修炼，体验境界阶段和突破。</li>
+<li>进入副本，获取第一批材料和资源。</li>
+<li>尝试炼丹、炼器，把资源转化为战力。</li>
+<li>再去调整功法神通，开始规划自己的构筑。</li>
+</ol>
+</div></div></article></main><footer class="border-ink/10 border-t px-4 py-10"><div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row"><div class="text-center md:text-left"><div class="mb-2 flex items-center justify-center gap-2 md:justify-start"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" width="24" height="24"><span class="font-heading text-lg">万界道友</span></div><p class="text-ink-muted text-xs">© 2026 daoyou.org. GPL-3.0 Licensed.</p></div><div class="text-ink-secondary flex flex-wrap justify-center gap-6 text-sm"><a href="../../intro/index.html" class="hover:text-crimson transition-colors footer-link">游戏介绍</a><a href="../index.html" class="hover:text-crimson transition-colors footer-link text-crimson">玩法资料</a><a href="../../updates/index.html" class="hover:text-crimson transition-colors footer-link">版本动态</a><a href="../../community/index.html" class="hover:text-crimson transition-colors footer-link">社区</a><a href="../../support/index.html" class="hover:text-crimson transition-colors footer-link">支持</a><a href="/game" class="footer-link hover:text-crimson transition-colors">立即游玩</a></div></div></footer></div></body></html>

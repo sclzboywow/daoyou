@@ -1,0 +1,1 @@
+import{t as e}from"./components-DlV-vxvi.js";import{t}from"./jsx-runtime-oxZg3LDB.js";var n=t();function r(){return(0,n.jsx)(e,{to:`/game/sect/arena`,replace:!0})}export{r as default};

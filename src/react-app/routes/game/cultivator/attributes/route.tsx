@@ -1,0 +1,169 @@
+import { AttributeAllocationControl } from '@app/components/feature/cultivator/AttributeAllocationControl';
+import { CultivatorAttributeOverview } from '@app/components/feature/cultivator/CultivatorAttributeOverview';
+import { useCultivatorDisplayProjection } from '@app/components/feature/cultivator/useCultivatorDisplayProjection';
+import {
+  canSubmitAttributeAllocation,
+  createEmptyAttributeDraft,
+} from '@app/components/feature/cultivator/attributeAllocationControlLogic';
+import { GameSceneFrame, GameSceneSection } from '@app/components/game-shell';
+import { useInkUI } from '@app/components/providers/InkUIProvider';
+import { InkButton, InkNotice } from '@app/components/ui';
+import { useResourceMutation } from '@app/lib/resources/mutations';
+import { ATTRIBUTE_RESET_TALISMAN_NAME } from '@shared/config/attributeResetTalisman';
+import type { Attributes } from '@shared/types/cultivator';
+import { useState } from 'react';
+
+export default function CultivatorAttributesPage() {
+  const projection = useCultivatorDisplayProjection();
+  const cultivator = projection.data?.cultivator ?? null;
+  const isLoading = projection.loading;
+  const { mutate } = useResourceMutation();
+  const { pushToast, openDialog } = useInkUI();
+  const [attributeDraft, setAttributeDraft] = useState<Attributes>(
+    createEmptyAttributeDraft(),
+  );
+  const [isAllocatingAttributes, setIsAllocatingAttributes] = useState(false);
+  const [isResettingAttributes, setIsResettingAttributes] = useState(false);
+
+  if (isLoading && !cultivator) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="loading-tip">正在读取根基属性……</p>
+      </div>
+    );
+  }
+
+  if (!cultivator) {
+    return (
+      <div className="flex h-full items-center justify-center px-4">
+        <InkNotice>
+          尚无角色资料，先去觉醒灵根，再来查看根基。
+          <InkButton href="/game/create" variant="primary" className="ml-2">
+            觉醒灵根
+          </InkButton>
+        </InkNotice>
+      </div>
+    );
+  }
+
+  const unallocatedAttributePoints =
+    cultivator.unallocated_attribute_points ?? 0;
+
+  const handleAllocateAttributes = async () => {
+    if (
+      !canSubmitAttributeAllocation({
+        draft: attributeDraft,
+        unallocatedPoints: unallocatedAttributePoints,
+        loading: isAllocatingAttributes,
+      })
+    ) {
+      return;
+    }
+
+    try {
+      setIsAllocatingAttributes(true);
+      await mutate(
+        fetch('/api/cultivator/attributes/allocate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(attributeDraft),
+        }),
+      );
+      setAttributeDraft(createEmptyAttributeDraft());
+      pushToast({ message: '根基属性已分配', tone: 'success' });
+    } catch (error) {
+      pushToast({
+        message: error instanceof Error ? error.message : '属性分配失败',
+        tone: 'danger',
+      });
+    } finally {
+      setIsAllocatingAttributes(false);
+    }
+  };
+
+  const handleResetAttributes = async () => {
+    if (isResettingAttributes) return;
+
+    try {
+      setIsResettingAttributes(true);
+      const result = await mutate<{
+        refunded_attribute_points: number;
+        consumed_talisman_name: string;
+      }>(
+        fetch('/api/cultivator/attributes/reset', {
+          method: 'POST',
+        }),
+      );
+      setAttributeDraft(createEmptyAttributeDraft());
+      pushToast({
+        message: `已启封${result.consumed_talisman_name}，返还 ${result.refunded_attribute_points} 点可分配属性点`,
+        tone: 'success',
+      });
+    } catch (error) {
+      pushToast({
+        message: error instanceof Error ? error.message : '属性重置失败',
+        tone: 'danger',
+      });
+    } finally {
+      setIsResettingAttributes(false);
+    }
+  };
+
+  const openResetConfirm = () => {
+    openDialog({
+      title: `启封${ATTRIBUTE_RESET_TALISMAN_NAME}`,
+      content: (
+        <div className="space-y-2 py-2 text-center text-sm leading-7">
+          <p>
+            将消耗 1 张{ATTRIBUTE_RESET_TALISMAN_NAME}
+            ，五维回到当前境界自然成长值。
+          </p>
+          <p className="text-ink-secondary">
+            已投入的自由属性会返还为未分配属性点。
+          </p>
+        </div>
+      ),
+      confirmLabel: '确认重置',
+      cancelLabel: '再想想',
+      loadingLabel: '重置中...',
+      onConfirm: handleResetAttributes,
+    });
+  };
+
+  return (
+    <GameSceneFrame
+      title="根基属性"
+      description="五维根基会随境界自然增长，额外获得的可分配点可在此处落定。"
+    >
+      <GameSceneSection title="分配根基">
+        <AttributeAllocationControl
+          currentAttributes={cultivator.attributes}
+          unallocatedPoints={unallocatedAttributePoints}
+          draft={attributeDraft}
+          loading={isAllocatingAttributes}
+          onChange={setAttributeDraft}
+          onSubmit={() => void handleAllocateAttributes()}
+        />
+      </GameSceneSection>
+
+      <GameSceneSection
+        title="属性详情"
+        actions={
+          <InkButton
+            variant="primary"
+            disabled={isResettingAttributes}
+            onClick={openResetConfirm}
+          >
+            重置属性点
+          </InkButton>
+        }
+      >
+        <CultivatorAttributeOverview
+          cultivator={cultivator}
+          defaultExpanded
+          expandable={false}
+        />
+      </GameSceneSection>
+    </GameSceneFrame>
+  );
+}

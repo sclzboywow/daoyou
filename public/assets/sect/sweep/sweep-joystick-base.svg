@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="base-fill" cx="42%" cy="36%" r="68%">
+      <stop offset="0" stop-color="#33463d" stop-opacity=".82"/>
+      <stop offset=".58" stop-color="#1d2a25" stop-opacity=".78"/>
+      <stop offset="1" stop-color="#101713" stop-opacity=".9"/>
+    </radialGradient>
+    <linearGradient id="base-rim" x1="36" y1="32" x2="218" y2="222">
+      <stop stop-color="#d9ccb0" stop-opacity=".54"/>
+      <stop offset=".48" stop-color="#8d856f" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#d8c8a7" stop-opacity=".42"/>
+    </linearGradient>
+    <filter id="base-shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="7"/>
+      <feOffset dy="6"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope=".48"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#base-shadow)">
+    <circle cx="128" cy="128" r="112" fill="#101714" fill-opacity=".45"/>
+    <circle cx="128" cy="128" r="106" fill="url(#base-fill)" stroke="url(#base-rim)" stroke-width="4"/>
+    <circle cx="128" cy="128" r="80" fill="none" stroke="#ede3cc" stroke-opacity=".13" stroke-width="2"/>
+    <circle cx="128" cy="128" r="61" fill="#0c1210" fill-opacity=".16" stroke="#090d0b" stroke-opacity=".35" stroke-width="2"/>
+    <g fill="#dfd1b4" fill-opacity=".58">
+      <path d="M128 25l9 17-9 10-9-10z"/>
+      <path d="M231 128l-17 9-10-9 10-9z"/>
+      <path d="M128 231l-9-17 9-10 9 10z"/>
+      <path d="M25 128l17-9 10 9-10 9z"/>
+    </g>
+    <g fill="none" stroke="#d9ccb0" stroke-linecap="round" stroke-opacity=".2" stroke-width="3">
+      <path d="M68 54c-7 6-12 11-17 19"/>
+      <path d="M202 68c-6-7-11-12-19-17"/>
+      <path d="M188 202c7-6 12-11 17-19"/>
+      <path d="M54 188c6 7 11 12 19 17"/>
+    </g>
+  </g>
+</svg>

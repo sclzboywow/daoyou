@@ -1,0 +1,143 @@
+<!DOCTYPE html><html lang="zh-CN"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-REHSYPCDGK"></script><script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag("js", new Date());
+  gtag("config", "G-REHSYPCDGK");
+</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"><meta name="generator" content="Astro v7.0.2"><title>首批宗门资料（四）：幽都 | 万界道友</title><meta name="description" content="幽都以蚀魂逐层削弱攻防、速度与治疗，用忘川制造长线压力，再以魂火、失魂、镇魂和魂兮不归完成裁决。"><link rel="canonical" href="index.html"><meta property="og:site_name" content="万界道友"><meta property="og:type" content="website"><meta property="og:title" content="首批宗门资料（四）：幽都 | 万界道友"><meta property="og:description" content="幽都以蚀魂逐层削弱攻防、速度与治疗，用忘川制造长线压力，再以魂火、失魂、镇魂和魂兮不归完成裁决。"><meta property="og:url" content="/guides/sect-youdu/"><meta property="og:image" content="/assets/daoyou_logo.png"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="首批宗门资料（四）：幽都 | 万界道友"><meta name="twitter:description" content="幽都以蚀魂逐层削弱攻防、速度与治疗，用忘川制造长线压力，再以魂火、失魂、镇魂和魂兮不归完成裁决。"><meta name="twitter:image" content="/assets/daoyou_logo.png"><meta name="theme-color" content="#f8f3e6"><link rel="stylesheet" href="../../_astro/Layout.DLsRdcaP.css"></head><body><div class="site-shell"><header class="site-header fixed top-0 right-0 left-0 z-50 transition-all duration-300 nav-glass is-scrolled py-2" data-site-header data-home="false"><div class="mx-auto flex max-w-7xl items-center justify-between px-4"><a href="../../index.html" class="group flex items-center gap-2 no-underline"><div class="relative h-8 w-8 transition-transform group-hover:rotate-12 md:h-10 md:w-10"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" class="absolute inset-0 h-full w-full object-contain"></div><span class="font-heading text-ink text-xl transition-opacity md:text-2xl">万界道友</span></a><nav class="hidden items-center gap-7 md:flex"><a class="nav-link text-ink hover:text-crimson" href="../../index.html">首页</a><a class="nav-link text-ink hover:text-crimson" href="../../intro/index.html">游戏介绍</a><a class="nav-link text-ink hover:text-crimson" href="../index.html" aria-current="page">玩法资料</a><a class="nav-link text-ink hover:text-crimson" href="../../updates/index.html">版本动态</a><a class="nav-link text-ink hover:text-crimson" href="../../search/index.html">搜索</a><a class="nav-link text-ink hover:text-crimson" href="../../community/index.html">社区</a><a class="nav-link text-ink hover:text-crimson" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta">立即游玩</a></nav><button class="text-ink p-2 md:hidden" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="打开菜单" data-menu-toggle><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button></div><div id="mobile-nav" class="site-mobile-menu border-ink/10 absolute top-full right-0 left-0 hidden flex-col gap-4 border-b p-4 shadow-lg backdrop-blur-md md:hidden" data-mobile-menu><a class="text-ink py-2 text-center text-lg" href="../../index.html">首页</a><a class="text-ink py-2 text-center text-lg" href="../../intro/index.html">游戏介绍</a><a class="text-ink py-2 text-center text-lg" href="../index.html" aria-current="page">玩法资料</a><a class="text-ink py-2 text-center text-lg" href="../../updates/index.html">版本动态</a><a class="text-ink py-2 text-center text-lg" href="../../search/index.html">搜索</a><a class="text-ink py-2 text-center text-lg" href="../../community/index.html">社区</a><a class="text-ink py-2 text-center text-lg" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta site-mobile-cta">立即游玩</a></div></header><script>
+  const header = document.querySelector("[data-site-header]");
+  const toggle = header?.querySelector("[data-menu-toggle]");
+  const mobileMenu = header?.querySelector("[data-mobile-menu]");
+  const isHome = header?.getAttribute("data-home") === "true";
+
+  const syncHeaderState = () => {
+    if (!header) return;
+    const scrolled = !isHome || window.scrollY > 50;
+    header.classList.add("nav-glass");
+    header.classList.toggle("is-scrolled", scrolled);
+    header.classList.toggle("py-2", scrolled);
+    header.classList.toggle("py-4", !scrolled);
+  };
+
+  syncHeaderState();
+  window.addEventListener("scroll", syncHeaderState, { passive: true });
+
+  toggle?.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+    mobileMenu?.classList.toggle("hidden", expanded);
+    mobileMenu?.classList.toggle("flex", !expanded);
+  });
+
+  mobileMenu?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => {
+      toggle?.setAttribute("aria-expanded", "false");
+      mobileMenu?.classList.add("hidden");
+      mobileMenu?.classList.remove("flex");
+    });
+  });
+</script><main data-pagefind-body><article class="content-page-shell article-shell px-4 pb-20 pt-32 md:pt-36"><div class="mx-auto max-w-3xl"><a href="../index.html" class="content-back-link">返回玩法资料</a><header class="content-card article-header"><div class="flex flex-wrap items-center gap-3"><span class="post-badge post-badge-announcement">系统说明</span></div><h1 class="font-heading article-title">首批宗门资料（四）：幽都</h1><p class="article-description">幽都以蚀魂逐层削弱攻防、速度与治疗，用忘川制造长线压力，再以魂火、失魂、镇魂和魂兮不归完成裁决。</p></header><div class="content-card article-body"><blockquote>
+<p>黑水照影，幽灯唤魂。敌人仍然站立时，支撑其形神的力量已经被一层层取走。</p>
+</blockquote>
+<p>幽都门人通晓三魂七魄。其术起势较慢，却擅长让强敌在不知不觉间失去攻防、速度、治疗与行动能力。山门两岸常年不见日月，三盏魂灯为每一个归山者留下方向。</p>
+<p><img src="../../assets/sect/onboarding/youdu.webp" alt="幽都山门、黑水石径与三盏魂灯"></p>
+<h2 id="战斗定位">战斗定位</h2>
+<ul>
+<li><strong>核心资源</strong>：魂火，上限 3 点。</li>
+<li><strong>默认术式</strong>：《一叹》。</li>
+<li><strong>核心减益</strong>：蚀魂，最高 5 层。</li>
+<li><strong>核心伤害</strong>：魂伤，按真实伤害结算。</li>
+<li><strong>道途一</strong>：招魂渡夜，忘川持续伤害、禁疗、长线铺层。</li>
+<li><strong>道途二</strong>：镇魄司命，照影增伤、失魂、镇魂与高层裁决。</li>
+</ul>
+<p>拥有 3 点魂火时，符合条件的下一次魂伤会获得额外增幅，随后消耗全部魂火。因此幽都既要把蚀魂稳定推到高层，也要决定魂火应交给铺层术、控制术，还是终结神通。</p>
+<h2 id="蚀魂机制">蚀魂机制</h2>
+<p>蚀魂持续 3 回合，最高 5 层。它会随层数削弱目标的物攻、法攻、物防、法防、身法与受治疗能力：</p>
+<ul>
+<li>1 层：攻防与身法降低 3%。</li>
+<li>2 层：攻防与身法降低 5%，受治疗降低 15%。</li>
+<li>3 层：攻防与身法降低 8%，受治疗降低 30%。</li>
+<li>4 层：攻防与身法降低 12%，受治疗降低 50%。</li>
+<li>5 层：攻防与身法降低 12%，无法获得气血治疗。</li>
+</ul>
+<p>普通驱散每次只能移除 1 层蚀魂。蚀魂达到特定层数还会触发更强的技能条件：例如《离魂引》在三层以上造成更多魂伤，《镇魂》在四层以上施加更强控制，《魂兮不归》则要求目标至少拥有四层蚀魂。</p>
+<h2 id="六卷心法与神通">六卷心法与神通</h2>
+<table>
+<thead>
+<tr>
+<th>心法</th>
+<th>长期成长</th>
+<th>代表神通</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>《幽都魂典》</td>
+<td>宗门总纲</td>
+<td>《一叹》《魂兮不归》</td>
+</tr>
+<tr>
+<td>《三魂离合篇》</td>
+<td>法术攻击</td>
+<td>《离魂引》《照影》</td>
+</tr>
+<tr>
+<td>《忘川渡夜录》</td>
+<td>最大法力</td>
+<td>《忘川潮》</td>
+</tr>
+<tr>
+<td>《七魄夺形法》</td>
+<td>控制命中</td>
+<td>《夺魄》</td>
+</tr>
+<tr>
+<td>《镇魂铁册》</td>
+<td>法术防御</td>
+<td>《镇魂》</td>
+</tr>
+<tr>
+<td>《心死神活诀》</td>
+<td>控制抗性</td>
+<td>常驻“心死神活”</td>
+</tr>
+</tbody>
+</table>
+<p>主要神通分工如下：</p>
+<ul>
+<li>《一叹》：基础铺层，命中后增加 1 层蚀魂。</li>
+<li>《离魂引》：直接魂伤并增加 2 层蚀魂；目标已有至少 3 层时伤害提高。</li>
+<li>《照影》：让目标受到的所有伤害随蚀魂层数提高。</li>
+<li>《忘川潮》：施加忘川，使目标每次行动前受到魂伤并降低治疗。</li>
+<li>《夺魄》：混合术伤与魂伤，增加蚀魂并削弱敌方攻击。</li>
+<li>《镇魂》：四层窗口下以镇魂钉封住主动技能，并阻断气血治疗。</li>
+<li>《魂兮不归》：按蚀魂层数计算终结魂伤，基础形态结算后清除蚀魂。</li>
+<li>“心死神活”：常驻控制韧性，并在每场第一次受控后自行解脱。</li>
+</ul>
+<h2 id="道途一招魂渡夜">道途一：招魂渡夜</h2>
+<p>招魂渡夜让忘川一寸寸漫过归路，强调长夜回潮、压缩治疗与终结后的续接。</p>
+<ul>
+<li>《忘川潮》对至少 3 层蚀魂的目标提高持续魂伤。</li>
+<li>每回合首次有效潮伤可以获得魂火。</li>
+<li>参悟可延长忘川、强化高层持续伤害、进一步降低治疗或速度。</li>
+<li>高阶节点可以让终结后保留蚀魂，或再次续上忘川，缩短下一轮铺垫。</li>
+</ul>
+<p><strong>回潮</strong> 维持三层压力并适时终结，<strong>沉医</strong> 专门压缩治疗窗口，<strong>长夜</strong> 则延后收束，让四层蚀魂与忘川持续施压。</p>
+<h2 id="道途二镇魄司命">道途二：镇魄司命</h2>
+<p>镇魄司命以“见影知魂、知魂书名”为核心，把蚀魂层数转化为更直接的魂伤与控制优势。</p>
+<ul>
+<li>对至少 3 层蚀魂目标，自身直接魂伤提高。</li>
+<li>《照影》会让自身魂伤进一步随层数增长。</li>
+<li>每场第一次受控后解脱时可获得魂火。</li>
+<li>高层《镇魂》可获得更强命中、速度压制与法力效率。</li>
+<li>参悟可强化《魂兮不归》的基础伤害、逐层成长和裁决后的资源回转。</li>
+</ul>
+<p><strong>钉法者</strong> 优先压制敌方术者，<strong>四层判决</strong> 会在达到四层后立即终结，<strong>取其第五</strong> 则倾向先触发失魂，再利用归窍窗口储存魂火。</p>
+<h2 id="山门舆图">山门舆图</h2>
+<p><img src="../../assets/sect/youdu-map.webp" alt="黑水穿过幽都殿、七魄台、照影场与山中诸院的舆图"></p>
+<p>幽都殿中没有神像，只有映照姓名、来处与归路的一面黑水。三魂阁收藏六卷心法，七魄台用于参悟道途，照影场检验神通在影上的痕迹。药庐只治魂魄缝隙，不许强拘生魂；招魂司记录失名者与界隙回声，也护送愿意归去的魂。</p>
+<h2 id="选择建议">选择建议</h2>
+<p>面对回复能力强、战线较长的敌人，招魂渡夜更容易持续制造压力；面对依赖主动技能或关键行动窗口的敌人，镇魄司命能以照影、失魂与镇魂打断节奏。</p>
+<p>幽都最怕铺垫被迫中断。配装时应确保至少有稳定铺层手段，并根据敌方治疗与控制抗性，决定四槽中是否同时携带《忘川潮》《照影》或《镇魂》。</p>
+</div></div></article></main><footer class="border-ink/10 border-t px-4 py-10"><div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row"><div class="text-center md:text-left"><div class="mb-2 flex items-center justify-center gap-2 md:justify-start"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" width="24" height="24"><span class="font-heading text-lg">万界道友</span></div><p class="text-ink-muted text-xs">© 2026 daoyou.org. GPL-3.0 Licensed.</p></div><div class="text-ink-secondary flex flex-wrap justify-center gap-6 text-sm"><a href="../../intro/index.html" class="hover:text-crimson transition-colors footer-link">游戏介绍</a><a href="../index.html" class="hover:text-crimson transition-colors footer-link text-crimson">玩法资料</a><a href="../../updates/index.html" class="hover:text-crimson transition-colors footer-link">版本动态</a><a href="../../community/index.html" class="hover:text-crimson transition-colors footer-link">社区</a><a href="../../support/index.html" class="hover:text-crimson transition-colors footer-link">支持</a><a href="/game" class="footer-link hover:text-crimson transition-colors">立即游玩</a></div></div></footer></div></body></html>

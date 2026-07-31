@@ -1,0 +1,1 @@
+import{r as e,t}from"./react-CYuo-Lgd.js";import{t as n}from"./store-AHHM0Vvx.js";var r=e(t(),1);async function i(e){return n.consumeMutation(e)}function a(e){n.consumeChanges(`changes`in e?e.changes:[...e])}function o(){return(0,r.useMemo)(()=>({mutate(e){return e.then(e=>n.consumeMutation(e))},consumeChanges:a}),[])}export{i as n,o as r,a as t};

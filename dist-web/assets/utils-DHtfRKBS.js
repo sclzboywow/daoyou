@@ -1,0 +1,1 @@
+import"./tower-DWt9hWPK.js";function e(e){let t=new Date(e);return`${t.getMonth()+1}月${t.getDate()}日 ${String(t.getHours()).padStart(2,`0`)}:${String(t.getMinutes()).padStart(2,`0`)}`}function t(e){return`第 ${e} 层`}function n(e){return e===`boss`?`压阵主影`:e===`elite`?`异化幻影`:`寻常幻影`}export{t as n,e as r,n as t};

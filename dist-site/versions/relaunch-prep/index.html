@@ -1,0 +1,56 @@
+<!DOCTYPE html><html lang="zh-CN"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-REHSYPCDGK"></script><script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag("js", new Date());
+  gtag("config", "G-REHSYPCDGK");
+</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"><meta name="generator" content="Astro v7.0.2"><title>6 月玩法与平衡迭代专题 | 万界道友</title><meta name="description" content="6 月玩法与平衡迭代集中调整闭关修炼、天地灵气、声望宝阁、炼丹炼体、排行榜、道友名录、副本战斗与界面体验。"><link rel="canonical" href="index.html"><meta property="og:site_name" content="万界道友"><meta property="og:type" content="website"><meta property="og:title" content="6 月玩法与平衡迭代专题 | 万界道友"><meta property="og:description" content="6 月玩法与平衡迭代集中调整闭关修炼、天地灵气、声望宝阁、炼丹炼体、排行榜、道友名录、副本战斗与界面体验。"><meta property="og:url" content="/versions/relaunch-prep/"><meta property="og:image" content="/assets/daoyou_logo.png"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="6 月玩法与平衡迭代专题 | 万界道友"><meta name="twitter:description" content="6 月玩法与平衡迭代集中调整闭关修炼、天地灵气、声望宝阁、炼丹炼体、排行榜、道友名录、副本战斗与界面体验。"><meta name="twitter:image" content="/assets/daoyou_logo.png"><meta name="theme-color" content="#f8f3e6"><link rel="stylesheet" href="../../_astro/Layout.DLsRdcaP.css"></head><body><div class="site-shell"><header class="site-header fixed top-0 right-0 left-0 z-50 transition-all duration-300 nav-glass is-scrolled py-2" data-site-header data-home="false"><div class="mx-auto flex max-w-7xl items-center justify-between px-4"><a href="../../index.html" class="group flex items-center gap-2 no-underline"><div class="relative h-8 w-8 transition-transform group-hover:rotate-12 md:h-10 md:w-10"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" class="absolute inset-0 h-full w-full object-contain"></div><span class="font-heading text-ink text-xl transition-opacity md:text-2xl">万界道友</span></a><nav class="hidden items-center gap-7 md:flex"><a class="nav-link text-ink hover:text-crimson" href="../../index.html">首页</a><a class="nav-link text-ink hover:text-crimson" href="../../intro/index.html">游戏介绍</a><a class="nav-link text-ink hover:text-crimson" href="../../guides/index.html">玩法资料</a><a class="nav-link text-ink hover:text-crimson" href="../../updates/index.html" aria-current="page">版本动态</a><a class="nav-link text-ink hover:text-crimson" href="../../search/index.html">搜索</a><a class="nav-link text-ink hover:text-crimson" href="../../community/index.html">社区</a><a class="nav-link text-ink hover:text-crimson" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta">立即游玩</a></nav><button class="text-ink p-2 md:hidden" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="打开菜单" data-menu-toggle><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button></div><div id="mobile-nav" class="site-mobile-menu border-ink/10 absolute top-full right-0 left-0 hidden flex-col gap-4 border-b p-4 shadow-lg backdrop-blur-md md:hidden" data-mobile-menu><a class="text-ink py-2 text-center text-lg" href="../../index.html">首页</a><a class="text-ink py-2 text-center text-lg" href="../../intro/index.html">游戏介绍</a><a class="text-ink py-2 text-center text-lg" href="../../guides/index.html">玩法资料</a><a class="text-ink py-2 text-center text-lg" href="../../updates/index.html" aria-current="page">版本动态</a><a class="text-ink py-2 text-center text-lg" href="../../search/index.html">搜索</a><a class="text-ink py-2 text-center text-lg" href="../../community/index.html">社区</a><a class="text-ink py-2 text-center text-lg" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta site-mobile-cta">立即游玩</a></div></header><script>
+  const header = document.querySelector("[data-site-header]");
+  const toggle = header?.querySelector("[data-menu-toggle]");
+  const mobileMenu = header?.querySelector("[data-mobile-menu]");
+  const isHome = header?.getAttribute("data-home") === "true";
+
+  const syncHeaderState = () => {
+    if (!header) return;
+    const scrolled = !isHome || window.scrollY > 50;
+    header.classList.add("nav-glass");
+    header.classList.toggle("is-scrolled", scrolled);
+    header.classList.toggle("py-2", scrolled);
+    header.classList.toggle("py-4", !scrolled);
+  };
+
+  syncHeaderState();
+  window.addEventListener("scroll", syncHeaderState, { passive: true });
+
+  toggle?.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+    mobileMenu?.classList.toggle("hidden", expanded);
+    mobileMenu?.classList.toggle("flex", !expanded);
+  });
+
+  mobileMenu?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => {
+      toggle?.setAttribute("aria-expanded", "false");
+      mobileMenu?.classList.add("hidden");
+      mobileMenu?.classList.remove("flex");
+    });
+  });
+</script><main data-pagefind-body><article class="content-page-shell article-shell px-4 pb-20 pt-32 md:pt-36"><div class="mx-auto max-w-3xl"><a href="../../updates/index.html" class="content-back-link">返回版本动态</a><header class="content-card article-header"><div class="flex flex-wrap items-center gap-3"><span class="post-badge post-badge-update">当前版本</span><time class="post-date" datetime="2026-06-23T00:00:00.000Z">2026-06-23</time></div><h1 class="font-heading article-title">6 月玩法与平衡迭代</h1><p class="article-description">6 月玩法与平衡迭代集中调整闭关修炼、天地灵气、声望宝阁、炼丹炼体、排行榜、道友名录、副本战斗与界面体验。</p></header><section class="content-card mt-6 p-6"><h2 class="text-ink text-2xl font-semibold">版本亮点</h2><ul class="version-highlight-list mt-4"><li>闭关修炼加入顿悟机制，并重新梳理修为获取、突破概率和金丹期后的成长节奏。</li><li>新增天地灵气、声望、天骄宝阁、境界分榜和道友名录，完善日常消耗、排名奖励与玩家互动。</li><li>炼丹与炼体系统完成重点改版，丹药品相、丹方熟练度、炼体继承和相关限制规则同步调整。</li><li>副本、幻境、敌人生成器、技能词条和战斗状态显示持续优化，提升挑战稳定性与构筑可读性。</li></ul></section><section class="content-card mt-6 p-6"><h2 class="text-ink text-2xl font-semibold">关联更新日志</h2><div class="mt-5 grid gap-3"><a href="../../updates/announcement-placeholder/index.html" class="content-link">《万界道友》官网重构完成公告</a><a href="../../updates/june-gameplay-balance-update/index.html" class="content-link">6 月玩法、平衡与体验优化更新日志</a></div></section><div class="content-card article-body"><p>本专题记录《万界道友》在 2026 年 6 月上旬至 6 月下旬完成的一轮玩法、平衡与体验迭代。相比单点功能更新，本轮调整更接近一次系统性整理：修炼成长、资源消耗、炼丹炼体、副本挑战、排行榜奖励和玩家互动都发生了明显变化。</p>
+<h2 id="本轮版本定位">本轮版本定位</h2>
+<p>这轮更新的核心目标，是让玩家的长期成长路径更稳定、更可理解：</p>
+<ul>
+<li>闭关、每日任务、丹药、炼体和突破共同构成更清晰的修炼节奏。</li>
+<li>天地灵气替代零散次数和寿元限制，作为更统一的玩法消耗入口。</li>
+<li>声望、天骄榜和天骄宝阁让排行榜目标有了更明确的长期奖励。</li>
+<li>炼丹品相、技能策略、词条规则和敌人难度调整，让构筑选择更有区分度。</li>
+<li>道友名录、好友交易和传音玉简强化玩家之间的连接。</li>
+</ul>
+<h2 id="适合关注的玩家">适合关注的玩家</h2>
+<p>如果你正在推进境界、闭关修炼或准备进入金丹期之后的成长阶段，本轮修为、丹药和突破相关调整会直接影响养成规划。</p>
+<p>如果你主要参与副本、幻境、排行榜或拍卖行，本轮敌人难度、奖励加成、声望发放、专属交易和黑市规则也值得重点查看。</p>
+<p>如果你是新玩家，可以先从新手指引任务、创建角色、修炼成长和副本探索相关资料开始，再结合本篇关联更新日志了解当前规则。</p>
+<h2 id="后续计划">后续计划</h2>
+<p>官网会继续把本轮机制变化沉淀到玩法资料和系统资料中。后续如果涉及正式版本号、版本名称、重要活动或更大范围系统改版，会继续通过版本专题和更新日志同步。</p>
+</div></div></article></main><footer class="border-ink/10 border-t px-4 py-10"><div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row"><div class="text-center md:text-left"><div class="mb-2 flex items-center justify-center gap-2 md:justify-start"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" width="24" height="24"><span class="font-heading text-lg">万界道友</span></div><p class="text-ink-muted text-xs">© 2026 daoyou.org. GPL-3.0 Licensed.</p></div><div class="text-ink-secondary flex flex-wrap justify-center gap-6 text-sm"><a href="../../intro/index.html" class="hover:text-crimson transition-colors footer-link">游戏介绍</a><a href="../../guides/index.html" class="hover:text-crimson transition-colors footer-link">玩法资料</a><a href="../../updates/index.html" class="hover:text-crimson transition-colors footer-link text-crimson">版本动态</a><a href="../../community/index.html" class="hover:text-crimson transition-colors footer-link">社区</a><a href="../../support/index.html" class="hover:text-crimson transition-colors footer-link">支持</a><a href="/game" class="footer-link hover:text-crimson transition-colors">立即游玩</a></div></div></footer></div></body></html>

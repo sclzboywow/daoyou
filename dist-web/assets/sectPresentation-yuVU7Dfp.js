@@ -1,0 +1,1 @@
+import{a as e,i as t}from"./content-BmbV9LIq.js";function n(n){if(!t.includes(n))throw Error(`未知宗门：${n}`);return e[n]}function r(e,t,n=0){let r=e?.metrics.find(e=>e.key===t)?.value;return typeof r==`number`&&Number.isFinite(r)?r:n}export{n,r as t};

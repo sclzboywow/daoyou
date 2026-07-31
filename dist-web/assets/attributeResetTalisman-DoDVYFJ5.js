@@ -1,0 +1,1 @@
+var e=`attribute_reset`,t=`归元洗髓符`;function n(t){return t===e}export{e as n,n as r,t};

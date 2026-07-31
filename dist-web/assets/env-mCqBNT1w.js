@@ -1,0 +1,1 @@
+var e={BASE_URL:`/`,DEV:!1,MODE:`client`,PROD:!0,SSR:!1};function t(...t){for(let n of t){let t=e[n];if(t)return t}}var n={apiBaseUrl:t(`VITE_API_BASE_URL`)?.replace(/\/+$/,``),turnstileSiteKey:t(`VITE_TURNSTILE_SITE_KEY`)};export{n as t};

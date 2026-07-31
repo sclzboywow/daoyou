@@ -1,0 +1,96 @@
+import { CreationTags } from '@shared/engine/shared/tag-domain';
+import type { EnemyRace } from '@shared/types/constants';
+import type { EnemyRaceProfile } from './types';
+
+export const ENEMY_RACE_PROFILES: Record<EnemyRace, EnemyRaceProfile> = {
+  人族: {
+    attributeWeights: {
+      vitality: 1,
+      spirit: 1.15,
+      wisdom: 1.2,
+      speed: 0.85,
+      willpower: 0.8,
+    },
+    elementPool: ['金', '木', '水', '火', '土', '风', '雷', '冰'],
+    narrativeTags: ['机变', '控制', '平衡'],
+    slotPriority: ['weapon', 'accessory', 'armor'],
+    techniqueTags: [CreationTags.MATERIAL.SEMANTIC_MANUAL, CreationTags.MATERIAL.SEMANTIC_SPIRIT],
+    skillTags: [CreationTags.MATERIAL.SEMANTIC_SPIRIT, CreationTags.MATERIAL.SEMANTIC_ILLUSION],
+    artifactTags: [CreationTags.MATERIAL.SEMANTIC_QI, CreationTags.MATERIAL.SEMANTIC_FORMATION],
+  },
+  妖族: {
+    attributeWeights: {
+      vitality: 1.35,
+      spirit: 0.75,
+      wisdom: 0.7,
+      speed: 1.25,
+      willpower: 0.95,
+    },
+    elementPool: ['金', '木', '土', '风'],
+    narrativeTags: ['肉身', '流血', '续战'],
+    slotPriority: ['weapon', 'armor', 'accessory'],
+    techniqueTags: [CreationTags.MATERIAL.SEMANTIC_BEAST, CreationTags.MATERIAL.SEMANTIC_BLOOD],
+    skillTags: [CreationTags.MATERIAL.SEMANTIC_BEAST, CreationTags.MATERIAL.SEMANTIC_BLADE],
+    artifactTags: [CreationTags.MATERIAL.SEMANTIC_BONE, CreationTags.MATERIAL.SEMANTIC_BURST],
+  },
+  鬼魂: {
+    attributeWeights: {
+      vitality: 0.55,
+      spirit: 1.35,
+      wisdom: 0.75,
+      speed: 1.15,
+      willpower: 1.2,
+    },
+    elementPool: ['水', '风', '冰'],
+    narrativeTags: ['阴寒', '控场', '神魂'],
+    slotPriority: ['accessory', 'weapon', 'armor'],
+    techniqueTags: [CreationTags.MATERIAL.SEMANTIC_SPIRIT, CreationTags.MATERIAL.SEMANTIC_ILLUSION],
+    skillTags: [CreationTags.MATERIAL.SEMANTIC_FREEZE, CreationTags.MATERIAL.SEMANTIC_SPIRIT],
+    artifactTags: [CreationTags.MATERIAL.SEMANTIC_ILLUSION, CreationTags.MATERIAL.SEMANTIC_WATER],
+  },
+  魔族: {
+    attributeWeights: {
+      vitality: 1.2,
+      spirit: 1.2,
+      wisdom: 0.7,
+      speed: 0.75,
+      willpower: 1.15,
+    },
+    elementPool: ['火', '雷', '土'],
+    narrativeTags: ['爆发', '残忍', '低血狂战'],
+    slotPriority: ['weapon', 'armor', 'accessory'],
+    techniqueTags: [CreationTags.MATERIAL.SEMANTIC_BURST, CreationTags.MATERIAL.SEMANTIC_BLOOD],
+    skillTags: [CreationTags.MATERIAL.SEMANTIC_FLAME, CreationTags.MATERIAL.SEMANTIC_THUNDER],
+    artifactTags: [CreationTags.MATERIAL.SEMANTIC_BURST, CreationTags.MATERIAL.SEMANTIC_GUARD],
+  },
+  古兽: {
+    attributeWeights: {
+      vitality: 1.3,
+      spirit: 1.15,
+      wisdom: 0.6,
+      speed: 1.15,
+      willpower: 0.8,
+    },
+    elementPool: ['金', '火', '风', '雷', '水'],
+    narrativeTags: ['太古', '碾压', '凶威'],
+    slotPriority: ['weapon', 'armor', 'accessory'],
+    techniqueTags: [CreationTags.MATERIAL.SEMANTIC_BEAST, CreationTags.MATERIAL.SEMANTIC_BONE],
+    skillTags: [CreationTags.MATERIAL.SEMANTIC_BEAST, CreationTags.MATERIAL.SEMANTIC_BURST],
+    artifactTags: [CreationTags.MATERIAL.SEMANTIC_BONE, CreationTags.MATERIAL.SEMANTIC_GUARD],
+  },
+  灵族: {
+    attributeWeights: {
+      vitality: 0.75,
+      spirit: 1.35,
+      wisdom: 1.2,
+      speed: 1.05,
+      willpower: 0.65,
+    },
+    elementPool: ['金', '木', '水', '火', '土', '风', '雷', '冰'],
+    narrativeTags: ['元素', '护体', '回能'],
+    slotPriority: ['accessory', 'weapon', 'armor'],
+    techniqueTags: [CreationTags.MATERIAL.SEMANTIC_SPIRIT, CreationTags.MATERIAL.SEMANTIC_QI],
+    skillTags: [CreationTags.MATERIAL.SEMANTIC_SPIRIT, CreationTags.MATERIAL.SEMANTIC_BURST],
+    artifactTags: [CreationTags.MATERIAL.SEMANTIC_DIVINE, CreationTags.MATERIAL.SEMANTIC_QI],
+  },
+};

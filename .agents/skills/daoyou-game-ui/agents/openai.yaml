@@ -1,0 +1,4 @@
+interface:
+  display_name: "Daoyou Game UI"
+  short_description: "Daoyou 游戏主流程场景 UI 约束与审查规则"
+  default_prompt: "Use $daoyou-game-ui to implement or review Daoyou GameViewportLayout main-flow scene UI while preserving scene-page rules."

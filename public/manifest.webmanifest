@@ -1,0 +1,32 @@
+{
+  "name": "万界道友",
+  "short_name": "万界道友",
+  "description": "AIGC 驱动的高自由度修仙文字游戏",
+  "lang": "zh-CN",
+  "start_url": "/game",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#141918",
+  "background_color": "#f8f3e6",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

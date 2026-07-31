@@ -1,0 +1,1 @@
+var e={disableConsumableBetBattle:!1,disableConsumableAuctionListing:!1},t={consumableBetBattle:`消耗品赌战已临时关闭，待系统调整完成后恢复。`,consumableAuctionListing:`拍卖行消耗品寄售已临时关闭，待系统调整完成后恢复。`};export{e as n,t};

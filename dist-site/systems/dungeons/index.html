@@ -1,0 +1,48 @@
+<!DOCTYPE html><html lang="zh-CN"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-REHSYPCDGK"></script><script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag("js", new Date());
+  gtag("config", "G-REHSYPCDGK");
+</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"><meta name="generator" content="Astro v7.0.2"><title>副本探索 | 万界道友</title><meta name="description" content="进入秘境挑战强敌，获取材料、法宝与成长资源。"><link rel="canonical" href="index.html"><meta property="og:site_name" content="万界道友"><meta property="og:type" content="website"><meta property="og:title" content="副本探索 | 万界道友"><meta property="og:description" content="进入秘境挑战强敌，获取材料、法宝与成长资源。"><meta property="og:url" content="/systems/dungeons/"><meta property="og:image" content="/assets/daoyou_logo.png"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="副本探索 | 万界道友"><meta name="twitter:description" content="进入秘境挑战强敌，获取材料、法宝与成长资源。"><meta name="twitter:image" content="/assets/daoyou_logo.png"><meta name="theme-color" content="#f8f3e6"><link rel="stylesheet" href="../../_astro/Layout.DLsRdcaP.css"></head><body><div class="site-shell"><header class="site-header fixed top-0 right-0 left-0 z-50 transition-all duration-300 nav-glass is-scrolled py-2" data-site-header data-home="false"><div class="mx-auto flex max-w-7xl items-center justify-between px-4"><a href="../../index.html" class="group flex items-center gap-2 no-underline"><div class="relative h-8 w-8 transition-transform group-hover:rotate-12 md:h-10 md:w-10"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" class="absolute inset-0 h-full w-full object-contain"></div><span class="font-heading text-ink text-xl transition-opacity md:text-2xl">万界道友</span></a><nav class="hidden items-center gap-7 md:flex"><a class="nav-link text-ink hover:text-crimson" href="../../index.html">首页</a><a class="nav-link text-ink hover:text-crimson" href="../../intro/index.html">游戏介绍</a><a class="nav-link text-ink hover:text-crimson" href="../../guides/index.html" aria-current="page">玩法资料</a><a class="nav-link text-ink hover:text-crimson" href="../../updates/index.html">版本动态</a><a class="nav-link text-ink hover:text-crimson" href="../../search/index.html">搜索</a><a class="nav-link text-ink hover:text-crimson" href="../../community/index.html">社区</a><a class="nav-link text-ink hover:text-crimson" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta">立即游玩</a></nav><button class="text-ink p-2 md:hidden" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="打开菜单" data-menu-toggle><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button></div><div id="mobile-nav" class="site-mobile-menu border-ink/10 absolute top-full right-0 left-0 hidden flex-col gap-4 border-b p-4 shadow-lg backdrop-blur-md md:hidden" data-mobile-menu><a class="text-ink py-2 text-center text-lg" href="../../index.html">首页</a><a class="text-ink py-2 text-center text-lg" href="../../intro/index.html">游戏介绍</a><a class="text-ink py-2 text-center text-lg" href="../../guides/index.html" aria-current="page">玩法资料</a><a class="text-ink py-2 text-center text-lg" href="../../updates/index.html">版本动态</a><a class="text-ink py-2 text-center text-lg" href="../../search/index.html">搜索</a><a class="text-ink py-2 text-center text-lg" href="../../community/index.html">社区</a><a class="text-ink py-2 text-center text-lg" href="../../support/index.html">支持</a><a href="/game" class="site-header-cta site-mobile-cta">立即游玩</a></div></header><script>
+  const header = document.querySelector("[data-site-header]");
+  const toggle = header?.querySelector("[data-menu-toggle]");
+  const mobileMenu = header?.querySelector("[data-mobile-menu]");
+  const isHome = header?.getAttribute("data-home") === "true";
+
+  const syncHeaderState = () => {
+    if (!header) return;
+    const scrolled = !isHome || window.scrollY > 50;
+    header.classList.add("nav-glass");
+    header.classList.toggle("is-scrolled", scrolled);
+    header.classList.toggle("py-2", scrolled);
+    header.classList.toggle("py-4", !scrolled);
+  };
+
+  syncHeaderState();
+  window.addEventListener("scroll", syncHeaderState, { passive: true });
+
+  toggle?.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+    mobileMenu?.classList.toggle("hidden", expanded);
+    mobileMenu?.classList.toggle("flex", !expanded);
+  });
+
+  mobileMenu?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => {
+      toggle?.setAttribute("aria-expanded", "false");
+      mobileMenu?.classList.add("hidden");
+      mobileMenu?.classList.remove("flex");
+    });
+  });
+</script><main data-pagefind-body><article class="content-page-shell article-shell px-4 pb-20 pt-32 md:pt-36"><div class="mx-auto max-w-3xl"><a href="../../guides/index.html#systems" class="content-back-link">返回系统资料库</a><header class="content-card article-header"><div class="flex flex-wrap items-center gap-3"><span class="post-badge post-badge-update">世界探索</span></div><h1 class="font-heading article-title">副本探索</h1><p class="article-description">副本系统承担挑战目标、奖励循环和阶段性验证。</p></header><div class="content-card article-body"><p>副本探索是检验角色实力、获取资源和遭遇奇遇的重要玩法。</p>
+<p>进入副本前，你需要选择秘境地点。不同地点会有境界要求、难度倾向和地域特色。副本过程中可能遭遇事件、战斗、资源损耗和继续深入的抉择。</p>
+<h2 id="探索过程">探索过程</h2>
+<p>副本不是一次固定战斗。你可能在探索中获得线索、遇到敌人、消耗气血法力，或在奖励节点选择继续深入。越深入，潜在收益越高，风险也越明显。</p>
+<h2 id="奖励类型">奖励类型</h2>
+<p>副本可能提供灵石、修为、感悟、材料、造物资源和其他阶段性奖励。奖励会和副本难度、探索表现、秘境阶段等因素相关。</p>
+<h2 id="准备建议">准备建议</h2>
+<p>进入前确认气血法力充足，背包里有可用补给，主力神通和法宝已经装备妥当。如果当前目标只是拿材料，不一定要每次都追求最危险的路线。</p>
+</div></div></article></main><footer class="border-ink/10 border-t px-4 py-10"><div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row"><div class="text-center md:text-left"><div class="mb-2 flex items-center justify-center gap-2 md:justify-start"><img src="../../assets/daoyou_logo.png" alt="万界道友 Logo" width="24" height="24"><span class="font-heading text-lg">万界道友</span></div><p class="text-ink-muted text-xs">© 2026 daoyou.org. GPL-3.0 Licensed.</p></div><div class="text-ink-secondary flex flex-wrap justify-center gap-6 text-sm"><a href="../../intro/index.html" class="hover:text-crimson transition-colors footer-link">游戏介绍</a><a href="../../guides/index.html" class="hover:text-crimson transition-colors footer-link text-crimson">玩法资料</a><a href="../../updates/index.html" class="hover:text-crimson transition-colors footer-link">版本动态</a><a href="../../community/index.html" class="hover:text-crimson transition-colors footer-link">社区</a><a href="../../support/index.html" class="hover:text-crimson transition-colors footer-link">支持</a><a href="/game" class="footer-link hover:text-crimson transition-colors">立即游玩</a></div></div></footer></div></body></html>
