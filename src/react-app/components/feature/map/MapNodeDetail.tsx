@@ -10,6 +10,7 @@ import {
 } from '@shared/lib/game/mapSystem';
 import { cn } from '@shared/lib/cn';
 import type { ComponentProps } from 'react';
+import { createPortal } from 'react-dom';
 
 type InkButtonVariant = ComponentProps<typeof InkButton>['variant'];
 
@@ -42,9 +43,9 @@ export function MapNodeDetail({
 }: MapNodeDetailProps) {
   const dungeonConfig = resolveDungeonMapConfig(node);
 
-  return (
+  const panel = (
     <div
-      className="bg-background pointer-events-auto absolute right-4 bottom-16 left-4 z-40 touch-manipulation md:right-8 md:left-auto md:w-96"
+      className="bg-background pointer-events-auto fixed right-4 bottom-16 left-4 z-50 touch-manipulation md:right-8 md:left-auto md:w-96"
       onPointerDown={(event) => event.stopPropagation()}
       onTouchStart={(event) => event.stopPropagation()}
     >
@@ -118,4 +119,7 @@ export function MapNodeDetail({
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return panel;
+  return createPortal(panel, document.body);
 }
