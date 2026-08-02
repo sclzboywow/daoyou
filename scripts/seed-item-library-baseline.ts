@@ -117,11 +117,11 @@ const ARTIFACT_CONFIG: Record<
 > = {
   weapon: {
     suffix: 'weapon',
-    affixIds: ['artifact-panel-weapon-dual-atk', 'artifact-panel-atk'],
+    affixIds: ['artifact-panel-weapon-dual-atk', 'artifact-panel-strength'],
   },
   armor: {
     suffix: 'armor',
-    affixIds: ['artifact-panel-armor-dual-def', 'artifact-panel-def'],
+    affixIds: ['artifact-panel-armor-dual-def', 'artifact-panel-endurance'],
   },
   accessory: {
     suffix: 'accessory',
@@ -359,14 +359,19 @@ async function seedShops() {
 }
 
 async function main() {
+  const curatedOnly = process.argv.includes('--curated-only');
   const curated = await upsertCuratedEntries(buildCuratedEntries());
-  const shops = await seedShops();
-  const materials = await generateDailyMarketMaterialLibraryEntries({
-    count: 500,
-    userId: ITEM_LIBRARY_SYSTEM_USER_ID,
-    source: 'realm_baseline_seed',
-    seed: 'realm_baseline_v1',
-  });
+  const shops = curatedOnly
+    ? { sectCreated: 0, reputationCreated: 0 }
+    : await seedShops();
+  const materials = curatedOnly
+    ? []
+    : await generateDailyMarketMaterialLibraryEntries({
+        count: 500,
+        userId: ITEM_LIBRARY_SYSTEM_USER_ID,
+        source: 'realm_baseline_seed',
+        seed: 'realm_baseline_v1',
+      });
 
   console.log(
     JSON.stringify(
