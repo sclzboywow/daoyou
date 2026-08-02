@@ -23,7 +23,7 @@
 
 ## 核心特色
 
-- 🤖 **AIGC 深度集成**：角色背景、战斗播报、奇遇故事、物品描述全流程 AI 生成，每一次体验都独一无二。当前统一使用 DeepSeek。
+- 🤖 **AIGC 深度集成**：角色背景、战斗播报、奇遇故事、物品描述全流程 AI 生成，每一次体验都独一无二。支持 DeepSeek、火山引擎 ARK、Kimi、Alibaba、OpenRouter 等多种 AI Provider。
 - ⚔️ **深度战斗引擎**：基于时间轴的回合制战斗，支持神通、法宝、状态效果（Buff/Debuff）、五行克制、伤害管道等复杂机制。
 - ☯️ **严谨修仙体系**：完整的境界（炼气至渡劫）、灵根（金木水火土风雷冰）、功法、命格、炼丹炼器系统。
 - 📱 **水墨风 UI**：基于 `Ink` 组件库（21 个组件）打造的纯文字 UI，简洁优雅，沉浸感强。
@@ -51,7 +51,7 @@
 - 数据库：`PostgreSQL` + `Drizzle ORM`
 - 认证：`Better Auth`
 - 缓存 / 定时任务依赖：`Redis`
-- AI 能力：`AI SDK` + `DeepSeek`
+- AI 能力：`AI SDK` + `DeepSeek / ARK / Kimi / Alibaba / OpenRouter / OpenAI-compatible`
 
 ## 当前目录结构
 
@@ -165,12 +165,16 @@ cp .env.example .env.local
 
 ### AI 能力
 
-AI 相关功能只调用 DeepSeek 官方 API。服务端默认配置：
+AI 相关功能按 `PROVIDER_CHOOSE` 选择 provider：
 
-- `DEEPSEEK_API_KEY`：服务端 DeepSeek API Key
-- `DEEPSEEK_MODEL`：服务端默认模型，未配置时使用 `deepseek-chat`
+- `deepseek`
+- `ark`
+- `kimi`
+- `alibaba`
+- `openrouter`
+- 其他情况走 `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`
 
-玩家也可以在游戏设置中保存自己的 DeepSeek API Key 与模型。BYOK 配置只保存在当前浏览器；请求携带的配置不完整或格式无效时，服务端会返回 400，不会静默消耗服务器额度。
+请按所选 provider 配置对应的 `*_API_KEY`、`*_BASE_URL`、`*_MODEL_USE`、`*_MODEL_FAST_USE`。
 
 ## 数据库初始化
 
@@ -361,7 +365,7 @@ docker compose up -d
 
 欢迎加入《万界道友》QQ交流群，与其他道友共同探讨修仙大计:
 
-- 1群: 1107586928
+- 1群: 308933047
 
 ## 🤝 致谢
 

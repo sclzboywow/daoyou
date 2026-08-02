@@ -1,5 +1,6 @@
 import {
   runAuctionExpireJob,
+  runActivityDispatchJob,
   runBetBattleExpireJob,
   runExpiredDataCleanupJob,
   runMarketRefreshCronJob,
@@ -10,6 +11,7 @@ import {
 } from './internalCron';
 
 const AUCTION_EXPIRE_SCHEDULE = '*/2 * * * *';
+const ACTIVITY_DISPATCH_SCHEDULE = '*/1 * * * *';
 const BET_BATTLE_EXPIRE_SCHEDULE = '*/2 * * * *';
 // Bun.cron uses UTC for cron expressions. 16:00 UTC equals 00:00 Asia/Shanghai.
 const RANK_REWARDS_SCHEDULE = '0 16 * * *';
@@ -47,6 +49,9 @@ export function registerInternalCronJobs(
   }
 
   scheduledTasks = [
+    Bun.cron(ACTIVITY_DISPATCH_SCHEDULE, () =>
+      runScheduledJob('activity-dispatch', runActivityDispatchJob),
+    ),
     Bun.cron(AUCTION_EXPIRE_SCHEDULE, () =>
       runScheduledJob('auction-expire', runAuctionExpireJob),
     ),
@@ -81,6 +86,7 @@ export function registerInternalCronJobs(
   schedulerRegistered = true;
 
   console.info('[cron] registered Bun cron jobs', {
+    activityDispatch: ACTIVITY_DISPATCH_SCHEDULE,
     auctionExpire: AUCTION_EXPIRE_SCHEDULE,
     betBattleExpire: BET_BATTLE_EXPIRE_SCHEDULE,
     rankRewardsUtc: RANK_REWARDS_SCHEDULE,

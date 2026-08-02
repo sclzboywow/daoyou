@@ -18,11 +18,13 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/alibaba": "^2.0.16",
     "@ai-sdk/deepseek": "^3.0.17",
     "@better-auth/drizzle-adapter": "^1.6.25",
     "@better-auth/i18n": "^1.6.25",
     "@marsidev/react-turnstile": "^1.5.4",
     "@microfleet/ioredis-lock": "^6.0.1",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "ai": "^7.0.44",
     "better-auth": "^1.6.25",
@@ -34,6 +36,7 @@
     "drizzle-orm": "^0.45.2",
     "hono": "4.12.32",
     "ioredis": "^5.11.1",
+    "jsonrepair": "^3.15.0",
     "nodemailer": "^9.0.3",
     "pg": "^8.22.0",
     "phaser": "^4.0.0",

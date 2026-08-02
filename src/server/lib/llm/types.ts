@@ -33,9 +33,18 @@ export interface LlmCallAttemptMetrics {
   finishReason?: string;
 }
 
+export type LlmMetricsProvider =
+  | 'deepseek'
+  | 'ark'
+  | 'kimi'
+  | 'alibaba'
+  | 'openrouter'
+  | 'openai-compatible'
+  | (string & {});
+
 export interface LlmCallMetrics {
   sceneId: LlmSceneId;
-  provider: 'deepseek';
+  provider: LlmMetricsProvider;
   model: string;
   systemChars: number;
   userChars: number;

@@ -141,6 +141,13 @@
       "when": 1785595974456,
       "tag": "0019_loving_menace",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785682707297,
+      "tag": "0020_restore_custom_ops",
+      "breakpoints": true
     }
   ]
 }

@@ -302,6 +302,20 @@ export const router = createBrowserRouter(
               )}
             />
             <Route
+              path="activities"
+              lazy={lazyRoute(
+                () => import('@app/routes/game/activities/route'),
+              )}
+              handle={scene(
+                {
+                  id: 'activities',
+                  presentation: 'service',
+                  summary: '仙盟告示、限时活动与登录赠礼汇于此处。',
+                },
+                '仙盟活动',
+              )}
+            />
+            <Route
               path="tower"
               lazy={lazyRoute(() => import('@app/routes/game/tower/route'))}
               handle={scene(
@@ -1194,6 +1208,31 @@ export const router = createBrowserRouter(
           path="online-users"
           lazy={lazyRoute(() => import('@app/routes/admin/online-users/route'))}
           handle={title('在线人数')}
+        />
+        <Route
+          path="operations"
+          lazy={lazyRoute(() => import('@app/routes/admin/operations/route'))}
+          handle={title('运营数据')}
+        />
+        <Route
+          path="activities"
+          lazy={lazyRoute(() => import('@app/routes/admin/activities/route'))}
+          handle={title('活动配置中心')}
+        />
+        <Route
+          path="players"
+          lazy={lazyRoute(() => import('@app/routes/admin/players/route'))}
+          handle={title('玩家检索与补发')}
+        />
+        <Route
+          path="jobs"
+          lazy={lazyRoute(() => import('@app/routes/admin/jobs/route'))}
+          handle={title('批处理任务')}
+        />
+        <Route
+          path="audit"
+          lazy={lazyRoute(() => import('@app/routes/admin/audit/route'))}
+          handle={title('操作审计')}
         />
         <Route
           path="battle-simulator"

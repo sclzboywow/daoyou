@@ -1,5 +1,5 @@
 import { db, getExecutor } from '@server/lib/drizzle/db';
-import { cultivators } from '@server/lib/drizzle/schema';
+import { cultivators, systemJobRuns } from '@server/lib/drizzle/schema';
 import { redis } from '@server/lib/redis';
 import {
   isRedisLockContention,
@@ -19,6 +19,7 @@ import {
 } from '@server/lib/repositories/retentionRepository';
 import { expireListings } from '@server/lib/services/AuctionService';
 import { expireBetBattles } from '@server/lib/services/BetBattleService';
+import { dispatchActivities } from '@server/lib/services/AdminActivityService';
 import type { MailAttachment } from '@server/lib/services/MailService';
 import { runMarketRefreshJob } from '@server/lib/services/MarketScheduler';
 import {
@@ -123,6 +124,41 @@ async function withJobLock<T extends CronJobResult>(
   ttlSeconds: number = LOCK_TTL_SECONDS,
 ): Promise<T | CronJobResult> {
   const startedAt = Date.now();
+  const [runRecord] = await getExecutor()
+    .insert(systemJobRuns)
+    .values({ jobName })
+    .returning({ id: systemJobRuns.id })
+    .catch((error) => {
+      console.error(`[cron] ${jobName} history start failed`, error);
+      return [];
+    });
+  const finishHistory = async (
+    status: string,
+    result?: CronJobResult,
+    error?: unknown,
+  ) => {
+    if (!runRecord) return;
+    await getExecutor()
+      .update(systemJobRuns)
+      .set({
+        status,
+        processedCount: result?.processed ?? 0,
+        skipped: result?.skipped ?? false,
+        reason: result?.reason,
+        error:
+          error instanceof Error
+            ? error.message.slice(0, 2_000)
+            : error
+              ? String(error).slice(0, 2_000)
+              : null,
+        finishedAt: new Date(),
+        durationMs: Date.now() - startedAt,
+      })
+      .where(eq(systemJobRuns.id, runRecord.id))
+      .catch((historyError) => {
+        console.error(`[cron] ${jobName} history finish failed`, historyError);
+      });
+  };
 
   console.info(`[cron] ${jobName} started`);
 
@@ -144,12 +180,17 @@ async function withJobLock<T extends CronJobResult>(
             reason: result.reason,
             durationMs: Date.now() - startedAt,
           });
+          await finishHistory(
+            result.skipped ? 'skipped' : 'succeeded',
+            result,
+          );
           return result;
         } catch (error) {
           console.error(
             `[cron] ${jobName} failed after ${Date.now() - startedAt}ms`,
             error,
           );
+          await finishHistory('failed', undefined, error);
           throw error;
         }
       },
@@ -168,8 +209,17 @@ async function withJobLock<T extends CronJobResult>(
       reason: result.reason,
       durationMs: Date.now() - startedAt,
     });
+    await finishHistory('skipped', result);
     return result;
   }
+}
+
+export async function runActivityDispatchJob(): Promise<CronJobResult> {
+  return withJobLock('activity-dispatch', async () => ({
+    success: true,
+    processed: await dispatchActivities(),
+    skipped: false,
+  }));
 }
 
 export async function runAuctionExpireJob(): Promise<CronJobResult> {

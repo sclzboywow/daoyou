@@ -4,6 +4,8 @@ import { MQ_KEYS } from './mqKeys';
 import { startLocalTransactionOutboxRelay } from './outboxRelay';
 import { createSectConstructionWorker } from './sect-construction/worker';
 import { createTaskProgressWorker } from './task-progress/worker';
+import { createAdminBatchWorker } from './admin-batch/worker';
+import { startAdminBatchRecovery } from './admin-batch/recovery';
 
 interface MqWorkerRegistration {
   queueKey: string;
@@ -21,6 +23,10 @@ interface MqAuxiliaryRegistration {
  */
 const WORKER_REGISTRATIONS: readonly MqWorkerRegistration[] = [
   {
+    queueKey: MQ_KEYS.queues.adminBatch,
+    createWorker: createAdminBatchWorker,
+  },
+  {
     queueKey: MQ_KEYS.queues.sectFacilityConstruction,
     createWorker: createSectConstructionWorker,
   },
@@ -35,6 +41,10 @@ const WORKER_REGISTRATIONS: readonly MqWorkerRegistration[] = [
  * outbox relay 不是 Worker，但与所有事务消息队列使用同一生命周期启动。
  */
 const AUXILIARY_REGISTRATIONS: readonly MqAuxiliaryRegistration[] = [
+  {
+    name: 'admin-batch-recovery',
+    start: startAdminBatchRecovery,
+  },
   {
     name: 'local-transaction-outbox-relay',
     start: startLocalTransactionOutboxRelay,

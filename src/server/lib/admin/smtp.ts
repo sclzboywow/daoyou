@@ -32,6 +32,7 @@ export async function sendViaSmtp(
   email: string,
   subject: string,
   content: string,
+  options: { messageId?: string } = {},
 ) {
   const { transporter, from } = createSmtpTransporter();
   const html = content
@@ -45,5 +46,6 @@ export async function sendViaSmtp(
     subject,
     text: content,
     html,
+    messageId: options.messageId,
   });
 }

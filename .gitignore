@@ -202,3 +202,14 @@ dist
 .vscode
 .antigravitycli
 output/
+
+# Self-host runtime/build outputs are generated on the server.
+dist-web/
+dist-site/
+
+# TLS certificates and ACME challenge files are runtime state, never source.
+certbot/
+
+# Local database backups and one-off synchronization artifacts.
+backups/
+*.bundle
