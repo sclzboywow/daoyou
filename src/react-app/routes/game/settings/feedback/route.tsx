@@ -15,8 +15,6 @@ const FEEDBACK_TYPES: { value: FeedbackType; label: string }[] = [
   { value: 'other', label: '其他意见' },
 ];
 
-const GITHUB_ISSUE_URL = 'https://github.com/ChurchTao/Daoyou/issues';
-
 export default function FeedbackPage() {
   const [type, setType] = useState<FeedbackType>('bug');
   const [content, setContent] = useState('');
@@ -64,33 +62,21 @@ export default function FeedbackPage() {
     <GameSceneFrame
       variant="lite"
       title="意见反馈"
-      description="广纳良言，共筑仙途。这里保留表单本体，把反馈类型、内容与外链提交整合进统一服务场景。"
+      description="广纳良言，共筑仙途。反馈将直接提交至站内后台，由管理人员统一查看和处理。"
       aside={
-        <>
-          <GameSceneAsideSection
-            title="填写建议"
-            className="text-sm leading-7"
-            help={{
-              title: '意见反馈填写建议',
-              content: (
-                <div className="space-y-2 text-sm leading-7">
-                  <p>优先写清复现路径、预期与实际结果，便于尽快定位。</p>
-                  <p>平衡性建议尽量附上场景、境界或资源阶段。</p>
-                </div>
-              ),
-            }}
-          />
-          <GameSceneAsideSection title="GitHub Issue">
-            <a
-              href={GITHUB_ISSUE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-crimson text-sm hover:underline"
-            >
-              {GITHUB_ISSUE_URL} →
-            </a>
-          </GameSceneAsideSection>
-        </>
+        <GameSceneAsideSection
+          title="填写建议"
+          className="text-sm leading-7"
+          help={{
+            title: '意见反馈填写建议',
+            content: (
+              <div className="space-y-2 text-sm leading-7">
+                <p>优先写清复现路径、预期与实际结果，便于尽快定位。</p>
+                <p>平衡性建议尽量附上场景、境界或资源阶段。</p>
+              </div>
+            ),
+          }}
+        />
       }
     >
       <div className="space-y-6">
@@ -150,21 +136,6 @@ export default function FeedbackPage() {
               {message.text}
             </span>
           )}
-        </div>
-
-        {/* GitHub 引导 */}
-        <div className="border-ink/10 border-t pt-4">
-          <p className="text-ink-secondary mb-2 text-sm">
-            也可以前往 GitHub 提交 Issue，获得更快的响应：
-          </p>
-          <a
-            href={GITHUB_ISSUE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-crimson text-sm hover:underline"
-          >
-            {GITHUB_ISSUE_URL} →
-          </a>
         </div>
       </div>
     </GameSceneFrame>

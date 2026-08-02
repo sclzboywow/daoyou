@@ -1,4 +1,3 @@
-import Link from '@app/components/router/AppLink';
 import { InkButton } from '@app/components/ui/InkButton';
 
 export default function NotFound() {
@@ -40,15 +39,9 @@ export default function NotFound() {
           <InkButton variant="secondary" href="/game">
             继续仙途
           </InkButton>
-        </div>
-
-        <div className="mt-12">
-          <Link
-            href="https://github.com/ChurchTao/wanjiedaoyou"
-            className="text-ink-muted hover:text-crimson border-ink-muted/30 border-b pb-0.5 text-sm transition-colors"
-          >
-            向天机阁反馈（报告 Bug）
-          </Link>
+          <InkButton variant="secondary" href="/game/settings/feedback">
+            向天机阁反馈
+          </InkButton>
         </div>
       </div>
 
