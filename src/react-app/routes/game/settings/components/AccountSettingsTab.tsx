@@ -56,11 +56,6 @@ export function AccountSettingsTab() {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
-  const [githubBinding, setGithubBinding] = useState(false);
-  const [githubMessage, setGithubMessage] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
   const [logoutSubmitting, setLogoutSubmitting] = useState(false);
   const [logoutMessage, setLogoutMessage] = useState<string | null>(null);
   const [deletionExpanded, setDeletionExpanded] = useState(false);
@@ -103,7 +98,6 @@ export function AccountSettingsTab() {
   }, []);
 
   const passwordMode = useMemo(() => getPasswordMode(accounts), [accounts]);
-  const hasGithub = accounts.some((account) => account.providerId === 'github');
   const passwordConfirmationError =
     newPassword || confirmPassword
       ? validatePasswordConfirmation(newPassword, confirmPassword)
@@ -180,27 +174,6 @@ export function AccountSettingsTab() {
       });
     } finally {
       setPasswordSubmitting(false);
-    }
-  };
-
-  const handleBindGithub = async () => {
-    if (hasGithub || githubBinding) return;
-
-    setGithubBinding(true);
-    setGithubMessage(null);
-
-    const { error } = await authClient.linkSocial({
-      provider: 'github',
-      callbackURL: '/game/settings?tab=account',
-      errorCallbackURL: '/game/settings?tab=account',
-    });
-
-    if (error) {
-      setGithubMessage({
-        type: 'error',
-        text: toErrorMessage(toAuthActionError(error), 'GitHub 绑定失败'),
-      });
-      setGithubBinding(false);
     }
   };
 
@@ -312,6 +285,10 @@ export function AccountSettingsTab() {
         }
       >
         <div className="grid gap-4">
+          {accountsError ? (
+            <SettingsMessage type="error">{accountsError}</SettingsMessage>
+          ) : null}
+
           {passwordMode === 'change' ? (
             <InkInput
               label="当前密码"
@@ -370,40 +347,6 @@ export function AccountSettingsTab() {
             ) : null}
           </div>
         </div>
-      </SettingsSection>
-
-      <SettingsSection
-        title="GitHub 绑定"
-        description={
-          accountsLoading
-            ? '正在读取绑定状态……'
-            : hasGithub
-              ? '当前账号已绑定 GitHub。'
-              : '绑定后可使用 GitHub 登录当前账号。'
-        }
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <InkButton
-            variant={hasGithub ? 'secondary' : 'primary'}
-            onClick={handleBindGithub}
-            disabled={accountsLoading || hasGithub}
-            pending={githubBinding}
-            pendingLabel="跳转中……"
-          >
-            {hasGithub ? '已绑定' : '绑定 GitHub'}
-          </InkButton>
-        </div>
-
-        {accountsError ? (
-          <SettingsMessage type="error" className="mt-3 block">
-            {accountsError}
-          </SettingsMessage>
-        ) : null}
-        {githubMessage ? (
-          <SettingsMessage type={githubMessage.type} className="mt-3 block">
-            {githubMessage.text}
-          </SettingsMessage>
-        ) : null}
       </SettingsSection>
 
       <SettingsSection

@@ -1,12 +1,5 @@
-import {
-  AuthChoiceCard,
-  AuthPageShell,
-  toErrorMessage,
-  useAuthFeedback,
-} from '@app/components/auth';
+import { AuthChoiceCard, AuthPageShell } from '@app/components/auth';
 import { InkButton } from '@app/components/ui/InkButton';
-import { useAuth, type AuthActionError } from '@app/lib/auth/authContext';
-import { useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
 
 export default function LoginRoute() {
@@ -26,28 +19,6 @@ export default function LoginRoute() {
 }
 
 function LoginChoicePage() {
-  const { signInWithGitHub } = useAuth();
-  const { showErrorDialog } = useAuthFeedback();
-  const [loading, setLoading] = useState(false);
-
-  const handleGitHubSignIn = async () => {
-    setLoading(true);
-
-    try {
-      const { error } = await signInWithGitHub('/game');
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      setLoading(false);
-      showErrorDialog(
-        toErrorMessage(error as AuthActionError, 'GitHub 登录失败'),
-        '登录失败',
-      );
-    }
-  };
-
   return (
     <AuthPageShell
       title="【登录】"
@@ -72,12 +43,6 @@ function LoginChoicePage() {
           href="/login/password"
           title="密码登录"
           description="使用邮箱和密码登录。"
-        />
-        <AuthChoiceCard
-          onClick={handleGitHubSignIn}
-          disabled={loading}
-          title={loading ? 'GitHub 登录中……' : 'GitHub 登录'}
-          description="已有 GitHub 账号时可直接登录。"
         />
       </div>
     </AuthPageShell>

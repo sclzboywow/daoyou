@@ -38,9 +38,6 @@ export interface AuthContextType {
     otp: string,
     name?: string,
   ) => Promise<{ error: AuthActionError | null }>;
-  signInWithGitHub: (
-    callbackURL?: string,
-  ) => Promise<{ error: AuthActionError | null }>;
   requestPasswordReset: (
     email: string,
     captchaToken?: string,

@@ -98,20 +98,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   };
 
-  const signInWithGitHub: AuthContextType['signInWithGitHub'] = async (
-    callbackURL = '/game',
-  ) => {
-    const { error } = await authClient.signIn.social({
-      provider: 'github',
-      callbackURL,
-      errorCallbackURL: '/login',
-    });
-
-    return {
-      error: toAuthActionError(error),
-    };
-  };
-
   const requestPasswordReset: AuthContextType['requestPasswordReset'] = async (
     email,
     captchaToken,
@@ -164,7 +150,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithPassword,
         signInWithEmailOtp,
         verifyEmailOtp,
-        signInWithGitHub,
         requestPasswordReset,
         resetPassword,
         signOut,
