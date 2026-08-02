@@ -174,7 +174,7 @@ router.post('/attributes/allocate', requireActiveCultivatorRef(), async (c) => {
       [
         '角色不存在',
         '未分配属性点不足',
-        '属性不能低于基础值',
+        '属性不能低于当前境界自然值',
         '属性总点数超过当前境界预算',
       ].includes(message)
     ) {
