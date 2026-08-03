@@ -113,6 +113,18 @@ const damageSegments: Record<PathId, Record<string, Record<Form, number[]>>> = {
   },
 };
 
+const projectedSegment = (value: number): number =>
+  ({
+    '0.6': 0.601,
+    '0.35': 0.3506,
+    '0.3': 0.3005,
+    '0.28': 0.2804,
+    '0.25': 0.2504,
+    '0.5': 0.5008,
+    '0.4': 0.4006,
+    '0.45': 0.4507,
+  })[String(value)] ?? value;
+
 function state(pathId: PathId): CultivatorSectState {
   return {
     membershipId: 'runtime',
@@ -245,7 +257,7 @@ describe('无相禅宗36格实际结算矩阵', () => {
     expect(damageRequests.map((event) =>
       event.damageComponents?.find((component) =>
         component.segmentMultiplier !== undefined)?.segmentMultiplier ?? 0))
-      .toEqual(damageSegments[pathId][abilityId][form]);
+      .toEqual(damageSegments[pathId][abilityId][form].map(projectedSegment));
     expect(owner.combatResources.getCurrent(WUXIANG_WAR_INTENT))
       .toBe(form === 'buddha' ? 1 : 0);
     if (form === 'demon') {

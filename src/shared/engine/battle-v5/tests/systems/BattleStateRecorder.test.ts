@@ -11,6 +11,7 @@ import { AbilityFactory } from '../../factories/AbilityFactory';
 import { BuffFactory } from '../../factories/BuffFactory';
 import { BattleStateRecorder } from '../../systems/state/BattleStateRecorder';
 import { Unit } from '../../units/Unit';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 describe('BattleStateRecorder buff display', () => {
   it('uses the shared buff text renderer for data-driven buffs without handwritten descriptions', () => {
@@ -128,7 +129,7 @@ describe('BattleStateRecorder action states', () => {
         hitPolicy: 'guaranteed',
       },
     });
-    effect?.execute({
+    executeTestEffect(effect, {
       caster,
       target,
     });

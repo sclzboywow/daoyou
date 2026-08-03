@@ -286,12 +286,12 @@ describe('无相禅宗战斗投影', () => {
     expect(flower.detailRows).toContain(
       '无相变化《心花两忘》：一念之中兼得叩心与问罪之效，并再发一击；施展后，无论业痕是否触发，自身都会获得1层业痕。',
     );
-    expect(flower.detailRows).toContain('佛相：造成相当于60%物攻的伤害');
+    expect(flower.detailRows).toContain('佛相：造成相当于60.1%物攻的伤害');
     expect(flower.detailRows).toContain(
-      '魔相显化时·命中后：每消耗1层业痕，额外造成相当于35%物攻的伤害',
+      '魔相显化时·命中后：每消耗1层业痕，额外造成相当于35.06%物攻的伤害',
     );
     expect(flower.detailRows).toContain(
-      '无相显化时：额外造成相当于30%物攻的伤害',
+      '无相显化时：额外造成相当于30.05%物攻的伤害',
     );
     expect(
       flower.detailRows.some((row) =>
@@ -350,27 +350,27 @@ describe('无相禅宗战斗投影', () => {
     });
     expect(base['blood-tide'][0]).toMatchObject({
       type: 'heal',
-      params: { value: { targetMaxHpRatio: 0.05 } },
+      params: { value: { targetMaxHpRatio: 0.0501 } },
     });
     expect(furnace['blood-tide'][0]).toMatchObject({
       type: 'heal',
-      params: { value: { targetMaxHpRatio: 0.08 } },
+      params: { value: { targetMaxHpRatio: 0.0801 } },
     });
     expect(base['three-knocks'][0]).toMatchObject({
       type: 'damage',
-      params: { value: { coefficient: 0.65 } },
+      params: { value: { coefficient: 0.651 } },
     });
     expect(furnace['three-knocks'][0]).toMatchObject({
       type: 'damage',
-      params: { value: { coefficient: 0.85 } },
+      params: { value: { coefficient: 0.8514 } },
     });
     expect(base['observe-calamity'][0]).toMatchObject({
       type: 'shield',
-      params: { value: { targetMaxHpRatio: 0.08 } },
+      params: { value: { targetMaxHpRatio: 0.0801 } },
     });
     expect(furnace['observe-calamity'][0]).toMatchObject({
       type: 'shield',
-      params: { value: { targetMaxHpRatio: 0.12 } },
+      params: { value: { targetMaxHpRatio: 0.1201 } },
     });
     expect(base['five-skandhas'].some((effect) => effect.type === 'heal')).toBe(
       false,
@@ -379,17 +379,17 @@ describe('无相禅宗战斗投影', () => {
       expect.objectContaining({
         type: 'heal',
         params: expect.objectContaining({
-          value: expect.objectContaining({ targetMaxHpRatio: 0.05 }),
+          value: expect.objectContaining({ targetMaxHpRatio: 0.0501 }),
         }),
       }),
     );
     expect(base['reed-crossing'][0]).toMatchObject({
       type: 'heal',
-      params: { value: { targetMaxHpRatio: 0.05 } },
+      params: { value: { targetMaxHpRatio: 0.0501 } },
     });
     expect(furnace['reed-crossing'][0]).toMatchObject({
       type: 'heal',
-      params: { value: { targetMaxHpRatio: 0.08 } },
+      params: { value: { targetMaxHpRatio: 0.0801 } },
     });
   });
 

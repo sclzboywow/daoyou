@@ -4,15 +4,14 @@ import { ActiveSkill } from '../../abilities/ActiveSkill';
 import { Buff, StackRule } from '../../buffs/Buff';
 import { EventBus } from '../../core/EventBus';
 import {
-  ActionStateEvent,
   ActionPostEvent,
+  ActionStateEvent,
   BuffAddEvent,
   BuffAppliedEvent,
   CooldownModifyEvent,
   DamageEvent,
   DamageRequestEvent,
   DamageTakenEvent,
-  MechanicLogEvent,
   RoundPreEvent,
   ShieldBreakEvent,
 } from '../../core/events';
@@ -29,6 +28,7 @@ import {
   DamageType,
   ModifierType,
 } from '../../core/types';
+import { AbilityModeEffect } from '../../effects/AbilityModeEffect';
 import {
   AbilityLockEffect,
   AbilityTransformEffect,
@@ -43,10 +43,17 @@ import {
   TurnStateCounterEffect,
 } from '../../effects/AdvancedEffects';
 import { DamageEffect } from '../../effects/DamageEffect';
-import { AbilityModeEffect } from '../../effects/AbilityModeEffect';
+import { DispelEffect } from '../../effects/DispelEffect';
+import { TagTriggerEffect } from '../../effects/TagTriggerEffect';
+import '../../effects/ShieldEffect';
 import { AbilityFactory } from '../../factories/AbilityFactory';
 import { BuffFactory } from '../../factories/BuffFactory';
 import { Unit } from '../../units/Unit';
+import {
+  collectCommittedResultsV3,
+  runTestActionV3,
+} from '../setup/combatV3TestHarness';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 function createUnit(id: string): Unit {
   return new Unit(id, id, {
@@ -73,23 +80,21 @@ describe('Advanced battle effects', () => {
       effects: [],
     });
     const states: ActionStateEvent[] = [];
-    const mechanics: MechanicLogEvent[] = [];
-    EventBus.instance.subscribe<ActionStateEvent>(
-      'ActionStateEvent',
-      (event) => states.push(event),
-    );
-    EventBus.instance.subscribe<MechanicLogEvent>(
-      'MechanicLogEvent',
-      (event) => mechanics.push(event),
+    const mechanics = collectCommittedResultsV3('mechanic');
+    EventBus.instance.subscribe<ActionStateEvent>('ActionStateEvent', (event) =>
+      states.push(event),
     );
 
-    new AbilityModeEffect({
-      key: 'combat-form',
-      operation: 'set',
-      mode: 'guard',
-      displayName: '守势',
-      remainingUses: 2,
-    }).execute({ caster, target: caster, ability });
+    executeTestEffect(
+      new AbilityModeEffect({
+        key: 'combat-form',
+        operation: 'set',
+        mode: 'guard',
+        displayName: '守势',
+        remainingUses: 2,
+      }),
+      { caster, target: caster, ability },
+    );
 
     expect(readAbilityMode(caster, 'combat-form')).toMatchObject({
       mode: 'guard',
@@ -133,29 +138,32 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new ConsumeStatusTriggerEffect({
-      match: { tags: [GameplayTags.BUFF.DOT.POISON] },
-      consume: 'all',
-      effects: [
-        {
-          type: 'damage',
-          params: {
-            value: {
-              base: 20,
-              attribute: AttributeType.MAGIC_ATK,
-              coefficient: 0,
+    executeTestEffect(
+      new ConsumeStatusTriggerEffect({
+        match: { tags: [GameplayTags.BUFF.DOT.POISON] },
+        consume: 'all',
+        effects: [
+          {
+            type: 'damage',
+            params: {
+              value: {
+                base: 20,
+                attribute: AttributeType.MAGIC_ATK,
+                coefficient: 0,
+              },
             },
           },
-        },
-      ],
-    }).execute({ caster, target });
+        ],
+      }),
+      { caster, target },
+    );
 
     expect(target.buffs.getAllBuffs()).toHaveLength(0);
     expect(requests).toHaveLength(1);
     expect(requests[0].baseDamage).toBe(20);
   });
 
-  it('consume status trigger logs consumed layer count before removal', () => {
+  it('consume status trigger commits one final consumed status fact', () => {
     const caster = createUnit('caster');
     const target = createUnit('target');
     const poison = new Buff(
@@ -168,26 +176,120 @@ describe('Advanced battle effects', () => {
     poison.tags.addTags([GameplayTags.BUFF.DOT.POISON]);
     poison.setLayer(3);
     target.buffs.addBuff(poison, caster);
-    const mechanics: MechanicLogEvent[] = [];
-    EventBus.instance.subscribe<MechanicLogEvent>(
-      'MechanicLogEvent',
-      (event) => {
-        mechanics.push(event);
-      },
+    const statuses = collectCommittedResultsV3('status');
+
+    executeTestEffect(
+      new ConsumeStatusTriggerEffect({
+        match: { tags: [GameplayTags.BUFF.DOT.POISON] },
+        consume: 'all',
+        effects: [],
+      }),
+      { caster, target },
     );
 
-    new ConsumeStatusTriggerEffect({
-      match: { tags: [GameplayTags.BUFF.DOT.POISON] },
-      consume: 'all',
-      effects: [],
-    }).execute({ caster, target });
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0].result).toMatchObject({
+      type: 'status',
+      operation: 'remove',
+      reason: 'consumed',
+      statusName: '毒',
+      beforeLayers: 3,
+      afterLayers: 0,
+    });
+  });
+
+  it('partially consumed status is represented by one layer fact', () => {
+    const caster = createUnit('caster');
+    const target = createUnit('target');
+    const poison = new Buff(
+      'poison_partial',
+      '毒',
+      BuffType.DEBUFF,
+      3,
+      StackRule.STACK_LAYER,
+    );
+    poison.tags.addTags([GameplayTags.BUFF.DOT.POISON]);
+    poison.setLayer(3);
+    target.buffs.addBuff(poison, caster);
+    const statuses = collectCommittedResultsV3('status');
+    const mechanics = collectCommittedResultsV3('mechanic');
+
+    executeTestEffect(
+      new ConsumeStatusTriggerEffect({
+        match: { tags: [GameplayTags.BUFF.DOT.POISON] },
+        consume: 2,
+        effects: [],
+      }),
+      { caster, target },
+    );
+
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0].result).toMatchObject({
+      type: 'status',
+      operation: 'layers',
+      reason: 'consumed',
+      beforeLayers: 3,
+      afterLayers: 1,
+    });
+    expect(mechanics).toHaveLength(0);
+  });
+
+  it('links a mechanic cue to its final result explicitly', () => {
+    const caster = createUnit('caster');
+    const target = createUnit('target');
+    const mechanics = collectCommittedResultsV3('mechanic');
+    const shields = collectCommittedResultsV3('shield');
+
+    executeTestEffect(
+      new TagTriggerEffect({
+        triggerTag: GameplayTags.STATUS.ROOT,
+        displayName: '毒发',
+        effects: [{ type: 'shield', params: { value: { base: 10 } } }],
+      }),
+      { caster, target },
+    );
 
     expect(mechanics).toHaveLength(1);
-    expect(mechanics[0]).toMatchObject({
-      mechanic: 'buff_layer',
-      value: 3,
-      detail: 'consumed',
+    expect(shields).toHaveLength(1);
+    expect(mechanics[0].narrative).toMatchObject({ role: 'cue' });
+    expect(shields[0].narrative).toMatchObject({
+      causeId: mechanics[0].narrative?.causeId,
+      role: 'result',
     });
+  });
+
+  it('represents dispel with one final status fact', () => {
+    const caster = createUnit('caster');
+    const target = createUnit('target');
+    const poison = new Buff(
+      'poison_dispel',
+      '毒',
+      BuffType.DEBUFF,
+      3,
+      StackRule.STACK_LAYER,
+    );
+    poison.tags.addTags([GameplayTags.BUFF.DOT.POISON]);
+    target.buffs.addBuff(poison, caster);
+    const statuses = collectCommittedResultsV3('status');
+    const defenses = collectCommittedResultsV3('defense');
+
+    executeTestEffect(
+      new DispelEffect({
+        targetTag: GameplayTags.BUFF.DOT.POISON,
+        maxCount: 1,
+      }),
+      { caster, target },
+    );
+
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0].result).toMatchObject({
+      type: 'status',
+      operation: 'remove',
+      reason: 'dispelled',
+      beforeLayers: 1,
+      afterLayers: 0,
+    });
+    expect(defenses).toHaveLength(0);
   });
 
   it('delayed effect triggers on owner action post', () => {
@@ -201,23 +303,26 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new DelayedEffect({
-      id: 'delay_test',
-      name: '延迟测试',
-      delayTurns: 2,
-      effects: [
-        {
-          type: 'damage',
-          params: {
-            value: {
-              base: 30,
-              attribute: AttributeType.MAGIC_ATK,
-              coefficient: 0,
+    executeTestEffect(
+      new DelayedEffect({
+        id: 'delay_test',
+        name: '延迟测试',
+        delayTurns: 2,
+        effects: [
+          {
+            type: 'damage',
+            params: {
+              value: {
+                base: 30,
+                attribute: AttributeType.MAGIC_ATK,
+                coefficient: 0,
+              },
             },
           },
-        },
-      ],
-    }).execute({ caster, target });
+        ],
+      }),
+      { caster, target },
+    );
 
     const post = (): void =>
       EventBus.instance.publish<ActionPostEvent>({
@@ -244,47 +349,55 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new DelayedEffect({
-      id: 'delay_cancel_test',
-      name: '延迟取消测试',
-      delayTurns: 2,
-      effects: [
-        {
-          type: 'damage',
-          params: {
-            value: {
-              base: 30,
-              attribute: AttributeType.MAGIC_ATK,
-              coefficient: 0,
+    executeTestEffect(
+      new DelayedEffect({
+        id: 'delay_cancel_test',
+        name: '延迟取消测试',
+        delayTurns: 2,
+        effects: [
+          {
+            type: 'damage',
+            params: {
+              value: {
+                base: 30,
+                attribute: AttributeType.MAGIC_ATK,
+                coefficient: 0,
+              },
             },
           },
-        },
-      ],
-    }).execute({ caster, target });
+        ],
+      }),
+      { caster, target },
+    );
 
     target.buffs.removeBuffDispel('delay_cancel_test');
     expect(requests).toHaveLength(0);
 
-    new DelayedEffect({
-      id: 'delay_detonate_test',
-      name: '延迟驱散触发测试',
-      delayTurns: 2,
-      triggerOnDispel: true,
-      effects: [
-        {
-          type: 'damage',
-          params: {
-            value: {
-              base: 40,
-              attribute: AttributeType.MAGIC_ATK,
-              coefficient: 0,
+    executeTestEffect(
+      new DelayedEffect({
+        id: 'delay_detonate_test',
+        name: '延迟驱散触发测试',
+        delayTurns: 2,
+        triggerOnDispel: true,
+        effects: [
+          {
+            type: 'damage',
+            params: {
+              value: {
+                base: 40,
+                attribute: AttributeType.MAGIC_ATK,
+                coefficient: 0,
+              },
             },
           },
-        },
-      ],
-    }).execute({ caster, target });
+        ],
+      }),
+      { caster, target },
+    );
 
-    target.buffs.removeBuffDispel('delay_detonate_test');
+    runTestActionV3(caster, () =>
+      target.buffs.removeBuffDispel('delay_detonate_test'),
+    );
     expect(requests).toHaveLength(1);
     expect(requests[0].baseDamage).toBe(40);
   });
@@ -300,24 +413,27 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new DelayedEffect({
-      id: 'delay_memory_test',
-      name: '延迟记忆测试',
-      delayTurns: 1,
-      record: { key: 'delay_damage', event: 'damage_taken' },
-      effects: [
-        {
-          type: 'damage_memory',
-          params: {
-            key: 'delay_damage',
-            mode: 'release',
-            ratio: 0.5,
-            releaseAs: 'damage',
-            target: 'target',
+    executeTestEffect(
+      new DelayedEffect({
+        id: 'delay_memory_test',
+        name: '延迟记忆测试',
+        delayTurns: 1,
+        record: { key: 'delay_damage', event: 'damage_taken' },
+        effects: [
+          {
+            type: 'damage_memory',
+            params: {
+              key: 'delay_damage',
+              mode: 'release',
+              ratio: 0.5,
+              releaseAs: 'damage',
+              target: 'target',
+            },
           },
-        },
-      ],
-    }).execute({ caster, target });
+        ],
+      }),
+      { caster, target },
+    );
 
     EventBus.instance.publish<DamageTakenEvent>({
       type: 'DamageTakenEvent',
@@ -327,7 +443,7 @@ describe('Advanced battle effects', () => {
       damageTaken: 80,
       beforeHp: target.getCurrentHp(),
       remainHp: target.getCurrentHp() - 80,
-      isLethal: false,
+      hpReachedZeroBeforeReactions: false,
     });
     EventBus.instance.publish<ActionPostEvent>({
       type: 'ActionPostEvent',
@@ -344,25 +460,28 @@ describe('Advanced battle effects', () => {
     const otherRuntimeOwner = createUnit('same-id');
     const attacker = createUnit('attacker');
 
-    new DamageMemoryEffect({
-      key: 'isolated_damage',
-      mode: 'record',
-      event: 'damage_taken',
-      target: 'target',
-    }).execute({
-      caster: attacker,
-      target: owner,
-      triggerEvent: {
-        type: 'DamageTakenEvent',
-        timestamp: Date.now(),
+    executeTestEffect(
+      new DamageMemoryEffect({
+        key: 'isolated_damage',
+        mode: 'record',
+        event: 'damage_taken',
+        target: 'target',
+      }),
+      {
         caster: attacker,
-        target: otherRuntimeOwner,
-        damageTaken: 100,
-        beforeHp: 1000,
-        remainHp: 900,
-        isLethal: false,
-      } satisfies DamageTakenEvent,
-    });
+        target: owner,
+        triggerEvent: {
+          type: 'DamageTakenEvent',
+          timestamp: Date.now(),
+          caster: attacker,
+          target: otherRuntimeOwner,
+          damageTaken: 100,
+          beforeHp: 1000,
+          remainHp: 900,
+          hpReachedZeroBeforeReactions: false,
+        } satisfies DamageTakenEvent,
+      },
+    );
 
     expect(readMemory(owner, 'isolated_damage').amount).toBe(0);
   });
@@ -378,23 +497,29 @@ describe('Advanced battle effects', () => {
       damageTaken: 80,
       beforeHp: target.getCurrentHp(),
       remainHp: target.getCurrentHp() - 80,
-      isLethal: false,
+      hpReachedZeroBeforeReactions: false,
     };
 
-    new DamageMemoryEffect({
-      key: 'stored',
-      mode: 'record',
-      event: 'damage_taken',
-      target: 'target',
-    }).execute({ caster, target, triggerEvent: damageEvent });
+    executeTestEffect(
+      new DamageMemoryEffect({
+        key: 'stored',
+        mode: 'record',
+        event: 'damage_taken',
+        target: 'target',
+      }),
+      { caster, target, triggerEvent: damageEvent },
+    );
 
-    new DamageMemoryEffect({
-      key: 'stored',
-      mode: 'release',
-      ratio: 0.5,
-      releaseAs: 'shield',
-      target: 'target',
-    }).execute({ caster, target });
+    executeTestEffect(
+      new DamageMemoryEffect({
+        key: 'stored',
+        mode: 'release',
+        ratio: 0.5,
+        releaseAs: 'shield',
+        target: 'target',
+      }),
+      { caster, target },
+    );
 
     expect(target.getCurrentShield()).toBe(40);
   });
@@ -410,28 +535,31 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new DamageMemoryEffect({
-      key: 'shielded_reflect',
-      mode: 'release',
-      ratio: 0.5,
-      releaseAs: 'reflect',
-      target: 'target',
-      includeShieldAbsorbed: true,
-    }).execute({
-      caster,
-      target,
-      triggerEvent: {
-        type: 'DamageTakenEvent',
-        timestamp: Date.now(),
+    executeTestEffect(
+      new DamageMemoryEffect({
+        key: 'shielded_reflect',
+        mode: 'release',
+        ratio: 0.5,
+        releaseAs: 'reflect',
+        target: 'target',
+        includeShieldAbsorbed: true,
+      }),
+      {
         caster,
         target,
-        damageTaken: 80,
-        shieldAbsorbed: 120,
-        beforeHp: target.getCurrentHp(),
-        remainHp: target.getCurrentHp() - 80,
-        isLethal: false,
-      } satisfies DamageTakenEvent,
-    });
+        triggerEvent: {
+          type: 'DamageTakenEvent',
+          timestamp: Date.now(),
+          caster,
+          target,
+          damageTaken: 80,
+          shieldAbsorbed: 120,
+          beforeHp: target.getCurrentHp(),
+          remainHp: target.getCurrentHp() - 80,
+          hpReachedZeroBeforeReactions: false,
+        } satisfies DamageTakenEvent,
+      },
+    );
 
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
@@ -456,26 +584,29 @@ describe('Advanced battle effects', () => {
     });
     target.updateDerivedStats();
 
-    new DamageMemoryEffect({
-      key: 'scaled_cap',
-      mode: 'record',
-      event: 'damage_taken',
-      target: 'target',
-      maxStoredValue: { targetMaxHpRatio: 0.5 },
-    }).execute({
-      caster,
-      target,
-      triggerEvent: {
-        type: 'DamageTakenEvent',
-        timestamp: Date.now(),
+    executeTestEffect(
+      new DamageMemoryEffect({
+        key: 'scaled_cap',
+        mode: 'record',
+        event: 'damage_taken',
+        target: 'target',
+        maxStoredValue: { targetMaxHpRatio: 0.5 },
+      }),
+      {
         caster,
         target,
-        damageTaken: 50_000,
-        beforeHp: target.getCurrentHp(),
-        remainHp: target.getCurrentHp() - 50_000,
-        isLethal: true,
-      } satisfies DamageTakenEvent,
-    });
+        triggerEvent: {
+          type: 'DamageTakenEvent',
+          timestamp: Date.now(),
+          caster,
+          target,
+          damageTaken: 50_000,
+          beforeHp: target.getCurrentHp(),
+          remainHp: target.getCurrentHp() - 50_000,
+          hpReachedZeroBeforeReactions: true,
+        } satisfies DamageTakenEvent,
+      },
+    );
 
     expect(readMemory(target, 'scaled_cap').amount).toBe(10_000);
   });
@@ -491,25 +622,28 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new DamageMemoryEffect({
-      key: 'shield_break',
-      mode: 'release',
-      event: 'shield_break',
-      ratio: 0.45,
-      releaseAs: 'damage',
-      target: 'target',
-    }).execute({
-      caster,
-      target,
-      triggerEvent: {
-        type: 'ShieldBreakEvent',
-        timestamp: Date.now(),
+    executeTestEffect(
+      new DamageMemoryEffect({
+        key: 'shield_break',
+        mode: 'release',
+        event: 'shield_break',
+        ratio: 0.45,
+        releaseAs: 'damage',
+        target: 'target',
+      }),
+      {
         caster,
         target,
-        brokenShieldAmount: 400,
-        overflowDamage: 120,
-      } satisfies ShieldBreakEvent,
-    });
+        triggerEvent: {
+          type: 'ShieldBreakEvent',
+          timestamp: Date.now(),
+          caster,
+          target,
+          brokenShieldAmount: 400,
+          overflowDamage: 120,
+        } satisfies ShieldBreakEvent,
+      },
+    );
 
     expect(requests).toHaveLength(1);
     expect(requests[0].baseDamage).toBe(180);
@@ -572,7 +706,7 @@ describe('Advanced battle effects', () => {
       remainHp: 90,
       shieldAbsorbed: 0,
       remainShield: 0,
-      isLethal: false,
+      hpReachedZeroBeforeReactions: false,
     });
 
     expect(requests).toHaveLength(1);
@@ -596,6 +730,8 @@ describe('Advanced battle effects', () => {
     mark.tags.addTags([GameplayTags.BUFF.ELEMENT.THUNDER]);
     mark.setLayer(2);
     target.buffs.addBuff(mark, caster);
+    const statuses = collectCommittedResultsV3('status');
+    const mechanics = collectCommittedResultsV3('mechanic');
 
     const requests: DamageRequestEvent[] = [];
     EventBus.instance.subscribe<DamageRequestEvent>(
@@ -605,26 +741,38 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new BuffLayerModifyEffect({
-      match: { id: 'mark' },
-      operation: 'clear',
-      scaleEffectsByLayer: true,
-      effects: [
-        {
-          type: 'damage',
-          params: {
-            value: {
-              base: 10,
-              attribute: AttributeType.MAGIC_ATK,
-              coefficient: 0,
+    executeTestEffect(
+      new BuffLayerModifyEffect({
+        match: { id: 'mark' },
+        operation: 'clear',
+        scaleEffectsByLayer: true,
+        effects: [
+          {
+            type: 'damage',
+            params: {
+              value: {
+                base: 10,
+                attribute: AttributeType.MAGIC_ATK,
+                coefficient: 0,
+              },
             },
           },
-        },
-      ],
-    }).execute({ caster, target });
+        ],
+      }),
+      { caster, target },
+    );
 
     expect(target.buffs.getAllBuffs()).toHaveLength(0);
     expect(requests).toHaveLength(2);
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0].result).toMatchObject({
+      type: 'status',
+      operation: 'remove',
+      reason: 'manual',
+      beforeLayers: 2,
+      afterLayers: 0,
+    });
+    expect(mechanics).toHaveLength(0);
   });
 
   it('stacking an existing buff emits applied event with updated layers for logs', () => {
@@ -696,19 +844,28 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new AbilityTransformEffect({
-      id: 'next_true_crit',
-      triggers: 1,
-      trueDamage: true,
-      forceCritical: true,
-    }).execute({ caster, target: caster });
+    executeTestEffect(
+      new AbilityTransformEffect({
+        id: 'next_true_crit',
+        triggers: 1,
+        trueDamage: true,
+        forceCritical: true,
+      }),
+      { caster, target: caster },
+    );
 
-    new DamageEffect({
-      value: { base: 10, attribute: AttributeType.MAGIC_ATK, coefficient: 0 },
-    }).execute({ caster, target, ability: skill });
-    new DamageEffect({
-      value: { base: 10, attribute: AttributeType.MAGIC_ATK, coefficient: 0 },
-    }).execute({ caster, target, ability: skill });
+    executeTestEffect(
+      new DamageEffect({
+        value: { base: 10, attribute: AttributeType.MAGIC_ATK, coefficient: 0 },
+      }),
+      { caster, target, ability: skill },
+    );
+    executeTestEffect(
+      new DamageEffect({
+        value: { base: 10, attribute: AttributeType.MAGIC_ATK, coefficient: 0 },
+      }),
+      { caster, target, ability: skill },
+    );
 
     expect(requests[0].damageType).toBe(DamageType.TRUE);
     expect(requests[0].isCritical).toBe(true);
@@ -779,15 +936,18 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new AbilityTransformEffect({
-      id: 'skill_level_transform',
-      triggers: 1,
-      trueDamage: true,
-      addDispel: { targetTag: GameplayTags.BUFF.TYPE.DEBUFF, maxCount: 1 },
-    }).execute({ caster, target: caster });
+    executeTestEffect(
+      new AbilityTransformEffect({
+        id: 'skill_level_transform',
+        triggers: 1,
+        trueDamage: true,
+        addDispel: { targetTag: GameplayTags.BUFF.TYPE.DEBUFF, maxCount: 1 },
+      }),
+      { caster, target: caster },
+    );
 
-    skill.execute({ caster, target });
-    skill.execute({ caster, target });
+    runTestActionV3(caster, () => skill.execute({ caster, target }));
+    runTestActionV3(caster, () => skill.execute({ caster, target }));
 
     expect(requests.slice(0, 2).map((event) => event.damageType)).toEqual([
       DamageType.TRUE,
@@ -824,7 +984,7 @@ describe('Advanced battle effects', () => {
       ],
     });
 
-    skill.execute({ caster, target });
+    runTestActionV3(caster, () => skill.execute({ caster, target }));
 
     expect(caster.buffs.getAllBuffIds()).toContain('self_haste');
     expect(target.buffs.getAllBuffIds()).not.toContain('self_haste');
@@ -833,6 +993,16 @@ describe('Advanced battle effects', () => {
   it('buff copy can copy an incoming debuff back to the event source', () => {
     const source = createUnit('source');
     const owner = createUnit('owner');
+    const equipment = AbilityFactory.create({
+      slug: 'copy-equipment',
+      name: '照影镜',
+      type: AbilityType.PASSIVE_SKILL,
+      tags: [
+        GameplayTags.ABILITY.KIND.ARTIFACT,
+        GameplayTags.ABILITY.FUNCTION.BUFF,
+      ],
+      listeners: [],
+    });
     const incoming = new Buff(
       'curse',
       '咒',
@@ -850,13 +1020,29 @@ describe('Advanced battle effects', () => {
       buff: incoming,
     };
 
-    new BuffCopyEffect({
-      match: { tags: [GameplayTags.BUFF.TYPE.DEBUFF] },
-      target: 'caster',
-    }).execute({ caster: source, target: owner, triggerEvent: event });
+    executeTestEffect(
+      new BuffCopyEffect({
+        match: { tags: [GameplayTags.BUFF.TYPE.DEBUFF] },
+        target: 'caster',
+      }),
+      {
+        owner,
+        caster: source,
+        target: owner,
+        ability: equipment,
+        triggerEvent: event,
+      },
+    );
 
     expect(source.buffs.getAllBuffIds()).toContain('curse');
     expect(owner.buffs.getAllBuffIds()).not.toContain('curse');
+    expect(
+      source.buffs.getAllBuffs()[0].getCombatAttributionV3()?.origin,
+    ).toMatchObject({
+      kind: 'owned',
+      owner: { id: owner.id },
+      carrier: { kind: 'equipment', id: equipment.id },
+    });
   });
 
   it('buff copy can replay the latest dispelled matching debuff', () => {
@@ -873,11 +1059,14 @@ describe('Advanced battle effects', () => {
     target.buffs.addBuff(curse, caster);
     target.buffs.removeBuffDispel('old_curse');
 
-    new BuffCopyEffect({
-      match: { tags: [GameplayTags.BUFF.TYPE.DEBUFF] },
-      target: 'target',
-      replayRemoved: true,
-    }).execute({ caster, target });
+    executeTestEffect(
+      new BuffCopyEffect({
+        match: { tags: [GameplayTags.BUFF.TYPE.DEBUFF] },
+        target: 'target',
+        replayRemoved: true,
+      }),
+      { caster, target },
+    );
 
     expect(target.buffs.getAllBuffIds()).toContain('old_curse');
   });
@@ -895,11 +1084,14 @@ describe('Advanced battle effects', () => {
     activeCurse.tags.addTags([GameplayTags.BUFF.TYPE.DEBUFF]);
     target.buffs.addBuff(activeCurse, caster);
 
-    new BuffCopyEffect({
-      match: { tags: [GameplayTags.BUFF.TYPE.DEBUFF] },
-      target: 'caster',
-      replayRemoved: true,
-    }).execute({ caster, target });
+    executeTestEffect(
+      new BuffCopyEffect({
+        match: { tags: [GameplayTags.BUFF.TYPE.DEBUFF] },
+        target: 'caster',
+        replayRemoved: true,
+      }),
+      { caster, target },
+    );
 
     expect(caster.buffs.getAllBuffIds()).not.toContain('active_curse');
   });
@@ -920,11 +1112,14 @@ describe('Advanced battle effects', () => {
     sourceBuff.tickDuration();
     target.buffs.removeBuffDispel('layered_curse');
 
-    new BuffCopyEffect({
-      match: { tags: [GameplayTags.BUFF.TYPE.DEBUFF] },
-      target: 'target',
-      replayRemoved: true,
-    }).execute({ caster, target });
+    executeTestEffect(
+      new BuffCopyEffect({
+        match: { tags: [GameplayTags.BUFF.TYPE.DEBUFF] },
+        target: 'target',
+        replayRemoved: true,
+      }),
+      { caster, target },
+    );
 
     const replayed = target.buffs
       .getAllBuffs()
@@ -943,7 +1138,11 @@ describe('Advanced battle effects', () => {
       maxTriggers: 1,
     });
     EventBus.instance.subscribe<BuffAddEvent>('BuffAddEvent', (event) => {
-      effect.execute({ caster: owner, target: owner, triggerEvent: event });
+      executeTestEffect(effect, {
+        caster: owner,
+        target: owner,
+        triggerEvent: event,
+      });
     });
 
     const first = new Buff(
@@ -1000,7 +1199,7 @@ describe('Advanced battle effects', () => {
 
       insideBattleOneCopy = true;
       try {
-        battleOneEffect.execute({
+        executeTestEffect(battleOneEffect, {
           caster: battleOneOwner,
           target: battleOneTarget,
           triggerEvent: event,
@@ -1012,7 +1211,7 @@ describe('Advanced battle effects', () => {
     EventBus.instance.subscribe<BuffAddEvent>('BuffAddEvent', (event) => {
       if (!insideBattleOneCopy) return;
 
-      battleTwoEffect.execute({
+      executeTestEffect(battleTwoEffect, {
         caster: battleTwoOwner,
         target: battleTwoOwner,
         triggerEvent: event,
@@ -1067,13 +1266,19 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new NextHitRuleEffect({ forceCritical: true, triggers: 1 }).execute({
-      caster,
-      target,
-    });
-    new DamageEffect({
-      value: { base: 10, attribute: AttributeType.MAGIC_ATK, coefficient: 0 },
-    }).execute({ caster, target, ability: skill });
+    executeTestEffect(
+      new NextHitRuleEffect({ forceCritical: true, triggers: 1 }),
+      {
+        caster,
+        target,
+      },
+    );
+    executeTestEffect(
+      new DamageEffect({
+        value: { base: 10, attribute: AttributeType.MAGIC_ATK, coefficient: 0 },
+      }),
+      { caster, target, ability: skill },
+    );
 
     expect(requests[0].isCritical).toBe(true);
   });
@@ -1107,9 +1312,9 @@ describe('Advanced battle effects', () => {
       ],
     });
 
-    counter.execute({ caster: owner, target });
+    executeTestEffect(counter, { caster: owner, target });
     markDamageDealt(owner);
-    counter.execute({
+    executeTestEffect(counter, {
       caster: owner,
       target,
       triggerEvent: {
@@ -1118,10 +1323,10 @@ describe('Advanced battle effects', () => {
         turn: 2,
       } satisfies RoundPreEvent,
     });
-    counter.execute({ caster: owner, target });
+    executeTestEffect(counter, { caster: owner, target });
 
     expect(requests).toHaveLength(0);
-    counter.execute({ caster: owner, target });
+    executeTestEffect(counter, { caster: owner, target });
     expect(requests).toHaveLength(1);
   });
 
@@ -1137,11 +1342,14 @@ describe('Advanced battle effects', () => {
       damageType: DamageType.MAGICAL,
     };
 
-    new DamageDeferEffect({
-      ratio: 0.5,
-      delayTurns: 2,
-      thresholdMaxHpRatio: 0.25,
-    }).execute({ caster: defender, target: defender, triggerEvent: event });
+    executeTestEffect(
+      new DamageDeferEffect({
+        ratio: 0.5,
+        delayTurns: 2,
+        thresholdMaxHpRatio: 0.25,
+      }),
+      { caster: defender, target: defender, triggerEvent: event },
+    );
 
     expect(event.finalDamage).toBe(Math.round(defender.getMaxHp() * 0.15));
     expect(
@@ -1166,12 +1374,12 @@ describe('Advanced battle effects', () => {
       delayTurns: 2,
     });
 
-    effect.execute({
+    executeTestEffect(effect, {
       caster: defender,
       target: defender,
       triggerEvent: createEvent(),
     });
-    effect.execute({
+    executeTestEffect(effect, {
       caster: defender,
       target: defender,
       triggerEvent: createEvent(),
@@ -1243,7 +1451,7 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new AbilityLockEffect({ rounds: 1, maxCount: 1 }).execute({
+    executeTestEffect(new AbilityLockEffect({ rounds: 1, maxCount: 1 }), {
       caster,
       target,
     });
@@ -1257,14 +1465,8 @@ describe('Advanced battle effects', () => {
   it('hp sacrifice damage emits both mechanic log and damage request', () => {
     const caster = createUnit('caster');
     const target = createUnit('target');
-    const mechanics: MechanicLogEvent[] = [];
+    const mechanics = collectCommittedResultsV3('mechanic');
     const requests: DamageRequestEvent[] = [];
-    EventBus.instance.subscribe<MechanicLogEvent>(
-      'MechanicLogEvent',
-      (event) => {
-        mechanics.push(event);
-      },
-    );
     EventBus.instance.subscribe<DamageRequestEvent>(
       'DamageRequestEvent',
       (event) => {
@@ -1272,20 +1474,31 @@ describe('Advanced battle effects', () => {
       },
     );
 
-    new HpSacrificeDamageEffect({
-      hpRatio: 0.1,
-      damagePerHp: 2,
-    }).execute({ caster, target });
+    executeTestEffect(
+      new HpSacrificeDamageEffect({
+        hpRatio: 0.1,
+        damagePerHp: 2,
+      }),
+      { caster, target },
+    );
 
     expect(mechanics).toHaveLength(1);
-    expect(mechanics[0]).toMatchObject({
-      mechanic: 'hp_sacrifice',
-      target: caster,
-      value: Math.round(caster.getMaxHp() * 0.1),
+    expect(mechanics[0].result).toMatchObject({
+      code: 'hp_sacrifice',
+      payload: {
+        kind: 'hp_sacrifice',
+        amount: Math.round(caster.getMaxHp() * 0.1),
+      },
     });
+    expect(mechanics[0].target).toBe(caster);
     expect(requests).toHaveLength(1);
     expect(requests[0].baseDamage).toBe(
-      Math.round((mechanics[0].value ?? 0) * 2),
+      Math.round(
+        (mechanics[0].result.type === 'mechanic' &&
+        mechanics[0].result.payload.kind === 'hp_sacrifice'
+          ? mechanics[0].result.payload.amount
+          : 0) * 2,
+      ),
     );
   });
 });

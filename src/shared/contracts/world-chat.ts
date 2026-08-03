@@ -22,9 +22,24 @@ export const WorldChatItemShowcaseMessageSchema = z.object({
     .optional(),
 });
 
+export const WorldChatBattleShowcaseMessageSchema = z.object({
+  messageType: z.literal('battle_showcase'),
+  battleRecordId: z.string().uuid(),
+  textContent: z
+    .string()
+    .trim()
+    .max(200)
+    .refine((value) => Array.from(value).length <= 100)
+    .optional(),
+});
+
 export const WorldChatCreateMessageSchema = z.discriminatedUnion(
   'messageType',
-  [WorldChatTextMessageSchema, WorldChatItemShowcaseMessageSchema],
+  [
+    WorldChatTextMessageSchema,
+    WorldChatItemShowcaseMessageSchema,
+    WorldChatBattleShowcaseMessageSchema,
+  ],
 );
 
 export const WorldChatListQuerySchema = z.object({

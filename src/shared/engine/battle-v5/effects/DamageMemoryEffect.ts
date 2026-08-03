@@ -1,5 +1,4 @@
 import { DamageMemoryParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import {
   DamageRequestEvent,
   DamageTakenEvent,
@@ -7,23 +6,19 @@ import {
   ShieldBreakEvent,
   ShieldEvent,
 } from '../core/events';
-import {
-  clearMemory,
-  readMemory,
-  rememberAmount,
-} from '../core/runtimeState';
+import { clearMemory, readMemory, rememberAmount } from '../core/runtimeState';
 import { DamageSource, DamageType } from '../core/types';
 import { ValueCalculator } from '../core/ValueCalculator';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { publishMechanicLog } from './advancedEffectUtils';
-import { EffectContext, GameplayEffect } from './Effect';
+import { commitMechanicResultV3 } from './advancedEffectUtils';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 export class DamageMemoryEffect extends GameplayEffect {
   constructor(private params: DamageMemoryParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const owner =
       this.params.target === 'target' ? context.target : context.caster;
     if (this.params.mode === 'clear') {
@@ -40,14 +35,10 @@ export class DamageMemoryEffect extends GameplayEffect {
           amount,
           this.resolveMaxStored(context, owner),
         );
-        publishMechanicLog({
-          mechanic: 'memory_record',
-          source: context.caster,
-          ability: context.ability,
-          sourceBuff: context.buff,
+        commitMechanicResultV3(context, {
+          code: this.params.key,
           target: owner,
-          name: this.params.key,
-          value: amount,
+          payload: { kind: 'damage_memory_record', amount },
         });
       }
       return;
@@ -58,12 +49,20 @@ export class DamageMemoryEffect extends GameplayEffect {
       memory.amount > 0 ? memory.amount : this.getRecordAmount(context);
     const amount = Math.round(storedAmount * (this.params.ratio ?? 1));
     if (amount <= 0) return;
+    const narrativeContext = context.withNarrativeCause();
 
     switch (this.params.releaseAs ?? 'damage') {
-      case 'heal':
-        {
-        const appliedAmount = context.target.heal(amount);
-        EventBus.instance.publish<HealEvent>({
+      case 'heal': {
+        const appliedAmount = narrativeContext.target.heal(amount);
+        if (appliedAmount > 0) {
+          narrativeContext.commit(narrativeContext.target, {
+            type: 'recovery',
+            resource: 'hp',
+            amount: Math.round(appliedAmount),
+            after: Math.round(narrativeContext.target.getCurrentHp()),
+          });
+        }
+        narrativeContext.emit<HealEvent>({
           type: 'HealEvent',
           timestamp: Date.now(),
           caster: context.caster,
@@ -75,10 +74,20 @@ export class DamageMemoryEffect extends GameplayEffect {
           healType: 'hp',
         });
         break;
+      }
+      case 'shield': {
+        const beforeShield = narrativeContext.target.getCurrentShield();
+        narrativeContext.target.addShield(amount);
+        const appliedShield =
+          narrativeContext.target.getCurrentShield() - beforeShield;
+        if (appliedShield > 0) {
+          narrativeContext.commit(narrativeContext.target, {
+            type: 'shield',
+            amount: Math.round(appliedShield),
+            after: Math.round(narrativeContext.target.getCurrentShield()),
+          });
         }
-      case 'shield':
-        context.target.addShield(amount);
-        EventBus.instance.publish<ShieldEvent>({
+        narrativeContext.emit<ShieldEvent>({
           type: 'ShieldEvent',
           timestamp: Date.now(),
           caster: context.caster,
@@ -87,13 +96,15 @@ export class DamageMemoryEffect extends GameplayEffect {
           shieldAmount: amount,
         });
         break;
+      }
       case 'reflect':
-        if (context.triggerEvent?.type === 'DamageTakenEvent') {
-          const attacker = (context.triggerEvent as DamageTakenEvent).caster;
+        if (narrativeContext.triggerEvent?.type === 'DamageTakenEvent') {
+          const attacker = (narrativeContext.triggerEvent as DamageTakenEvent)
+            .caster;
           if (attacker?.isAlive()) {
             this.publishDamage(
-              context,
-              context.target,
+              narrativeContext,
+              narrativeContext.target,
               attacker,
               amount,
               DamageSource.REFLECT,
@@ -103,21 +114,27 @@ export class DamageMemoryEffect extends GameplayEffect {
         break;
       case 'counter':
         this.publishDamage(
-          context,
-          context.caster,
-          context.target,
+          narrativeContext,
+          narrativeContext.caster,
+          narrativeContext.target,
           amount,
           DamageSource.COUNTER,
         );
         break;
       case 'follow_up':
-        this.publishDamage(context, context.caster, context.target, amount, DamageSource.FOLLOW_UP);
+        this.publishDamage(
+          narrativeContext,
+          narrativeContext.caster,
+          narrativeContext.target,
+          amount,
+          DamageSource.FOLLOW_UP,
+        );
         break;
       case 'resolved_follow_up':
         this.publishDamage(
-          context,
-          context.caster,
-          context.target,
+          narrativeContext,
+          narrativeContext.caster,
+          narrativeContext.target,
           amount,
           DamageSource.FOLLOW_UP,
           true,
@@ -126,24 +143,26 @@ export class DamageMemoryEffect extends GameplayEffect {
       case 'damage':
       default:
         this.publishDamage(
-          context,
-          context.caster,
-          context.target,
+          narrativeContext,
+          narrativeContext.caster,
+          narrativeContext.target,
           amount,
           DamageSource.DIRECT,
         );
         break;
     }
 
-    publishMechanicLog({
-      mechanic: 'memory_release',
-      source: context.caster,
-      ability: context.ability,
-      sourceBuff: context.buff,
-      target: context.target,
-      name: this.params.key,
-      value: amount,
-      detail: this.params.releaseAs ?? 'damage',
+    narrativeContext.commitCue(narrativeContext.target, {
+      type: 'mechanic',
+      code: this.params.key,
+      payload: {
+        kind: 'damage_memory_release',
+        amount,
+        releaseAs:
+          this.params.releaseAs === 'resolved_follow_up'
+            ? 'follow_up'
+            : (this.params.releaseAs ?? 'damage'),
+      },
     });
 
     if (this.params.consume !== false) {
@@ -152,15 +171,15 @@ export class DamageMemoryEffect extends GameplayEffect {
   }
 
   private publishDamage(
-    context: EffectContext,
-    caster: EffectContext['caster'],
-    target: EffectContext['target'],
+    context: EffectExecutionContextV3,
+    caster: EffectExecutionContextV3['caster'],
+    target: EffectExecutionContextV3['target'],
     amount: number,
     damageSource: DamageSource,
     resolvedFinal = false,
   ): void {
     if (!target.isAlive()) return;
-    EventBus.instance.publish<DamageRequestEvent>({
+    context.emit<DamageRequestEvent>({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster,
@@ -168,12 +187,12 @@ export class DamageMemoryEffect extends GameplayEffect {
       ability: context.ability,
       buff: context.buff,
       damageSource,
-      damageType: this.params.damageType ?? (
-        damageSource === DamageSource.COUNTER ||
+      damageType:
+        this.params.damageType ??
+        (damageSource === DamageSource.COUNTER ||
         damageSource === DamageSource.FOLLOW_UP
           ? DamageType.PHYSICAL
-          : DamageType.TRUE
-      ),
+          : DamageType.TRUE),
       calculationMode: resolvedFinal ? 'resolved_final' : 'standard',
       cause: this.params.cause ?? context.damageCause,
       damageTags: this.params.damageTags,
@@ -182,16 +201,14 @@ export class DamageMemoryEffect extends GameplayEffect {
           kind: 'memory',
           amount,
           mitigation:
-            !resolvedFinal && (
-              damageSource === DamageSource.COUNTER ||
-              damageSource === DamageSource.FOLLOW_UP
-            )
+            !resolvedFinal &&
+            (damageSource === DamageSource.COUNTER ||
+              damageSource === DamageSource.FOLLOW_UP)
               ? 'normal'
               : 'bypass_defense',
-          ...(!resolvedFinal && (
-            damageSource === DamageSource.COUNTER ||
-            damageSource === DamageSource.FOLLOW_UP
-          )
+          ...(!resolvedFinal &&
+          (damageSource === DamageSource.COUNTER ||
+            damageSource === DamageSource.FOLLOW_UP)
             ? { attackBase: amount, segmentMultiplier: 1 }
             : {}),
         },
@@ -201,7 +218,7 @@ export class DamageMemoryEffect extends GameplayEffect {
     });
   }
 
-  private getRecordAmount(context: EffectContext): number {
+  private getRecordAmount(context: EffectExecutionContextV3): number {
     const event = context.triggerEvent;
     if (!event) return 0;
     if (this.params.event === 'heal' && event.type === 'HealEvent') {
@@ -246,8 +263,8 @@ export class DamageMemoryEffect extends GameplayEffect {
   }
 
   private resolveMaxStored(
-    context: EffectContext,
-    owner: EffectContext['target'],
+    context: EffectExecutionContextV3,
+    owner: EffectExecutionContextV3['target'],
   ): number | undefined {
     if (this.params.maxStoredValue) {
       const valueCap = ValueCalculator.calculate(

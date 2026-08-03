@@ -7,111 +7,119 @@ import type { ScalableValue } from '@shared/engine/battle-v5/core/ValueCalculato
 import type {
   SectCompiledAbility,
   SectDefinition,
-  SectMethodId,
+  SectHeartMethodDefinition,
+  SectMethodEffectCategory,
+  SectMethodGrowthCurve,
   SectMethodGrowthPolicy,
+  SectMethodId,
 } from '../domain';
-import { sectAbilityMethodId } from '../domain';
+import {
+  normalizeSectMethodLevel,
+  resolveSectMethodCurve,
+  roundSectMethodGrowthValue,
+  sectAbilityMethodId,
+} from '../domain';
 import { consumeSectBuffMethodGrowth } from './SectMethodGrowthAuthoring';
 
 export interface SectMethodGrowthValues {
+  methodId?: SectMethodId;
   level: number;
-  tier: number;
-  magnitude: number;
-  statusMagnitude: number;
+  curve?: SectMethodGrowthCurve;
+  progress: number;
+  damageMultiplier: number;
+  healMultiplier: number;
+  shieldMultiplier: number;
+  statusMultiplier: number;
   durationBonus: number;
+  countBonus: number;
 }
 
-const round4 = (value: number): number => Math.round(value * 10_000) / 10_000;
+function milestoneBonus(
+  milestones: readonly { level: number; bonus: number }[] | undefined,
+  level: number,
+): number {
+  return (milestones ?? []).reduce(
+    (bonus, milestone) => (level >= milestone.level ? milestone.bonus : bonus),
+    0,
+  );
+}
 
 function assertNeverEffect(effect: never): never {
   throw new Error(`未声明心法成长语义的效果: ${JSON.stringify(effect)}`);
 }
 
-/** 宗门神通的标准 1–180 级投影策略。 */
+/** 依照每本心法自己的成长档案，将 authoring 配置投影为运行时配置。 */
 export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
-  resolve(rawLevel: number | undefined): SectMethodGrowthValues {
-    const normalized =
-      rawLevel === undefined || Number.isNaN(rawLevel) ? 1 : rawLevel;
-    const level = Math.max(1, Math.min(180, Math.floor(normalized)));
-    if (level === 180) {
-      return {
-        level,
-        tier: 6,
-        magnitude: 1.5,
-        statusMagnitude: 1.4,
-        durationBonus: 3,
-      };
-    }
-    if (level >= 150) {
-      return {
-        level,
-        tier: 5,
-        magnitude: 1.4167,
-        statusMagnitude: 1.3333,
-        durationBonus: 2,
-      };
-    }
-    if (level >= 120) {
-      return {
-        level,
-        tier: 4,
-        magnitude: 1.3333,
-        statusMagnitude: 1.2667,
-        durationBonus: 2,
-      };
-    }
-    if (level >= 90) {
-      return {
-        level,
-        tier: 3,
-        magnitude: 1.25,
-        statusMagnitude: 1.2,
-        durationBonus: 1,
-      };
-    }
-    if (level >= 60) {
-      return {
-        level,
-        tier: 2,
-        magnitude: 1.1667,
-        statusMagnitude: 1.1333,
-        durationBonus: 1,
-      };
-    }
-    if (level >= 30) {
-      return {
-        level,
-        tier: 1,
-        magnitude: 1.0833,
-        statusMagnitude: 1.0667,
-        durationBonus: 0,
-      };
-    }
+  private readonly methods: ReadonlyMap<
+    SectMethodId,
+    SectHeartMethodDefinition
+  >;
+
+  constructor(methods: readonly SectHeartMethodDefinition[]) {
+    this.methods = new Map(methods.map((method) => [method.id, method]));
+  }
+
+  resolve(
+    methodId: SectMethodId,
+    rawLevel: number | undefined,
+  ): SectMethodGrowthValues {
+    const method = this.methods.get(methodId);
+    if (!method) throw new Error(`未知心法成长档案: ${methodId}`);
+    const level = normalizeSectMethodLevel(rawLevel);
+    const profile = method.growthProfile;
+    const progress = resolveSectMethodCurve(profile.curve, level);
     return {
+      methodId,
       level,
-      tier: 0,
-      magnitude: 1,
-      statusMagnitude: 1,
-      durationBonus: 0,
+      curve: profile.curve,
+      progress,
+      damageMultiplier: roundSectMethodGrowthValue(
+        1 + profile.effects.damage * progress,
+      ),
+      healMultiplier: roundSectMethodGrowthValue(
+        1 + profile.effects.heal * progress,
+      ),
+      shieldMultiplier: roundSectMethodGrowthValue(
+        1 + profile.effects.shield * progress,
+      ),
+      statusMultiplier: roundSectMethodGrowthValue(
+        1 + profile.effects.status * progress,
+      ),
+      durationBonus: milestoneBonus(profile.durationMilestones, level),
+      countBonus: milestoneBonus(profile.countMilestones, level),
     };
   }
 
-  scaleMagnitude(value: number, rawLevel: number | undefined): number {
-    return round4(value * this.resolve(rawLevel).magnitude);
+  scaleEffect(
+    methodId: SectMethodId,
+    category: SectMethodEffectCategory,
+    value: number,
+    rawLevel: number | undefined,
+  ): number {
+    return roundSectMethodGrowthValue(
+      value * this.factor(this.resolve(methodId, rawLevel), category),
+    );
   }
 
-  scaleStatusMagnitude(value: number, rawLevel: number | undefined): number {
-    return round4(value * this.resolve(rawLevel).statusMagnitude);
-  }
-
-  growDuration(duration: number, rawLevel: number | undefined): number {
+  growDuration(
+    methodId: SectMethodId,
+    duration: number,
+    rawLevel: number | undefined,
+  ): number {
     return duration < 0
       ? duration
-      : duration + this.resolve(rawLevel).durationBonus;
+      : duration + this.resolve(methodId, rawLevel).durationBonus;
   }
 
-  growCount(baseCount: number, rawLevel: number | undefined): number {
-    return Math.max(0, Math.floor(baseCount)) + this.resolve(rawLevel).tier;
+  growCount(
+    methodId: SectMethodId,
+    baseCount: number,
+    rawLevel: number | undefined,
+  ): number {
+    return (
+      Math.max(0, Math.floor(baseCount)) +
+      this.resolve(methodId, rawLevel).countBonus
+    );
   }
 
   projectAbility(
@@ -119,30 +127,11 @@ export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
     methodId: SectMethodId,
     methodLevels: Partial<Record<SectMethodId, number>>,
   ): SectCompiledAbility {
-    const projected = structuredClone(ability);
-    const growth = this.resolve(methodLevels[methodId]);
-    projected.config.effects = projected.config.effects?.map((effect) =>
-      this.projectEffect(effect, growth, methodLevels),
+    return this.projectAbilityWithGrowth(
+      ability,
+      this.resolve(methodId, methodLevels[methodId]),
+      methodLevels,
     );
-    projected.config.completionEffects = projected.config.completionEffects?.map((effect) =>
-      this.projectEffect(effect, growth, methodLevels),
-    );
-    projected.config.effectLayers = projected.config.effectLayers?.map((layer) => ({
-      ...layer,
-      effects: layer.effects?.map((effect) =>
-        this.projectEffect(effect, growth, methodLevels),
-      ),
-      completionEffects: layer.completionEffects?.map((effect) =>
-        this.projectEffect(effect, growth, methodLevels),
-      ),
-    }));
-    projected.config.castEffects = projected.config.castEffects?.map((effect) =>
-      this.projectEffect(effect, growth, methodLevels),
-    );
-    projected.config.listeners = projected.config.listeners?.map((listener) =>
-      this.projectListener(listener, growth, methodLevels),
-    );
-    return projected;
   }
 
   projectAbilities(
@@ -158,19 +147,11 @@ export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
         const methodId = abilityDefinition
           ? sectAbilityMethodId(abilityDefinition)
           : undefined;
-        if (!methodId) {
-          return [
-            abilityId,
-            this.projectAbilityWithoutMethod(ability, methodLevels),
-          ];
-        }
         return [
           abilityId,
-          this.projectAbility(
-            ability,
-            methodId,
-            methodLevels,
-          ),
+          methodId
+            ? this.projectAbility(ability, methodId, methodLevels)
+            : this.projectAbilityWithoutMethod(ability, methodLevels),
         ];
       }),
     );
@@ -180,28 +161,42 @@ export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
     ability: SectCompiledAbility,
     methodLevels: Partial<Record<SectMethodId, number>>,
   ): SectCompiledAbility {
+    return this.projectAbilityWithGrowth(
+      ability,
+      this.neutralGrowth(),
+      methodLevels,
+    );
+  }
+
+  private projectAbilityWithGrowth(
+    ability: SectCompiledAbility,
+    growth: SectMethodGrowthValues,
+    methodLevels: Partial<Record<SectMethodId, number>>,
+  ): SectCompiledAbility {
     const projected = structuredClone(ability);
-    const fixedGrowth = this.resolve(1);
     projected.config.effects = projected.config.effects?.map((effect) =>
-      this.projectEffect(effect, fixedGrowth, methodLevels),
+      this.projectEffect(effect, growth, methodLevels),
     );
-    projected.config.completionEffects = projected.config.completionEffects?.map((effect) =>
-      this.projectEffect(effect, fixedGrowth, methodLevels),
+    projected.config.completionEffects =
+      projected.config.completionEffects?.map((effect) =>
+        this.projectEffect(effect, growth, methodLevels),
+      );
+    projected.config.effectLayers = projected.config.effectLayers?.map(
+      (layer) => ({
+        ...layer,
+        effects: layer.effects?.map((effect) =>
+          this.projectEffect(effect, growth, methodLevels),
+        ),
+        completionEffects: layer.completionEffects?.map((effect) =>
+          this.projectEffect(effect, growth, methodLevels),
+        ),
+      }),
     );
-    projected.config.effectLayers = projected.config.effectLayers?.map((layer) => ({
-      ...layer,
-      effects: layer.effects?.map((effect) =>
-        this.projectEffect(effect, fixedGrowth, methodLevels),
-      ),
-      completionEffects: layer.completionEffects?.map((effect) =>
-        this.projectEffect(effect, fixedGrowth, methodLevels),
-      ),
-    }));
     projected.config.castEffects = projected.config.castEffects?.map((effect) =>
-      this.projectEffect(effect, fixedGrowth, methodLevels),
+      this.projectEffect(effect, growth, methodLevels),
     );
     projected.config.listeners = projected.config.listeners?.map((listener) =>
-      this.projectListener(listener, fixedGrowth, methodLevels),
+      this.projectListener(listener, growth, methodLevels),
     );
     return projected;
   }
@@ -214,24 +209,34 @@ export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
     const projected = structuredClone(effect);
     switch (projected.type) {
       case 'damage':
+        projected.params.value = this.scaleValue(
+          projected.params.value,
+          growth.damageMultiplier,
+        );
+        break;
       case 'heal':
+        projected.params.value = this.scaleValue(
+          projected.params.value,
+          growth.healMultiplier,
+        );
+        break;
       case 'shield':
         projected.params.value = this.scaleValue(
           projected.params.value,
-          growth.magnitude,
+          growth.shieldMultiplier,
         );
         break;
       case 'resource_scaled_damage':
-        projected.params.baseCoefficient = round4(
-          projected.params.baseCoefficient * growth.magnitude,
+        projected.params.baseCoefficient = roundSectMethodGrowthValue(
+          projected.params.baseCoefficient * growth.damageMultiplier,
         );
-        projected.params.coefficientPerPoint = round4(
-          projected.params.coefficientPerPoint * growth.magnitude,
+        projected.params.coefficientPerPoint = roundSectMethodGrowthValue(
+          projected.params.coefficientPerPoint * growth.damageMultiplier,
         );
         break;
       case 'percent_damage_modifier':
-        projected.params.value = round4(
-          projected.params.value * growth.statusMagnitude,
+        projected.params.value = roundSectMethodGrowthValue(
+          projected.params.value * growth.statusMultiplier,
         );
         break;
       case 'apply_buff':
@@ -242,20 +247,20 @@ export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
         );
         break;
       case 'hp_sacrifice_damage':
-        projected.params.damagePerHp = round4(
-          projected.params.damagePerHp * growth.magnitude,
+        projected.params.damagePerHp = roundSectMethodGrowthValue(
+          projected.params.damagePerHp * growth.damageMultiplier,
         );
         break;
       case 'tag_trigger':
         if (projected.params.damageRatio !== undefined) {
-          projected.params.damageRatio = round4(
-            projected.params.damageRatio * growth.magnitude,
+          projected.params.damageRatio = roundSectMethodGrowthValue(
+            projected.params.damageRatio * growth.damageMultiplier,
           );
         }
         break;
       case 'dynamic_scalar':
-        projected.params.value = round4(
-          projected.params.value * growth.statusMagnitude,
+        projected.params.value = roundSectMethodGrowthValue(
+          projected.params.value * growth.statusMultiplier,
         );
         break;
       case 'resource_drain':
@@ -299,25 +304,17 @@ export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
       cancelEffects?: EffectConfig[];
       onResistEffects?: EffectConfig[];
     };
-    if (params.effects) {
-      params.effects = params.effects.map((nested) =>
-        this.projectEffect(nested, growth, methodLevels),
-      );
-    }
-    if (params.fallbackEffects) {
-      params.fallbackEffects = params.fallbackEffects.map((nested) =>
-        this.projectEffect(nested, growth, methodLevels),
-      );
-    }
-    if (params.cancelEffects) {
-      params.cancelEffects = params.cancelEffects.map((nested) =>
-        this.projectEffect(nested, growth, methodLevels),
-      );
-    }
-    if (params.onResistEffects) {
-      params.onResistEffects = params.onResistEffects.map((nested) =>
-        this.projectEffect(nested, growth, methodLevels),
-      );
+    for (const key of [
+      'effects',
+      'fallbackEffects',
+      'cancelEffects',
+      'onResistEffects',
+    ] as const) {
+      if (params[key]) {
+        params[key] = params[key]!.map((nested) =>
+          this.projectEffect(nested, growth, methodLevels),
+        );
+      }
     }
     return projected;
   }
@@ -329,7 +326,10 @@ export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
   ): BuffConfig {
     const authored = consumeSectBuffMethodGrowth(buff);
     const growth = authored.growth?.methodId
-      ? this.resolve(methodLevels[authored.growth.methodId])
+      ? this.resolve(
+          authored.growth.methodId,
+          methodLevels[authored.growth.methodId],
+        )
       : inheritedGrowth;
     const projected = authored.config;
     if (authored.growth?.duration && projected.duration >= 0) {
@@ -337,7 +337,9 @@ export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
     }
     projected.modifiers = projected.modifiers?.map((modifier) => ({
       ...modifier,
-      value: round4(modifier.value * growth.statusMagnitude),
+      value: roundSectMethodGrowthValue(
+        modifier.value * growth.statusMultiplier,
+      ),
     }));
     projected.listeners = projected.listeners?.map((listener) =>
       this.projectListener(listener, growth, methodLevels),
@@ -361,22 +363,45 @@ export class StandardSectMethodGrowthPolicy implements SectMethodGrowthPolicy {
   private scaleValue(value: ScalableValue, factor: number): ScalableValue {
     return {
       ...value,
-      base: value.base === undefined ? undefined : round4(value.base * factor),
+      base:
+        value.base === undefined
+          ? undefined
+          : roundSectMethodGrowthValue(value.base * factor),
       coefficient:
         value.coefficient === undefined
           ? undefined
-          : round4(value.coefficient * factor),
+          : roundSectMethodGrowthValue(value.coefficient * factor),
       targetMaxHpRatio:
         value.targetMaxHpRatio === undefined
           ? undefined
-          : round4(value.targetMaxHpRatio * factor),
+          : roundSectMethodGrowthValue(value.targetMaxHpRatio * factor),
       targetMaxMpRatio:
         value.targetMaxMpRatio === undefined
           ? undefined
-          : round4(value.targetMaxMpRatio * factor),
+          : roundSectMethodGrowthValue(value.targetMaxMpRatio * factor),
+    };
+  }
+
+  private factor(
+    growth: SectMethodGrowthValues,
+    category: SectMethodEffectCategory,
+  ): number {
+    if (category === 'damage') return growth.damageMultiplier;
+    if (category === 'heal') return growth.healMultiplier;
+    if (category === 'shield') return growth.shieldMultiplier;
+    return growth.statusMultiplier;
+  }
+
+  private neutralGrowth(): SectMethodGrowthValues {
+    return {
+      level: 0,
+      progress: 0,
+      damageMultiplier: 1,
+      healMultiplier: 1,
+      shieldMultiplier: 1,
+      statusMultiplier: 1,
+      durationBonus: 0,
+      countBonus: 0,
     };
   }
 }
-
-export const standardSectMethodGrowthPolicy =
-  new StandardSectMethodGrowthPolicy();

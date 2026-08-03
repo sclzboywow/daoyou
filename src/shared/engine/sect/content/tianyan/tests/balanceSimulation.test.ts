@@ -9,7 +9,6 @@ import type {
   BuffAppliedEvent,
   DamageTakenEvent,
   HealEvent,
-  MechanicLogEvent,
   ShieldEvent,
   SkillCastEvent,
 } from '@shared/engine/battle-v5/core/events';
@@ -22,12 +21,13 @@ import {
 } from '@shared/engine/battle-v5/core/types';
 import { AbilityFactory } from '@shared/engine/battle-v5/factories/AbilityFactory';
 import { Unit } from '@shared/engine/battle-v5/units/Unit';
+import {
+  CombatV3EventType,
+  type CombatResultCommittedEventV3,
+} from '@shared/engine/battle-v5/v3';
 import { afterEach, describe, expect, it } from 'vitest';
 import { projectSectCombat } from '../..';
-import {
-  TIANYAN_HETU_PATH_ID,
-  TIANYAN_LUOSHU_PATH_ID,
-} from '../ids';
+import { TIANYAN_HETU_PATH_ID, TIANYAN_LUOSHU_PATH_ID } from '../ids';
 import { tianyanState, type TianyanPathId } from './testState';
 
 interface BuildSpec {
@@ -67,81 +67,172 @@ const BUILDS: BuildSpec[] = [
     id: 'cycle-wood-fire-water',
     pathId: TIANYAN_HETU_PATH_ID,
     tacticId: 'small-cycle',
-    loadout: ['verdant-pulse', 'flowing-flame', 'dark-water-return', 'shift-palace'],
+    loadout: [
+      'verdant-pulse',
+      'flowing-flame',
+      'dark-water-return',
+      'shift-palace',
+    ],
   },
   {
     id: 'cycle-fire-earth-wood',
     pathId: TIANYAN_HETU_PATH_ID,
     tacticId: 'small-cycle',
-    loadout: ['flowing-flame', 'earth-bearing-seal', 'verdant-pulse', 'shift-palace'],
+    loadout: [
+      'flowing-flame',
+      'earth-bearing-seal',
+      'verdant-pulse',
+      'shift-palace',
+    ],
   },
   {
     id: 'cycle-earth-metal-fire',
     pathId: TIANYAN_HETU_PATH_ID,
     tacticId: 'small-cycle',
-    loadout: ['earth-bearing-seal', 'metal-cloud-cutter', 'flowing-flame', 'shift-palace'],
+    loadout: [
+      'earth-bearing-seal',
+      'metal-cloud-cutter',
+      'flowing-flame',
+      'shift-palace',
+    ],
   },
   {
     id: 'cycle-metal-water-earth',
     pathId: TIANYAN_HETU_PATH_ID,
     tacticId: 'small-cycle',
-    loadout: ['metal-cloud-cutter', 'dark-water-return', 'earth-bearing-seal', 'shift-palace'],
+    loadout: [
+      'metal-cloud-cutter',
+      'dark-water-return',
+      'earth-bearing-seal',
+      'shift-palace',
+    ],
   },
   {
     id: 'cycle-water-wood-metal',
     pathId: TIANYAN_HETU_PATH_ID,
     tacticId: 'small-cycle',
-    loadout: ['dark-water-return', 'verdant-pulse', 'metal-cloud-cutter', 'shift-palace'],
+    loadout: [
+      'dark-water-return',
+      'verdant-pulse',
+      'metal-cloud-cutter',
+      'shift-palace',
+    ],
   },
   {
     id: 'four-element-wide',
     pathId: TIANYAN_HETU_PATH_ID,
     tacticId: 'small-cycle',
-    loadout: ['verdant-pulse', 'flowing-flame', 'metal-cloud-cutter', 'dark-water-return'],
+    loadout: [
+      'verdant-pulse',
+      'flowing-flame',
+      'metal-cloud-cutter',
+      'dark-water-return',
+    ],
   },
   {
     id: 'two-element-guard',
     pathId: TIANYAN_HETU_PATH_ID,
     tacticId: 'nourish-origin',
-    loadout: ['flowing-flame', 'earth-bearing-seal', 'myriad-wood-renewal', 'boundless-earth'],
+    loadout: [
+      'flowing-flame',
+      'earth-bearing-seal',
+      'myriad-wood-renewal',
+      'boundless-earth',
+    ],
   },
   {
     id: 'derivation-caster',
     pathId: TIANYAN_LUOSHU_PATH_ID,
     tacticId: 'decisive-derivation',
-    loadout: ['flowing-flame', 'dark-water-return', 'shift-palace', 'five-qi-repository'],
+    loadout: [
+      'flowing-flame',
+      'dark-water-return',
+      'shift-palace',
+      'five-qi-repository',
+    ],
   },
   {
     id: 'hetu-pure-reaction',
     pathId: TIANYAN_HETU_PATH_ID,
     tacticId: 'small-cycle',
-    loadout: ['verdant-pulse', 'flowing-flame', 'earth-bearing-seal', 'dark-water-return'],
-    nodes: ['hetu-first-number', 'hetu-flow-refund', 'hetu-river-cleansing', 'hetu-three-talents', 'hetu-number-remains', 'hetu-one-line-opens'],
+    loadout: [
+      'verdant-pulse',
+      'flowing-flame',
+      'earth-bearing-seal',
+      'dark-water-return',
+    ],
+    nodes: [
+      'hetu-first-number',
+      'hetu-flow-refund',
+      'hetu-river-cleansing',
+      'hetu-three-talents',
+      'hetu-number-remains',
+      'hetu-one-line-opens',
+    ],
   },
   {
     id: 'hetu-double-utility',
     pathId: TIANYAN_HETU_PATH_ID,
     tacticId: 'nourish-origin',
-    loadout: ['flowing-flame', 'dark-water-return', 'myriad-wood-renewal', 'boundless-earth'],
-    nodes: ['hetu-blank-breath', 'hetu-flow-refund', 'hetu-verdant-endless', 'hetu-generation-gate', 'hetu-inner-outer', 'hetu-escaped-one-returns'],
+    loadout: [
+      'flowing-flame',
+      'dark-water-return',
+      'myriad-wood-renewal',
+      'boundless-earth',
+    ],
+    nodes: [
+      'hetu-blank-breath',
+      'hetu-flow-refund',
+      'hetu-verdant-endless',
+      'hetu-generation-gate',
+      'hetu-inner-outer',
+      'hetu-escaped-one-returns',
+    ],
   },
   {
     id: 'luoshu-control',
     pathId: TIANYAN_LUOSHU_PATH_ID,
     tacticId: 'lock-meridian',
-    loadout: ['earth-bearing-seal', 'metal-cloud-cutter', 'dark-water-return', 'shift-palace'],
-    nodes: ['luoshu-observe-gap', 'luoshu-fast-shift', 'luoshu-metal-water', 'luoshu-lock-position', 'luoshu-chain-control', 'luoshu-nine-changes'],
+    loadout: [
+      'earth-bearing-seal',
+      'metal-cloud-cutter',
+      'dark-water-return',
+      'shift-palace',
+    ],
+    nodes: [
+      'luoshu-observe-gap',
+      'luoshu-fast-shift',
+      'luoshu-metal-water',
+      'luoshu-lock-position',
+      'luoshu-chain-control',
+      'luoshu-nine-changes',
+    ],
   },
   {
     id: 'luoshu-low-hp-burst',
     pathId: TIANYAN_LUOSHU_PATH_ID,
     tacticId: 'break-pattern',
-    loadout: ['verdant-pulse', 'flowing-flame', 'metal-cloud-cutter', 'dark-water-return'],
-    nodes: ['luoshu-first-number', 'luoshu-reverse-two', 'luoshu-flame-flow', 'luoshu-exploit-weakness', 'luoshu-shatter-seal', 'luoshu-heaven-ends'],
+    loadout: [
+      'verdant-pulse',
+      'flowing-flame',
+      'metal-cloud-cutter',
+      'dark-water-return',
+    ],
+    nodes: [
+      'luoshu-first-number',
+      'luoshu-reverse-two',
+      'luoshu-flame-flow',
+      'luoshu-exploit-weakness',
+      'luoshu-shatter-seal',
+      'luoshu-heaven-ends',
+    ],
   },
 ];
 
-function unit(id: string, values: Partial<Record<AttributeType, number>>): Unit {
+function unit(
+  id: string,
+  values: Partial<Record<AttributeType, number>>,
+): Unit {
   const result = new Unit(id, id, {
     [AttributeType.VITALITY]: values[AttributeType.VITALITY] ?? 120,
     [AttributeType.SPIRIT]: values[AttributeType.SPIRIT] ?? 120,
@@ -181,9 +272,12 @@ function simulate(
   opponent.updateDerivedStats();
   opponent.setHp(opponent.getMaxHp());
 
-  for (const resource of projection.resources) player.combatResources.define(resource);
+  for (const resource of projection.resources)
+    player.combatResources.define(resource);
   if (projection.defaultAttack) {
-    player.abilities.setDefaultAttack(AbilityFactory.create(projection.defaultAttack));
+    player.abilities.setDefaultAttack(
+      AbilityFactory.create(projection.defaultAttack),
+    );
   }
   for (const config of projection.abilities) {
     player.abilities.addAbility(AbilityFactory.create(config));
@@ -205,52 +299,90 @@ function simulate(
   let replacements = 0;
   let basicAttacks = 0;
 
-  EventBus.instance.subscribe<SkillCastEvent>('SkillCastEvent', (event) => {
-    if (event.caster !== player) return;
-    actions += 1;
-    if (event.ability.id === 'sect.tianyan.primordial-ray') basicAttacks += 1;
-  }, -1_000);
-  EventBus.instance.subscribe<DamageTakenEvent>('DamageTakenEvent', (event) => {
-    if (event.caster === player && event.damageSource === DamageSource.DIRECT) {
-      directDamage += event.damageTaken;
-    }
-  }, -1_000);
-  EventBus.instance.subscribe<MechanicLogEvent>('MechanicLogEvent', (event) => {
-    if (event.source !== player) return;
-    if (
-      event.mechanic === 'named_trigger' &&
-      event.internalKey?.startsWith('sect.tianyan.reaction.')
-    ) reactions += 1;
-    if (
-      event.mechanic === 'named_trigger' &&
-      (event.internalKey === 'sect.tianyan.hetu-cycle' ||
-        event.internalKey === 'sect.tianyan.luoshu-break')
-    ) {
-      trinary += 1;
-      const round = getBattleRuntimeState(player).round;
-      firstTrinaryRound ??= round;
-      if (round <= 10) trinaryWithinTenRounds += 1;
-    }
-    if (event.mechanic === 'status_transition' && event.operation === 'replace') {
-      replacements += 1;
-    }
-  }, -1_000);
-  EventBus.instance.subscribe<AbilityCostPaidEvent>('AbilityCostPaidEvent', (event) => {
-    if (event.caster === player && event.afterMp <= 0) {
-      mpExhaustedRound ??= getBattleRuntimeState(player).round;
-    }
-  }, -1_000);
-  EventBus.instance.subscribe<HealEvent>('HealEvent', (event) => {
-    if (event.caster === player && event.healType !== 'mp') {
-      healing += event.appliedAmount ?? event.healAmount;
-    }
-  }, -1_000);
-  EventBus.instance.subscribe<ShieldEvent>('ShieldEvent', (event) => {
-    if (event.caster === player) shielding += event.shieldAmount;
-  }, -1_000);
-  EventBus.instance.subscribe<BuffAppliedEvent>('BuffAppliedEvent', (event) => {
-    if (event.source === player && event.buff.type === BuffType.CONTROL) controls += 1;
-  }, -1_000);
+  EventBus.instance.subscribe<SkillCastEvent>(
+    'SkillCastEvent',
+    (event) => {
+      if (event.caster !== player) return;
+      actions += 1;
+      if (event.ability.id === 'sect.tianyan.primordial-ray') basicAttacks += 1;
+    },
+    -1_000,
+  );
+  EventBus.instance.subscribe<DamageTakenEvent>(
+    'DamageTakenEvent',
+    (event) => {
+      if (
+        event.caster === player &&
+        event.damageSource === DamageSource.DIRECT
+      ) {
+        directDamage += event.damageTaken;
+      }
+    },
+    -1_000,
+  );
+  EventBus.instance.subscribe<CombatResultCommittedEventV3>(
+    CombatV3EventType.RESULT_COMMITTED,
+    (event) => {
+      if (event.result.type !== 'mechanic') return;
+      if (event.origin?.kind !== 'owned' || event.origin.owner.id !== player.id)
+        return;
+      if (
+        event.result.payload.kind === 'named_trigger' &&
+        event.result.code.startsWith('sect.tianyan.reaction.')
+      )
+        reactions += 1;
+      if (
+        event.result.payload.kind === 'named_trigger' &&
+        (event.result.code === 'sect.tianyan.hetu-cycle' ||
+          event.result.code === 'sect.tianyan.luoshu-break')
+      ) {
+        trinary += 1;
+        const round = getBattleRuntimeState(player).round;
+        firstTrinaryRound ??= round;
+        if (round <= 10) trinaryWithinTenRounds += 1;
+      }
+      if (
+        event.result.payload.kind === 'status_transition' &&
+        event.result.payload.operation === 'replace'
+      ) {
+        replacements += 1;
+      }
+    },
+    -1_000,
+  );
+  EventBus.instance.subscribe<AbilityCostPaidEvent>(
+    'AbilityCostPaidEvent',
+    (event) => {
+      if (event.caster === player && event.afterMp <= 0) {
+        mpExhaustedRound ??= getBattleRuntimeState(player).round;
+      }
+    },
+    -1_000,
+  );
+  EventBus.instance.subscribe<HealEvent>(
+    'HealEvent',
+    (event) => {
+      if (event.caster === player && event.healType !== 'mp') {
+        healing += event.appliedAmount ?? event.healAmount;
+      }
+    },
+    -1_000,
+  );
+  EventBus.instance.subscribe<ShieldEvent>(
+    'ShieldEvent',
+    (event) => {
+      if (event.caster === player) shielding += event.shieldAmount;
+    },
+    -1_000,
+  );
+  EventBus.instance.subscribe<BuffAppliedEvent>(
+    'BuffAppliedEvent',
+    (event) => {
+      if (event.source === player && event.buff.type === BuffType.CONTROL)
+        controls += 1;
+    },
+    -1_000,
+  );
 
   const engine = new BattleEngineV5(player, opponent);
   const result = withBattleRandomSource(

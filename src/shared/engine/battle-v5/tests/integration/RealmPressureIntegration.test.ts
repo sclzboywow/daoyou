@@ -1,11 +1,13 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { getRealmStageRank } from '@shared/config/realmProgression';
-import { BuffType, DamageSource, DamageType } from '../../core/types';
-import { DamageRequestEvent } from '../../core/events';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../../core/EventBus';
+import { DamageRequestEvent } from '../../core/events';
+import { BuffType, DamageSource, DamageType } from '../../core/types';
+import { ApplyBuffEffect } from '../../effects/ApplyBuffEffect';
 import { DamageSystem } from '../../systems/DamageSystem';
 import { Unit } from '../../units/Unit';
-import { ApplyBuffEffect } from '../../effects/ApplyBuffEffect';
+import { publishTestDamageRequest } from '../setup/combatV3TestHarness';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 describe('realm pressure integration', () => {
   beforeEach(() => {
@@ -39,13 +41,16 @@ describe('realm pressure integration', () => {
       finalDamage: 100,
     };
 
-    EventBus.instance.publish(event);
+    publishTestDamageRequest(event);
     damageSystem.destroy();
     return event;
   }
 
   it('keeps missing realm meta as same-rank behavior', () => {
-    const event = publishTrueDamage(createUnit('attacker'), createUnit('defender'));
+    const event = publishTrueDamage(
+      createUnit('attacker'),
+      createUnit('defender'),
+    );
     expect(event.finalDamage).toBe(100);
   });
 
@@ -53,8 +58,18 @@ describe('realm pressure integration', () => {
     const lowRank = getRealmStageRank('炼气', '初期');
     const highRank = getRealmStageRank('筑基', '初期');
 
-    expect(publishTrueDamage(createUnit('high', highRank), createUnit('low', lowRank)).finalDamage).toBe(140);
-    expect(publishTrueDamage(createUnit('low', lowRank), createUnit('high', highRank)).finalDamage).toBe(68);
+    expect(
+      publishTrueDamage(
+        createUnit('high', highRank),
+        createUnit('low', lowRank),
+      ).finalDamage,
+    ).toBe(140);
+    expect(
+      publishTrueDamage(
+        createUnit('low', lowRank),
+        createUnit('high', highRank),
+      ).finalDamage,
+    ).toBe(68);
   });
 
   it('applies realm pressure to hostile debuff and control chances only', () => {
@@ -62,40 +77,49 @@ describe('realm pressure integration', () => {
     const high = createUnit('high', 4);
     vi.spyOn(Math, 'random').mockReturnValue(0.7);
 
-    new ApplyBuffEffect({
-      target: 'target',
-      chance: 0.8,
-      buffConfig: {
-        id: 'slow',
-        name: '迟滞',
-        type: BuffType.DEBUFF,
-        duration: 1,
-      },
-    }).execute({ caster: low, target: high });
+    executeTestEffect(
+      new ApplyBuffEffect({
+        target: 'target',
+        chance: 0.8,
+        buffConfig: {
+          id: 'slow',
+          name: '迟滞',
+          type: BuffType.DEBUFF,
+          duration: 1,
+        },
+      }),
+      { caster: low, target: high },
+    );
     expect(high.buffs.getAllBuffIds()).toEqual([]);
 
-    new ApplyBuffEffect({
-      target: 'target',
-      chance: 0.8,
-      buffConfig: {
-        id: 'slow_high',
-        name: '威压迟滞',
-        type: BuffType.DEBUFF,
-        duration: 1,
-      },
-    }).execute({ caster: high, target: low });
+    executeTestEffect(
+      new ApplyBuffEffect({
+        target: 'target',
+        chance: 0.8,
+        buffConfig: {
+          id: 'slow_high',
+          name: '威压迟滞',
+          type: BuffType.DEBUFF,
+          duration: 1,
+        },
+      }),
+      { caster: high, target: low },
+    );
     expect(low.buffs.getAllBuffIds()).toContain('slow_high');
 
-    new ApplyBuffEffect({
-      target: 'caster',
-      chance: 1,
-      buffConfig: {
-        id: 'focus',
-        name: '凝神',
-        type: BuffType.BUFF,
-        duration: 1,
-      },
-    }).execute({ caster: low, target: high });
+    executeTestEffect(
+      new ApplyBuffEffect({
+        target: 'caster',
+        chance: 1,
+        buffConfig: {
+          id: 'focus',
+          name: '凝神',
+          type: BuffType.BUFF,
+          duration: 1,
+        },
+      }),
+      { caster: low, target: high },
+    );
     expect(low.buffs.getAllBuffIds()).toContain('focus');
   });
 });

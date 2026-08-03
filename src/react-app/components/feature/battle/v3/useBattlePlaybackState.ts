@@ -1,11 +1,13 @@
-import type { UnitStateSnapshot } from '@shared/engine/battle-v5/systems/state/types';
-import type { BattleRecord } from '@shared/types/battle';
+import type {
+  BattlePlaybackRecordV3,
+  PublicBattleUnitSnapshotV1,
+} from '@shared/types/battle';
 import { useEffect, useMemo, useState } from 'react';
 import { useCombatPlayer } from './useCombatPlayer';
 
 export { resolvePlaybackStateForRecord } from './useCombatPlayer';
 
-export interface BattlePlaybackState {
+export interface BattlePlaybackStateV3 {
   currentIndex: number;
   totalActions: number;
   progress: number;
@@ -15,30 +17,25 @@ export interface BattlePlaybackState {
   play: () => void;
   pause: () => void;
   reset: () => void;
-  currentPlayerFrame: UnitStateSnapshot | undefined;
-  currentOpponentFrame: UnitStateSnapshot | undefined;
+  currentPlayerFrame: PublicBattleUnitSnapshotV1 | undefined;
+  currentOpponentFrame: PublicBattleUnitSnapshotV1 | undefined;
   playerName: string;
   opponentName: string;
-  isReplaySupported: boolean;
   isPlaybackFinished: boolean;
-  selectedUnit: UnitStateSnapshot | null;
-  openUnitDetails: (unit: UnitStateSnapshot | null) => void;
+  selectedUnit: PublicBattleUnitSnapshotV1 | null;
+  openUnitDetails: (unit: PublicBattleUnitSnapshotV1 | null) => void;
   closeUnitDetails: () => void;
 }
 
 export function resolveSelectedBattleUnit(
   selectedUnitId: string | null,
-  unitSnapshots: Record<string, UnitStateSnapshot>,
+  unitSnapshots: Record<string, PublicBattleUnitSnapshotV1>,
 ) {
   return selectedUnitId ? (unitSnapshots[selectedUnitId] ?? null) : null;
 }
 
-export function isBattleReplaySupported(record: BattleRecord | undefined) {
-  return !!record?.logSpans?.length && !!record?.stateTimeline?.frames?.length;
-}
-
 export function resolveBattleUnitName(
-  record: BattleRecord | undefined,
+  record: BattlePlaybackRecordV3 | undefined,
   unitId: string | undefined,
   fallbackName: string,
 ) {
@@ -46,27 +43,37 @@ export function resolveBattleUnitName(
     return fallbackName;
   }
 
-  if (record.winner.id === unitId) {
-    return record.winner.name;
+  if (record.outcome.winner.id === unitId) {
+    return record.outcome.winner.name;
   }
 
-  if (record.loser.id === unitId) {
-    return record.loser.name;
+  if (record.outcome.loser.id === unitId) {
+    return record.outcome.loser.name;
   }
 
   return fallbackName;
 }
 
-export function resolveBattlePlaybackNames(record: BattleRecord | undefined) {
+export function resolveBattlePlaybackNames(
+  record: BattlePlaybackRecordV3 | undefined,
+) {
   return {
-    playerName: resolveBattleUnitName(record, record?.player, '加载中'),
-    opponentName: resolveBattleUnitName(record, record?.opponent, '神秘对手'),
+    playerName: resolveBattleUnitName(
+      record,
+      record?.participants.player.id,
+      '加载中',
+    ),
+    opponentName: resolveBattleUnitName(
+      record,
+      record?.participants.opponent.id,
+      '神秘对手',
+    ),
   };
 }
 
 export function useBattlePlaybackState(
-  record: BattleRecord | undefined,
-): BattlePlaybackState {
+  record: BattlePlaybackRecordV3 | undefined,
+): BattlePlaybackStateV3 {
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const {
     currentIndex,
@@ -81,7 +88,6 @@ export function useBattlePlaybackState(
     unitSnapshots,
   } = useCombatPlayer(record);
 
-  const replaySupported = isBattleReplaySupported(record);
   const { playerName, opponentName } = useMemo(
     () => resolveBattlePlaybackNames(record),
     [record],
@@ -93,11 +99,11 @@ export function useBattlePlaybackState(
     }
   }, [currentIndex, isPlaying, play, record, totalActions]);
 
-  const currentPlayerFrame = record?.player
-    ? unitSnapshots[record.player]
+  const currentPlayerFrame = record?.participants.player.id
+    ? unitSnapshots[record.participants.player.id]
     : undefined;
-  const currentOpponentFrame = record?.opponent
-    ? unitSnapshots[record.opponent]
+  const currentOpponentFrame = record?.participants.opponent.id
+    ? unitSnapshots[record.participants.opponent.id]
     : undefined;
   const selectedUnit = useMemo(
     () => resolveSelectedBattleUnit(selectedUnitId, unitSnapshots),
@@ -118,9 +124,7 @@ export function useBattlePlaybackState(
     currentOpponentFrame,
     playerName,
     opponentName,
-    isReplaySupported: replaySupported,
-    isPlaybackFinished:
-      replaySupported && totalActions > 0 && currentIndex >= totalActions - 1,
+    isPlaybackFinished: totalActions > 0 && currentIndex >= totalActions - 1,
     selectedUnit,
     openUnitDetails: (unit) => setSelectedUnitId(unit?.id ?? null),
     closeUnitDetails: () => setSelectedUnitId(null),

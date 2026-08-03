@@ -5,7 +5,6 @@ import { EventBus } from '../../core/EventBus';
 import type {
   DeathPreventEvent,
   DamageRequestEvent,
-  UnitDeadEvent,
 } from '../../core/events';
 import {
   AbilityType,
@@ -16,6 +15,11 @@ import {
 import { AbilityFactory } from '../../factories/AbilityFactory';
 import { DamageSystem } from '../../systems/DamageSystem';
 import { Unit } from '../../units/Unit';
+import {
+  CombatV3EventType,
+  type CombatResultCommittedEventV3,
+} from '../../v3';
+import { publishTestDamageRequest } from '../setup/combatV3TestHarness';
 
 describe('DeathPreventEffect source-scoped triggers', () => {
   let damageSystem: DamageSystem | undefined;
@@ -74,7 +78,7 @@ describe('DeathPreventEffect source-scoped triggers', () => {
   }
 
   function dealLethalDamage(attacker: Unit, defender: Unit): void {
-    EventBus.instance.publish<DamageRequestEvent>({
+    publishTestDamageRequest({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster: attacker,
@@ -90,7 +94,7 @@ describe('DeathPreventEffect source-scoped triggers', () => {
     const attacker = createUnit('attacker', '破阵者');
     const defender = createUnit('defender', '持符者');
     const deathPreventEvents: DeathPreventEvent[] = [];
-    const deathEvents: UnitDeadEvent[] = [];
+    const deathEvents: CombatResultCommittedEventV3[] = [];
 
     addDeathPreventAbility(defender, 'source_a', 'source:a');
     addDeathPreventAbility(defender, 'source_b', 'source:b');
@@ -99,8 +103,11 @@ describe('DeathPreventEffect source-scoped triggers', () => {
       'DeathPreventEvent',
       (event) => deathPreventEvents.push(event),
     );
-    EventBus.instance.subscribe<UnitDeadEvent>('UnitDeadEvent', (event) =>
-      deathEvents.push(event),
+    EventBus.instance.subscribe<CombatResultCommittedEventV3>(
+      CombatV3EventType.RESULT_COMMITTED,
+      (event) => {
+        if (event.result.type === 'unit_died') deathEvents.push(event);
+      },
     );
 
     dealLethalDamage(attacker, defender);
@@ -131,7 +138,7 @@ describe('DeathPreventEffect source-scoped triggers', () => {
     const attacker = createUnit('attacker', '破阵者');
     const defender = createUnit('defender', '持符者');
     const deathPreventEvents: DeathPreventEvent[] = [];
-    const deathEvents: UnitDeadEvent[] = [];
+    const deathEvents: CombatResultCommittedEventV3[] = [];
 
     addDeathPreventAbility(defender, 'same_source', 'source:same');
 
@@ -139,8 +146,11 @@ describe('DeathPreventEffect source-scoped triggers', () => {
       'DeathPreventEvent',
       (event) => deathPreventEvents.push(event),
     );
-    EventBus.instance.subscribe<UnitDeadEvent>('UnitDeadEvent', (event) =>
-      deathEvents.push(event),
+    EventBus.instance.subscribe<CombatResultCommittedEventV3>(
+      CombatV3EventType.RESULT_COMMITTED,
+      (event) => {
+        if (event.result.type === 'unit_died') deathEvents.push(event);
+      },
     );
 
     dealLethalDamage(attacker, defender);

@@ -95,7 +95,11 @@ export const resolveSectPathPreview = (args: {
         id: node.id,
         name: node.name,
         description:
-          plugin?.describe?.({ sect: args.sect, realm: args.realm }) ??
+          plugin?.describe?.({
+            sect: args.sect,
+            realm: args.realm,
+            methodGrowth: sectModule.methodGrowth,
+          }) ??
           node.description,
       };
     }),

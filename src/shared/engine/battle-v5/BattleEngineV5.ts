@@ -1,4 +1,7 @@
+import { GameplayTags } from '@shared/engine/shared/tag-domain';
+import { battleRandom } from './core/BattleRandom';
 import { CombatContext, CombatStateMachine } from './core/CombatStateMachine';
+import { executeEffectConfigs } from './core/effectExecutor';
 import { EventBus } from './core/EventBus';
 import {
   ActionEvent,
@@ -8,19 +11,6 @@ import {
   ControlledSkipEvent,
   SkillPreCastEvent,
 } from './core/events';
-import { GameplayTags } from '@shared/engine/shared/tag-domain';
-import { AttributeType, CombatPhase } from './core/types';
-import { ActionExecutionSystem } from './systems/ActionExecutionSystem';
-import { DamageSystem } from './systems/DamageSystem';
-import { LogSpan } from './systems/log';
-import { CombatLogSystem } from './systems/log/CombatLogSystem';
-import { BattleStateRecorder } from './systems/state/BattleStateRecorder';
-import {
-  BattleStateTimeline,
-  UnitStateSnapshot,
-} from './systems/state/types';
-import { VictorySystem } from './systems/VictorySystem';
-import { Unit } from './units/Unit';
 import {
   beginRuntimeAction,
   clearPendingActionStates,
@@ -30,20 +20,35 @@ import {
   setRuntimeRound,
   shouldTickBuffDuration,
 } from './core/runtimeState';
+import { AttributeType, CombatPhase } from './core/types';
+import { EffectExecutionContextV3 } from './effects/Effect';
 import { AbilityFactory } from './factories/AbilityFactory';
-import { executeEffectConfigs } from './core/effectExecutor';
-import { battleRandom } from './core/BattleRandom';
+import { ActionExecutionSystem } from './systems/ActionExecutionSystem';
+import { DamageSystem } from './systems/DamageSystem';
+import { BattleStateRecorder } from './systems/state/BattleStateRecorder';
+import { UnitStateSnapshot } from './systems/state/types';
+import { VictorySystem } from './systems/VictorySystem';
+import { Unit } from './units/Unit';
+import {
+  CombatMechanicCodeV3,
+  CombatRecordBuilderV3,
+  toBattleStateTimelineV3,
+  type BattleStateTimelineV3,
+  type CombatFactDraftV3,
+  type CombatSequenceV3,
+} from './v3';
+import { CombatResultEmitterV3 } from './v3/CombatResultEmitterV3';
+import { CombatAttributionV3, CombatSystemSourceV3 } from './v3/origin';
 
 export interface BattleResult {
   winner: string;
-  loser?: string;
+  loser: string;
   turns: number;
-  logs: string[];
-  logSpans?: LogSpan[]; // 新增，支持结构化日志
+  sequences: CombatSequenceV3[];
   /** 状态时间线：每次行动前后的双方状态帧，含 delta */
-  stateTimeline: BattleStateTimeline;
+  stateTimeline: BattleStateTimelineV3;
   winnerSnapshot: UnitStateSnapshot;
-  loserSnapshot?: UnitStateSnapshot;
+  loserSnapshot: UnitStateSnapshot;
 }
 
 /**
@@ -63,7 +68,7 @@ export class BattleEngineV5 {
   private _player: Unit;
   private _opponent: Unit;
   private _stateMachine: CombatStateMachine;
-  private _logSystem: CombatLogSystem;
+  private _recordBuilder: CombatRecordBuilderV3;
   private _eventBus: EventBus;
   private _actionSystem: ActionExecutionSystem;
   private _damageSystem: DamageSystem;
@@ -74,8 +79,7 @@ export class BattleEngineV5 {
     this._opponent = opponent;
     this._eventBus = EventBus.instance;
 
-    this._logSystem = new CombatLogSystem();
-    this._logSystem.subscribe(this._eventBus);
+    this._recordBuilder = new CombatRecordBuilderV3(this._eventBus);
 
     // 初始化事件驱动系统
     this._actionSystem = new ActionExecutionSystem();
@@ -102,16 +106,18 @@ export class BattleEngineV5 {
    * 执行战斗模拟
    */
   execute(): BattleResult {
-    // 启动状态机（进入 INIT 状态）
-    this._stateMachine.start();
-
-    // 记录初始状态（基线快照）
-    this._stateRecorder.record(
-      'battle_init',
-      0,
-      [this._player, this._opponent],
-      undefined,
-      this._logSystem.getActiveSpanId(),
+    this._recordBuilder.runInSequence(
+      { phase: 'battle_init', turn: 0 },
+      (sequence) => {
+        this._stateMachine.start();
+        this._stateRecorder.record(
+          'battle_init',
+          0,
+          [this._player, this._opponent],
+          undefined,
+          sequence.id,
+        );
+      },
     );
 
     // 主循环
@@ -120,15 +126,30 @@ export class BattleEngineV5 {
     }
 
     // 进入结束状态
-    this._stateMachine.switchTo(CombatPhase.END);
-
-    // 记录终态快照
-    this._stateRecorder.record(
-      'battle_end',
-      this.getContext().turn,
-      [this._player, this._opponent],
-      undefined,
-      this._logSystem.getActiveSpanId(),
+    this._recordBuilder.runInSequence(
+      {
+        phase: 'battle_end',
+        turn: this.getContext().turn,
+        actor: this.getContext().winner
+          ? {
+              id: this.getContext().winner!,
+              name:
+                this.getContext().winner === this._player.id
+                  ? this._player.name
+                  : this._opponent.name,
+            }
+          : undefined,
+      },
+      (sequence) => {
+        this._stateMachine.switchTo(CombatPhase.END);
+        this._stateRecorder.record(
+          'battle_end',
+          this.getContext().turn,
+          [this._player, this._opponent],
+          undefined,
+          sequence.id,
+        );
+      },
     );
 
     // 生成结果
@@ -159,10 +180,13 @@ export class BattleEngineV5 {
     // ===== 状态机驱动战斗流程 =====
 
     // ROUND_START 阶段
-    this._stateMachine.switchTo(CombatPhase.ROUND_START);
-
-    // ROUND_PRE 阶段（DOT、持续效果触发）
-    this._stateMachine.switchTo(CombatPhase.ROUND_PRE);
+    this._recordBuilder.runInSequence(
+      { phase: 'round_start', turn: context.turn },
+      () => {
+        this._stateMachine.switchTo(CombatPhase.ROUND_START);
+        this._stateMachine.switchTo(CombatPhase.ROUND_PRE);
+      },
+    );
 
     // TURN_ORDER 阶段（行动顺序确定）
     this._stateMachine.switchTo(CombatPhase.TURN_ORDER);
@@ -198,119 +222,153 @@ export class BattleEngineV5 {
     const units = this.getSortedUnits();
 
     for (const actor of units) {
+      if (!actor.isAlive()) {
+        clearPendingActionStates(actor);
+        continue;
+      }
       beginRuntimeAction(actor);
-      // 发布行动前事件（DOT / 持续效果在此触发）
-      this._eventBus.publish<ActionPreEvent>({
-        type: 'ActionPreEvent',
-        timestamp: Date.now(),
-        caster: actor,
-      });
-
-      // action_pre 帧：ActionPreEvent 处理完毕后（DOT 已结算）
-      this._stateRecorder.record(
-        'action_pre',
-        this.getContext().turn,
-        [this._player, this._opponent],
-        actor.id,
-        this._logSystem.getActiveSpanId(),
+      this._recordBuilder.runInSequence(
+        {
+          phase: 'action_pre',
+          turn: this.getContext().turn,
+          actor: { id: actor.id, name: actor.name },
+        },
+        (sequence) => {
+          this._eventBus.publish<ActionPreEvent>({
+            type: 'ActionPreEvent',
+            timestamp: Date.now(),
+            caster: actor,
+          });
+          this._stateRecorder.record(
+            'action_pre',
+            this.getContext().turn,
+            [this._player, this._opponent],
+            actor.id,
+            sequence.id,
+          );
+        },
       );
 
       if (!actor.isAlive()) {
         clearPendingActionStates(actor);
         continue;
       }
-      actor.combatResources.beginAction();
-      const pendingQueue = peekQueuedAction(actor);
-      const hasUninterruptibleQueue =
-        pendingQueue?.interruptPolicy === 'uninterruptible';
+      this._recordBuilder.runInSequence(
+        {
+          phase: 'action',
+          turn: this.getContext().turn,
+          actor: { id: actor.id, name: actor.name },
+        },
+        () => {
+          actor.combatResources.beginAction();
+          const pendingQueue = peekQueuedAction(actor);
+          const hasUninterruptibleQueue =
+            pendingQueue?.interruptPolicy === 'uninterruptible';
 
-      // 不可打断后发优先于控制和调息；调息保留到下一次自身行动。
-      if (!hasUninterruptibleQueue) {
-        const controlTag = this.getSkipControlTag(actor);
-        const skippedAction = consumeSkippedAction(actor);
-        if (skippedAction) {
-          this._eventBus.publish<ActionStateEvent>({
-            type: 'ActionStateEvent',
-            timestamp: Date.now(),
-            unit: actor,
-            stateType: 'rest',
-            phase: 'skipped',
-            name: skippedAction.name,
-            remainingActions: 0,
-            sourceAbility: skippedAction.sourceAbility,
-            reason: skippedAction.reason,
-          });
-        }
-        if (controlTag) {
-          const cancelledQueue = consumeQueuedAction(actor);
-          this.cancelQueuedAction(actor, cancelledQueue, controlTag);
-          this._eventBus.publish<ControlledSkipEvent>({
-            type: 'ControlledSkipEvent',
-            timestamp: Date.now(),
-            unit: actor,
-            controlTag,
-          });
-          this.finalizeActorTurn(actor, true);
-          continue;
-        }
-        if (skippedAction) {
+          // 不可打断后发优先于控制和调息；调息保留到下一次自身行动。
+          if (!hasUninterruptibleQueue) {
+            const controlTag = this.getSkipControlTag(actor);
+            const skippedAction = consumeSkippedAction(actor);
+            if (skippedAction) {
+              this.commitSystemResult(actor, {
+                type: 'action_state',
+                stateType: 'rest',
+                phase: 'skipped',
+                name: skippedAction.name,
+                remainingActions: 0,
+              });
+              this._eventBus.publish<ActionStateEvent>({
+                type: 'ActionStateEvent',
+                timestamp: Date.now(),
+                unit: actor,
+                stateType: 'rest',
+                phase: 'skipped',
+                name: skippedAction.name,
+                remainingActions: 0,
+                sourceAbility: skippedAction.sourceAbility,
+                reason: skippedAction.reason,
+              });
+            }
+            if (controlTag) {
+              const cancelledQueue = consumeQueuedAction(actor);
+              this.cancelQueuedAction(actor, cancelledQueue, controlTag);
+              this.commitSystemResult(actor, {
+                type: 'mechanic',
+                code: CombatMechanicCodeV3.CONTROL_SKIP,
+                payload: {
+                  kind: 'control_skip',
+                  controlName: this.getControlName(actor, controlTag),
+                },
+              });
+              this._eventBus.publish<ControlledSkipEvent>({
+                type: 'ControlledSkipEvent',
+                timestamp: Date.now(),
+                unit: actor,
+                controlTag,
+              });
+              this.finalizeActorTurn(actor, true);
+              return;
+            }
+            if (skippedAction) {
+              this.finalizeActorTurn(actor, false);
+              return;
+            }
+          }
+          // 设置当前出手单位
+          this._stateMachine.setCurrentCaster(actor);
+
+          // 设置默认目标（敌方单位）
+          const target = actor === this._player ? this._opponent : this._player;
+          if (target.isAlive()) {
+            actor.abilities.setDefaultTarget(target);
+          }
+
+          let queuedAction = consumeQueuedAction(actor);
+          if (
+            queuedAction?.interruptPolicy !== 'uninterruptible' &&
+            actor.tags.hasTag(GameplayTags.STATUS.CONTROL.NO_SKILL)
+          ) {
+            this.cancelQueuedAction(
+              actor,
+              queuedAction,
+              GameplayTags.STATUS.CONTROL.NO_SKILL,
+            );
+            queuedAction = undefined;
+          }
+          if (queuedAction && target.isAlive()) {
+            const queuedAbility = AbilityFactory.create(queuedAction.ability);
+            this._eventBus.publish<SkillPreCastEvent>({
+              type: 'SkillPreCastEvent',
+              timestamp: Date.now(),
+              caster: actor,
+              target,
+              ability: queuedAbility,
+              isInterrupted: false,
+              interruptPolicy: queuedAction.interruptPolicy,
+              hitPolicy: queuedAction.hitPolicy,
+              queuedActionState: {
+                name: '蓄势',
+                sourceAbility: queuedAction.sourceAbility,
+              },
+            });
+          } else {
+            // 发布行动事件，触发整个技能流程
+            this._eventBus.publish<ActionEvent>({
+              type: 'ActionEvent',
+              timestamp: Date.now(),
+              caster: actor,
+            });
+          }
+
+          // 清除默认目标
+          actor.abilities.clearDefaultTarget();
+
+          // 清除当前出手单位
+          this._stateMachine.clearCurrentCaster();
+
           this.finalizeActorTurn(actor, false);
-          continue;
-        }
-      }
-      // 设置当前出手单位
-      this._stateMachine.setCurrentCaster(actor);
-
-      // 设置默认目标（敌方单位）
-      const target = actor === this._player ? this._opponent : this._player;
-      if (target.isAlive()) {
-        actor.abilities.setDefaultTarget(target);
-      }
-
-      let queuedAction = consumeQueuedAction(actor);
-      if (
-        queuedAction?.interruptPolicy !== 'uninterruptible' &&
-        actor.tags.hasTag(GameplayTags.STATUS.CONTROL.NO_SKILL)
-      ) {
-        this.cancelQueuedAction(
-          actor,
-          queuedAction,
-          GameplayTags.STATUS.CONTROL.NO_SKILL,
-        );
-        queuedAction = undefined;
-      }
-      if (queuedAction && target.isAlive()) {
-        const queuedAbility = AbilityFactory.create(queuedAction.ability);
-        this._eventBus.publish<SkillPreCastEvent>({
-          type: 'SkillPreCastEvent',
-          timestamp: Date.now(),
-          caster: actor,
-          target,
-          ability: queuedAbility,
-          isInterrupted: false,
-          interruptPolicy: queuedAction.interruptPolicy,
-          hitPolicy: queuedAction.hitPolicy,
-          queuedActionState: {
-            name: '蓄势',
-            sourceAbility: queuedAction.sourceAbility,
-          },
-        });
-      } else {
-        // 发布行动事件，触发整个技能流程
-        this._eventBus.publish<ActionEvent>({
-          type: 'ActionEvent',
-          timestamp: Date.now(),
-          caster: actor,
-        });
-      }
-
-      // 清除默认目标
-      actor.abilities.clearDefaultTarget();
-
-      // 清除当前出手单位
-      this._stateMachine.clearCurrentCaster();
-
-      this.finalizeActorTurn(actor, false);
+        },
+      );
     }
   }
 
@@ -321,11 +379,28 @@ export class BattleEngineV5 {
   ): void {
     if (!queuedAction) return;
     if (queuedAction.cancelEffects.length) {
-      executeEffectConfigs(queuedAction.cancelEffects, {
-        caster: actor,
-        target: actor,
-      });
+      executeEffectConfigs(
+        queuedAction.cancelEffects,
+        EffectExecutionContextV3.system({
+          owner: actor,
+          caster: actor,
+          target: actor,
+          source: CombatSystemSourceV3.ACTION_FLOW,
+          trace: this._eventBus.reserveTrace(),
+        }),
+      );
     }
+    this.commitSystemResult(actor, {
+      type: 'action_state',
+      stateType: 'queued_action',
+      phase: 'cancelled',
+      name: '蓄势',
+      remainingActions: 0,
+      ability: {
+        id: queuedAction.ability.slug,
+        name: queuedAction.ability.name,
+      },
+    });
     this._eventBus.publish<ActionStateEvent>({
       type: 'ActionStateEvent',
       timestamp: Date.now(),
@@ -355,28 +430,51 @@ export class BattleEngineV5 {
     return null;
   }
 
-  private finalizeActorTurn(actor: Unit, controlledSkip = false): void {
-    // 发布行动后置事件（Buff 过期处理阶段开始）
-    this._eventBus.publish<ActionPostEvent>({
-      type: 'ActionPostEvent',
-      timestamp: Date.now(),
-      caster: actor,
+  private getControlName(actor: Unit, controlTag: string): string {
+    return (
+      actor.buffs.getAllBuffs().find((buff) => buff.tags.hasTag(controlTag))
+        ?.name ?? '控制效果'
+    );
+  }
+
+  private commitSystemResult(unit: Unit, result: CombatFactDraftV3): void {
+    const attribution = CombatAttributionV3.system(
+      unit,
+      CombatSystemSourceV3.ACTION_FLOW,
+    );
+    new CombatResultEmitterV3(this._eventBus).commit(unit, result, {
+      origin: attribution.origin,
+      parentTrace: this._eventBus.reserveTrace(),
     });
-    actor.combatResources.finishAction(controlledSkip, actor.getCurrentShield() > 0);
+  }
 
-    // 处理 Buff 过期
-    this.processBuffs(actor);
-
-    // 更新技能冷却
-    actor.abilities.tickAbilitiesCooldown();
-
-    // action_post 帧：技能执行 + Buff 过期 + CD 刷新全部完成后
-    this._stateRecorder.record(
-      'action_post',
-      this.getContext().turn,
-      [this._player, this._opponent],
-      actor.id,
-      this._logSystem.getActiveSpanId(),
+  private finalizeActorTurn(actor: Unit, controlledSkip = false): void {
+    this._recordBuilder.runInSequence(
+      {
+        phase: 'action_after',
+        turn: this.getContext().turn,
+        actor: { id: actor.id, name: actor.name },
+      },
+      (sequence) => {
+        this._eventBus.publish<ActionPostEvent>({
+          type: 'ActionPostEvent',
+          timestamp: Date.now(),
+          caster: actor,
+        });
+        actor.combatResources.finishAction(
+          controlledSkip,
+          actor.getCurrentShield() > 0,
+        );
+        this.processBuffs(actor);
+        actor.abilities.tickAbilitiesCooldown();
+        this._stateRecorder.record(
+          'action_post',
+          this.getContext().turn,
+          [this._player, this._opponent],
+          actor.id,
+          sequence.id,
+        );
+      },
     );
   }
 
@@ -389,7 +487,9 @@ export class BattleEngineV5 {
       if (!shouldTickBuffDuration(unit, buff)) continue;
       buff.tickDuration();
       if (buff.isExpired()) {
-        unit.buffs.removeBuffExpired(buff.id);
+        unit.buffs.removeBuffExpired(buff.id, {
+          trace: this._eventBus.reserveTrace(),
+        });
       }
     }
   }
@@ -432,33 +532,29 @@ export class BattleEngineV5 {
     const winner =
       context.winner === this._player.id ? this._player : this._opponent;
     const loser = winner === this._player ? this._opponent : this._player;
-    const stateTimeline = this._stateRecorder.getTimeline([
+    const rawStateTimeline = this._stateRecorder.getTimeline([
       this._player,
       this._opponent,
     ]);
-    const finalFrame =
-      stateTimeline.frames[stateTimeline.frames.length - 1];
+    const sequences = this._recordBuilder.getSequences();
+    const stateTimeline = toBattleStateTimelineV3(rawStateTimeline);
+    const finalFrame = stateTimeline.frames[stateTimeline.frames.length - 1];
     const winnerSnapshot = finalFrame?.units[winner.id];
-    const loserSnapshot = loser ? finalFrame?.units[loser.id] : undefined;
+    const loserSnapshot = finalFrame?.units[loser.id];
 
-    if (!winnerSnapshot) {
-      throw new Error('战斗终态缺少胜者状态快照');
+    if (!winnerSnapshot || !loserSnapshot) {
+      throw new Error('战斗终态缺少参战单位状态快照');
     }
 
     return {
       winner: winner.id,
-      loser: loser?.id,
+      loser: loser.id,
       turns: context.turn,
-      logs: this._logSystem.getPlayerLogs(),
-      logSpans: this._logSystem.getSpans(),
+      sequences,
       stateTimeline,
       winnerSnapshot,
       loserSnapshot,
     };
-  }
-
-  get logSystem(): CombatLogSystem {
-    return this._logSystem;
   }
 
   /**
@@ -467,7 +563,6 @@ export class BattleEngineV5 {
   destroy(): void {
     this._actionSystem.destroy();
     this._damageSystem.destroy();
-    this._logSystem.unsubscribe(this._eventBus);
-    this._logSystem.destroy();
+    this._recordBuilder.destroy();
   }
 }

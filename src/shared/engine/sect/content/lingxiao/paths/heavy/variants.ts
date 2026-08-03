@@ -267,6 +267,7 @@ export function buildHeavyAbilities(
     effects: [
       damage(1.04),
       sectEffects.dispelPositiveBuffsByMethod(
+        'edge-cleansing',
         1,
         edgeCleansingLevel,
         methodGrowth!,

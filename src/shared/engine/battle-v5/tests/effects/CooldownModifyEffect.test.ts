@@ -3,6 +3,7 @@ import { AbilityId } from '../../core/types';
 import { EventBus } from '../../core/EventBus';
 import { CooldownModifyEffect } from '../../effects/CooldownModifyEffect';
 import { Unit } from '../../units/Unit';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 class TestSkill extends ActiveSkill {
   constructor(id: string, name: string) {
@@ -29,7 +30,7 @@ describe('CooldownModifyEffect', () => {
     target.abilities.addAbility(secondSkill);
     target.abilities.addAbility(thirdSkill);
 
-    new CooldownModifyEffect({ cdModifyValue: 1, maxCount: 1 }).execute({
+    executeTestEffect(new CooldownModifyEffect({ cdModifyValue: 1, maxCount: 1 }), {
       caster,
       target,
       ability: sourceSkill,

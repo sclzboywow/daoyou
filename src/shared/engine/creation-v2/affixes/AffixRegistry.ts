@@ -127,18 +127,26 @@ export class AffixRegistry {
         );
       }
 
-      // 规则七：Gongfa attribute_modifier 禁止 FIXED modType
+      // 规则七：功法常驻修正必须遵循属性语义：
+      // 百分比/概率属性直接增加百分点，其他属性使用相对加成。
       if (
         productType === 'gongfa' &&
-        def.effectTemplate.type === 'attribute_modifier'
+        (def.effectTemplate.type === 'attribute_modifier' ||
+          def.effectTemplate.type === 'random_attribute_modifier')
       ) {
-        const params = def.effectTemplate.params;
         const modifiers =
-          'modifiers' in params ? params.modifiers : [params];
+          def.effectTemplate.type === 'random_attribute_modifier'
+            ? def.effectTemplate.params.pool
+            : 'modifiers' in def.effectTemplate.params
+              ? def.effectTemplate.params.modifiers
+              : [def.effectTemplate.params];
         for (const mod of modifiers) {
-          if (mod.modType === ModifierType.FIXED) {
+          const expectedType = isPercentageAttributeType(mod.attrType)
+            ? ModifierType.FIXED
+            : ModifierType.ADD;
+          if (mod.modType !== expectedType) {
             throw new Error(
-              `affix ${def.id}: gongfa affix must not use ModifierType.FIXED in attribute_modifier (boundary violation)`,
+              `affix ${def.id}: gongfa modifier '${mod.attrType}' must use ModifierType.${expectedType.toUpperCase()} (boundary violation)`,
             );
           }
         }

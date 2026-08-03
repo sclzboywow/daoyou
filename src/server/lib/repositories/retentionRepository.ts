@@ -2,7 +2,7 @@ import type { DbExecutor, DbTransaction } from '@server/lib/drizzle/db';
 import { getExecutor } from '@server/lib/drizzle/db';
 import {
   auctionListings,
-  battleRecordsV2,
+  battleRecordsV3,
   dungeonHistories,
   dungeonRuns,
   mails,
@@ -16,7 +16,7 @@ export type ExpiredDataCleanupCutoffs = {
   qiLogs: Date;
   dungeonHistories: Date;
   dungeonRuns: Date;
-  battleRecordsV2: Date;
+  battleRecordsV3: Date;
   reputationShopPurchases: Date;
   auctionListings: Date;
 };
@@ -26,7 +26,7 @@ export type ExpiredDataCleanupResult = {
   qiLogs: number;
   dungeonHistories: number;
   dungeonRuns: number;
-  battleRecordsV2: number;
+  battleRecordsV3: number;
   reputationShopPurchases: number;
   auctionListings: number;
 };
@@ -78,11 +78,11 @@ export async function pruneExpiredData(
       .returning({ id: dungeonRuns.id }),
   );
 
-  const battleRecordsV2Deleted = await deleteExpiredRows(q, (executor) =>
+  const battleRecordsV3Deleted = await deleteExpiredRows(q, (executor) =>
     executor
-      .delete(battleRecordsV2)
-      .where(lt(battleRecordsV2.createdAt, cutoffs.battleRecordsV2))
-      .returning({ id: battleRecordsV2.id }),
+      .delete(battleRecordsV3)
+      .where(lt(battleRecordsV3.createdAt, cutoffs.battleRecordsV3))
+      .returning({ id: battleRecordsV3.id }),
   );
 
   const reputationShopPurchasesDeleted = await deleteExpiredRows(
@@ -117,7 +117,7 @@ export async function pruneExpiredData(
     qiLogs: qiLogsDeleted,
     dungeonHistories: dungeonHistoriesDeleted,
     dungeonRuns: dungeonRunsDeleted,
-    battleRecordsV2: battleRecordsV2Deleted,
+    battleRecordsV3: battleRecordsV3Deleted,
     reputationShopPurchases: reputationShopPurchasesDeleted,
     auctionListings: auctionListingsDeleted,
   };

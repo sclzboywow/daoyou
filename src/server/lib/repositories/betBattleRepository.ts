@@ -2,7 +2,36 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { getExecutor, type DbExecutor, type DbTransaction } from '../drizzle/db';
 import * as schema from '../drizzle/schema';
 
-export type BetBattleRecord = typeof schema.betBattles.$inferSelect;
+const betBattleRuntimeFields = {
+  id: schema.betBattles.id,
+  creatorId: schema.betBattles.creatorId,
+  creatorName: schema.betBattles.creatorName,
+  status: schema.betBattles.status,
+  minRealm: schema.betBattles.minRealm,
+  maxRealm: schema.betBattles.maxRealm,
+  taunt: schema.betBattles.taunt,
+  creatorStakeSnapshot: schema.betBattles.creatorStakeSnapshot,
+  challengerStakeSnapshot: schema.betBattles.challengerStakeSnapshot,
+  challengerId: schema.betBattles.challengerId,
+  challengerName: schema.betBattles.challengerName,
+  winnerCultivatorId: schema.betBattles.winnerCultivatorId,
+  battleRecordV3Id: schema.betBattles.battleRecordV3Id,
+  expiresAt: schema.betBattles.expiresAt,
+  matchedAt: schema.betBattles.matchedAt,
+  settledAt: schema.betBattles.settledAt,
+  createdAt: schema.betBattles.createdAt,
+};
+
+type BetBattleRuntimeField = keyof typeof betBattleRuntimeFields;
+
+export type BetBattleRecord = Pick<
+  typeof schema.betBattles.$inferSelect,
+  BetBattleRuntimeField
+>;
+type BetBattleInsert = Pick<
+  typeof schema.betBattles.$inferInsert,
+  BetBattleRuntimeField
+>;
 export type BetBattleListingRecord = BetBattleRecord & {
   creatorRealm: string;
   creatorRealmStage: string;
@@ -27,7 +56,7 @@ export interface FindPendingBetBattlesOptions {
 
 export async function createBetBattle(
   data: Omit<
-    typeof schema.betBattles.$inferInsert,
+    BetBattleInsert,
     'id' | 'createdAt' | 'status'
   > & { status?: 'pending' | 'matched' | 'cancelled' | 'expired' | 'settled' },
   tx?: DbTransaction,
@@ -39,7 +68,7 @@ export async function createBetBattle(
       ...data,
       status: data.status ?? 'pending',
     })
-    .returning();
+    .returning(betBattleRuntimeFields);
   return row;
 }
 
@@ -49,7 +78,7 @@ export async function findById(
 ): Promise<BetBattleRecord | null> {
   const q = executor ?? getExecutor();
   const [row] = await q
-    .select()
+    .select(betBattleRuntimeFields)
     .from(schema.betBattles)
     .where(eq(schema.betBattles.id, id))
     .limit(1);
@@ -63,7 +92,7 @@ export async function findListingById(
   const q = executor ?? getExecutor();
   const [row] = await q
     .select({
-      battle: schema.betBattles,
+      battle: betBattleRuntimeFields,
       creatorRealm: schema.cultivators.realm,
       creatorRealmStage: schema.cultivators.realm_stage,
     })
@@ -108,7 +137,7 @@ export async function findPendingBetBattles(
 
   const rows = await q
     .select({
-      battle: schema.betBattles,
+      battle: betBattleRuntimeFields,
       creatorRealm: schema.cultivators.realm,
       creatorRealmStage: schema.cultivators.realm_stage,
     })
@@ -145,7 +174,7 @@ export async function findMyBetBattles(
 
   const rows = await q
     .select({
-      battle: schema.betBattles,
+      battle: betBattleRuntimeFields,
       creatorRealm: schema.cultivators.realm,
       creatorRealmStage: schema.cultivators.realm_stage,
     })
@@ -173,7 +202,7 @@ export async function findMyBetBattles(
 export async function updateBetBattleById(
   tx: DbTransaction,
   id: string,
-  patch: Partial<typeof schema.betBattles.$inferInsert>,
+  patch: Partial<BetBattleInsert>,
 ): Promise<void> {
   await tx
     .update(schema.betBattles)
@@ -184,7 +213,7 @@ export async function updateBetBattleById(
 export async function transitionPendingBetBattle(
   tx: DbTransaction,
   id: string,
-  patch: Partial<typeof schema.betBattles.$inferInsert> & {
+  patch: Partial<BetBattleInsert> & {
     status: 'settled' | 'cancelled' | 'expired';
   },
   creatorId?: string,
@@ -200,7 +229,7 @@ export async function transitionPendingBetBattle(
     .update(schema.betBattles)
     .set(patch)
     .where(and(...conditions))
-    .returning();
+    .returning(betBattleRuntimeFields);
   return row ?? null;
 }
 
@@ -216,5 +245,5 @@ export async function markExpiredPendingBetBattles(
         sql`${schema.betBattles.expiresAt} < NOW()`,
       ),
     )
-    .returning();
+    .returning(betBattleRuntimeFields);
 }

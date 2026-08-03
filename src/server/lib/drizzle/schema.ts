@@ -8,6 +8,7 @@ import type {
   ItemLibraryPayload,
 } from '@shared/lib/itemLibrary';
 import type { TowerPreparedEnemy } from '@shared/lib/tower';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import type {
   AlchemyFormulaBlueprint,
   AlchemyFormulaMastery,
@@ -878,7 +879,9 @@ export const battleRecords = pgTable(
   ],
 );
 
-// 战斗记录表 v2 - 新版战斗引擎记录（唯一产品路径）
+/**
+ * @deprecated 仅为首次 V3 发布保留表结构，禁止任何运行时读写，下一版本删除。
+ */
 export const battleRecordsV2 = pgTable(
   'wanjiedaoyou_battle_records_v2',
   {
@@ -915,6 +918,44 @@ export const battleRecordsV2 = pgTable(
       table.userId,
       table.createdAt,
     ),
+  ],
+);
+
+// 战斗记录 V3：战斗事实、序列与状态时间线的唯一运行时数据源。
+export const battleRecordsV3 = pgTable(
+  'wanjiedaoyou_battle_records_v3',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    cultivatorId: uuid('cultivator_id')
+      .references(() => cultivators.id, { onDelete: 'cascade' })
+      .notNull(),
+    opponentCultivatorId: uuid('opponent_cultivator_id').references(
+      () => cultivators.id,
+      { onDelete: 'set null' },
+    ),
+    battleType: varchar('battle_type', { length: 20 })
+      .notNull()
+      .default('normal'),
+    battleResult: jsonb('battle_result').$type<BattleRecordV3>().notNull(),
+    shareCode: uuid('share_code'),
+    sharedAt: timestamp('shared_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('battle_records_v3_cultivator_created_idx').on(
+      table.cultivatorId,
+      table.createdAt,
+    ),
+    index('battle_records_v3_opponent_created_idx').on(
+      table.opponentCultivatorId,
+      table.createdAt,
+    ),
+    index('battle_records_v3_user_created_idx').on(
+      table.userId,
+      table.createdAt,
+    ),
+    uniqueIndex('battle_records_v3_share_code_uidx').on(table.shareCode),
   ],
 );
 
@@ -1350,9 +1391,7 @@ export const sectShopItems = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex('sect_shop_item_library_item_uidx').on(
-      table.itemLibraryItemId,
-    ),
+    uniqueIndex('sect_shop_item_library_item_uidx').on(table.itemLibraryItemId),
     index('sect_shop_status_sort_idx').on(
       table.status,
       table.sortOrder,
@@ -1669,8 +1708,15 @@ export const betBattles = pgTable(
         onDelete: 'set null',
       },
     ),
+    /** @deprecated 仅为首次 V3 发布保留，禁止运行时读写。 */
     battleRecordV2Id: uuid('battle_record_v2_id').references(
       () => battleRecordsV2.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
+    battleRecordV3Id: uuid('battle_record_v3_id').references(
+      () => battleRecordsV3.id,
       {
         onDelete: 'set null',
       },

@@ -2,6 +2,14 @@ import { BuffId, BuffType } from '../core/types';
 import { Unit } from '../units/Unit';
 import { GameplayTagContainer } from '@shared/engine/shared/tag-domain';
 import { EventBus } from '../core/EventBus';
+import type { CombatAttributionV3 } from '../v3/origin';
+
+export type BuffDeactivateReason =
+  | 'manual'
+  | 'expired'
+  | 'dispel'
+  | 'replace'
+  | 'death';
 
 // 堆叠规则枚举
 export const StackRule = {
@@ -37,6 +45,7 @@ export class Buff {
   readonly dispelPolicy: 'normal' | 'protected';
   readonly dispelMode: 'whole' | 'one_layer';
   readonly countsAsStatus: boolean;
+  readonly removeOnDeath: boolean;
   private _duration: number;
   private _maxDuration: number;
 
@@ -51,6 +60,7 @@ export class Buff {
 
   // GAS 核心：source 引用，记录 Buff 来源（施法者/技能）
   protected _source: Unit | null = null;
+  private _combatAttribution?: CombatAttributionV3;
 
   // 层数机制（大多数 Buff 都有层数概念）
   protected _layer: number = 1;
@@ -75,6 +85,7 @@ export class Buff {
     statusVisibility?: 'player' | 'hidden',
     stackPriority: number = 0,
     dispelMode: 'whole' | 'one_layer' = 'whole',
+    removeOnDeath: boolean = false,
   ) {
     this.id = id;
     this.name = name;
@@ -86,6 +97,7 @@ export class Buff {
     this.dispelPolicy = dispelPolicy;
     this.dispelMode = dispelMode;
     this.countsAsStatus = countsAsStatus;
+    this.removeOnDeath = removeOnDeath;
     this.type = type;
     this._maxDuration = duration;
     this._duration = duration;
@@ -125,6 +137,14 @@ export class Buff {
    */
   getSource(): Unit | null {
     return this._source;
+  }
+
+  setCombatAttributionV3(attribution: CombatAttributionV3): void {
+    this._combatAttribution = attribution;
+  }
+
+  getCombatAttributionV3(): CombatAttributionV3 | undefined {
+    return this._combatAttribution;
   }
 
   /**
@@ -177,7 +197,7 @@ export class Buff {
    * Buff 移除时的清理（GAS 模式）
    * 子类重写此方法来取消订阅、移除标签、移除属性修改器等
    */
-  onDeactivate(reason?: 'manual' | 'expired' | 'dispel' | 'replace'): void {
+  onDeactivate(reason?: BuffDeactivateReason): void {
     void reason;
     // 取消所有事件订阅
     this._unsubscribeAll();
@@ -305,11 +325,12 @@ export class Buff {
       this.statusVisibility,
       this.stackPriority,
       this.dispelMode,
+      this.removeOnDeath,
     );
     cloned.setDuration(this._duration);
     cloned.tags = this.tags.clone();
     cloned._layer = this._layer;
-    // 注意：不复制 owner、source 和事件订阅，这些需要在 addBuff 时重新设置
+    // 不复制 owner、source、attribution 和事件订阅；应用时必须重新绑定。
     return cloned;
   }
 }

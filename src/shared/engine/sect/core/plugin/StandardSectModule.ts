@@ -1,4 +1,4 @@
-import { standardSectMethodGrowthPolicy } from '../authoring';
+import { StandardSectMethodGrowthPolicy } from '../authoring';
 import type { SectDefinitionWithoutPaths } from '../domain';
 import {
   StandardSectOrganizationModule,
@@ -25,7 +25,7 @@ export abstract class StandardSectModule extends BaseSectModule {
       definition,
       pathModules,
       standardSectProgression,
-      standardSectMethodGrowthPolicy,
+      new StandardSectMethodGrowthPolicy(definition.methods),
       new StandardSectOrganizationModule(options.organizationTheme),
       new AllowedRaceAdmissionPolicy(
         definition.raceIds,

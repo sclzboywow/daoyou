@@ -155,21 +155,6 @@ function hiddenMarker(id: string, name: string, tag: string): BuffConfig {
   };
 }
 
-function deathCleanupListener(id: string): ListenerConfig {
-  return {
-    id: `${id}.death-cleanup`,
-    eventType: GameplayTags.EVENT.UNIT_DEAD,
-    scope: GameplayTags.SCOPE.OWNER_AS_TARGET,
-    priority: EventPriorityLevel.POST_SETTLE,
-    mapping: { caster: 'owner', target: 'owner' },
-    guard: { requireOwnerAlive: false },
-    effects: [{
-      type: 'buff_layer_modify',
-      params: { match: { id }, operation: 'clear' },
-    }],
-  };
-}
-
 function applyBuff(
   buffConfig: BuffConfig,
   target: 'caster' | 'target' = 'target',
@@ -257,7 +242,8 @@ function returningSoulBuff(): BuffConfig {
           layers: 4,
         },
       }],
-    }, deathCleanupListener(YOUDU_RETURNING_SOUL)],
+    }],
+    removeOnDeath: true,
   };
 }
 
@@ -346,7 +332,8 @@ function soulLostBuff(settings: YouduBuildSettings): BuffConfig {
       priority: EventPriorityLevel.POST_SETTLE,
       mapping: { caster: 'owner', target: 'owner' },
       effects: convergeLostSoul(settings, 'skipped'),
-    }, deathCleanupListener(YOUDU_SOUL_LOST)],
+    }],
+    removeOnDeath: true,
   };
 }
 
@@ -447,8 +434,8 @@ function forgetfulRiverBuff(settings: YouduBuildSettings): BuffConfig {
             effects: [soulDamage(0.12, { damageSource: DamageSource.FOLLOW_UP })],
           } satisfies ListenerConfig]
         : []),
-      deathCleanupListener(YOUDU_FORGETFUL_RIVER),
     ],
+    removeOnDeath: true,
   };
 }
 
@@ -704,8 +691,6 @@ function soulErosionBuff(settings: YouduBuildSettings): BuffConfig {
       ))],
     });
   }
-  listeners.push(deathCleanupListener(YOUDU_SOUL_EROSION));
-
   return {
     id: YOUDU_SOUL_EROSION,
     name: '蚀魂',
@@ -717,6 +702,7 @@ function soulErosionBuff(settings: YouduBuildSettings): BuffConfig {
     dispelMode: 'one_layer',
     tags: debuffTags(erosionTag),
     statusTags: [stateTag('soul-erosion')],
+    removeOnDeath: true,
     modifiers: [
       ...[
         AttributeType.ATK,
@@ -793,7 +779,7 @@ function noReturnBuff(settings: YouduBuildSettings): BuffConfig {
         value: settings.noReturnSpeedReduction,
       },
     ],
-    listeners: [deathCleanupListener(YOUDU_NO_RETURN)],
+    removeOnDeath: true,
   };
 }
 
@@ -812,7 +798,7 @@ function shadowBuff(settings: YouduBuildSettings): BuffConfig {
       type: ModifierType.OVERRIDE,
       value: 0,
     }],
-    listeners: [deathCleanupListener(YOUDU_SHADOW_REVEALED)],
+    removeOnDeath: true,
   };
 }
 
@@ -834,7 +820,7 @@ function pinBuff(duration: number): BuffConfig {
       type: ModifierType.FIXED,
       value: 1,
     }],
-    listeners: [deathCleanupListener(YOUDU_SOUL_PINNING_NAIL)],
+    removeOnDeath: true,
   };
 }
 

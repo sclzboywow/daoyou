@@ -1,5 +1,4 @@
 import type { AbilityModeParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import type { ActionStateEvent } from '../core/events';
 import {
   advanceAbilityMode,
@@ -8,7 +7,7 @@ import {
   setAbilityMode,
 } from '../core/runtimeState';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import type { EffectContext } from './Effect';
+import type { EffectExecutionContextV3 } from './Effect';
 import { GameplayEffect } from './Effect';
 
 export class AbilityModeEffect extends GameplayEffect {
@@ -16,7 +15,7 @@ export class AbilityModeEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const sourceAbility = context.ability
       ? { id: context.ability.id, name: context.ability.name }
       : undefined;
@@ -46,7 +45,10 @@ export class AbilityModeEffect extends GameplayEffect {
 
     if (!current) return;
     if (this.params.operation === 'advance') {
-      const next = advanceAbilityMode(context.caster, this.params.key);
+      const next = advanceAbilityMode(context.caster, this.params.key, {
+        attribution: context.attribution,
+        trace: context.trace,
+      });
       this.publishState(
         context,
         'triggered',
@@ -57,7 +59,10 @@ export class AbilityModeEffect extends GameplayEffect {
       return;
     }
 
-    clearAbilityMode(context.caster, this.params.key);
+    clearAbilityMode(context.caster, this.params.key, {
+      attribution: context.attribution,
+      trace: context.trace,
+    });
     this.publishState(
       context,
       'cancelled',
@@ -68,13 +73,20 @@ export class AbilityModeEffect extends GameplayEffect {
   }
 
   private publishState(
-    context: EffectContext,
+    context: EffectExecutionContextV3,
     phase: ActionStateEvent['phase'],
     name: string,
     remainingActions: number,
     sourceAbility?: { id: string; name: string },
   ): void {
-    EventBus.instance.publish<ActionStateEvent>({
+    context.commit(context.caster, {
+      type: 'action_state',
+      stateType: 'ability_mode',
+      phase,
+      name,
+      remainingActions,
+    });
+    context.emit<ActionStateEvent>({
       type: 'ActionStateEvent',
       timestamp: Date.now(),
       unit: context.caster,

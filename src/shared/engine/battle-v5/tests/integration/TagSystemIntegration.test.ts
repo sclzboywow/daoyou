@@ -6,6 +6,7 @@ import { DispelEffect } from '../../effects/DispelEffect';
 import { AbilityType, BuffId, BuffType } from '../../core/types';
 import { AbilityFactory } from '../../factories/AbilityFactory';
 import { Unit } from '../../units/Unit';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 function addBuffImmunityPassive(unit: Unit, tags: string[]): void {
   unit.abilities.addAbility(
@@ -108,10 +109,10 @@ describe('标签系统集成测试', () => {
       unit.buffs.addBuff(controlBuff);
       expect(unit.buffs.getAllBuffIds()).toContain('stun');
 
-      new DispelEffect({
+      executeTestEffect(new DispelEffect({
         targetTag: GameplayTags.BUFF.TYPE.DEBUFF,
         maxCount: 1,
-      }).execute({ caster: unit, target: unit });
+      }), { caster: unit, target: unit });
 
       expect(unit.buffs.getAllBuffIds()).not.toContain('stun');
     });

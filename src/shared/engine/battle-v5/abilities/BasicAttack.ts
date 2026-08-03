@@ -2,6 +2,10 @@
 import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { AbilityId, AttributeType } from '../core/types';
 import { DamageEffect } from '../effects/DamageEffect';
+import {
+  EffectExecutionContextV3,
+  executeGameplayEffectV3,
+} from '../effects/Effect';
 import { Unit } from '../units/Unit';
 import { ActiveSkill } from './ActiveSkill';
 
@@ -34,10 +38,12 @@ export class BasicAttack extends ActiveSkill {
    * 执行普攻
    */
   protected executeSkill(caster: Unit, target: Unit): void {
-    this._damageEffect.execute({
+    const context = EffectExecutionContextV3.activeAbility({
+      owner: caster,
       caster,
       target,
       ability: this,
     });
+    executeGameplayEffectV3(this._damageEffect, context);
   }
 }

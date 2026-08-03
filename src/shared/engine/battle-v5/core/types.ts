@@ -4,10 +4,14 @@ export type AbilityId = string;
 export type BuffId = string;
 export type EventPriority = number;
 
+import type { CombatOriginV3, CombatTraceV3 } from '../v3/types';
+
 // ===== 战斗事件基类 =====
 export interface CombatEvent {
   readonly type: string;
   readonly timestamp: number;
+  readonly trace?: CombatTraceV3;
+  readonly origin?: CombatOriginV3;
 }
 
 // ===== 战斗阶段枚举 =====
@@ -25,34 +29,34 @@ export enum CombatPhase {
 // ===== 六维属性类型 =====
 export enum AttributeType {
   // ── 主属性（六维）──
-  VITALITY = 'vitality',     // 体魄：气血上限、少量法术防御
-  STRENGTH = 'strength',     // 力道：物理攻击
-  SPIRIT = 'spirit',         // 灵力：法术攻击、少量法力
-  ENDURANCE = 'endurance',   // 根骨：物理防御、少量气血上限
-  SPEED = 'speed',           // 身法：行动速度、闪避率、命中
-  WILLPOWER = 'willpower',   // 神识：法防、法力、控制命中与抗性
+  VITALITY = 'vitality', // 体魄：气血上限、少量法术防御
+  STRENGTH = 'strength', // 力道：物理攻击
+  SPIRIT = 'spirit', // 灵力：法术攻击、少量法力
+  ENDURANCE = 'endurance', // 根骨：物理防御、少量气血上限
+  SPEED = 'speed', // 身法：行动速度、闪避率、命中
+  WILLPOWER = 'willpower', // 神识：法防、法力、控制命中与抗性
 
   // ── 派生型二级属性（base 由主属性公式推算，modifier 可叠加）──
-  ATK = 'atk',                                 // 物理攻击：40 + STRENGTH×3.5
-  DEF = 'def',                                 // 物理防御：10 + ENDURANCE×1.75
-  MAGIC_ATK = 'magicAtk',                      // 法术攻击：40 + SPIRIT×3.5
-  MAGIC_DEF = 'magicDef',                      // 法术防御：10 + WILLPOWER×1.75 + VITALITY×0.25
-  ACTION_SPEED = 'actionSpeed',                // 行动速度：SPEED
-  CRIT_RATE = 'critRate',                      // 暴击率：基础 5%，外部构筑注入
-  CRIT_DAMAGE_MULT = 'critDamageMult',         // 暴击伤害倍率：基础 1.5
-  EVASION_RATE = 'evasionRate',                // 闪避率：0.02 + curve(SPEED, 240, 0.24)
-  ACCURACY = 'accuracy',                       // 命中：0.05 + curve(SPEED, 240, 0.27)
-  CONTROL_HIT = 'controlHit',                  // 控制命中：0.04 + curve(WILLPOWER, 240, 0.30)
-  CONTROL_RESISTANCE = 'controlResistance',    // 控制抗性：0.04 + curve(WILLPOWER, 240, 0.34)
-  MAX_HP = 'maxHp',                            // 最大气血：400 + VITALITY×20 + ENDURANCE×3
-  MAX_MP = 'maxMp',                            // 最大法力：200 + SPIRIT×4 + WILLPOWER×10
+  ATK = 'atk', // 物理攻击：40 + STRENGTH×3.5
+  DEF = 'def', // 物理防御：10 + ENDURANCE×1.75
+  MAGIC_ATK = 'magicAtk', // 法术攻击：40 + SPIRIT×3.5
+  MAGIC_DEF = 'magicDef', // 法术防御：10 + WILLPOWER×1.75 + VITALITY×0.25
+  ACTION_SPEED = 'actionSpeed', // 行动速度：SPEED
+  CRIT_RATE = 'critRate', // 暴击率：基础 5%，外部构筑注入
+  CRIT_DAMAGE_MULT = 'critDamageMult', // 暴击伤害倍率：基础 1.5
+  EVASION_RATE = 'evasionRate', // 闪避率：0.02 + curve(SPEED, 240, 0.24)
+  ACCURACY = 'accuracy', // 命中：0.05 + curve(SPEED, 240, 0.27)
+  CONTROL_HIT = 'controlHit', // 控制命中：0.04 + curve(WILLPOWER, 240, 0.30)
+  CONTROL_RESISTANCE = 'controlResistance', // 控制抗性：0.04 + curve(WILLPOWER, 240, 0.34)
+  MAX_HP = 'maxHp', // 最大气血：400 + VITALITY×20 + ENDURANCE×3
+  MAX_MP = 'maxMp', // 最大法力：200 + SPIRIT×4 + WILLPOWER×10
 
   // ── 外部注入型二级属性（base=0，完全由装备/Buff/命格提供）──
-  ARMOR_PENETRATION = 'armorPenetration',        // 破防：抵消目标减伤率 (0~1)
-  MAGIC_PENETRATION = 'magicPenetration',        // 法术穿透：削减目标法防 (0~1)
-  CRIT_RESIST = 'critResist',                    // 暴击韧性：降低对手暴击率 (0~1)
+  ARMOR_PENETRATION = 'armorPenetration', // 破防：抵消目标减伤率 (0~1)
+  MAGIC_PENETRATION = 'magicPenetration', // 法术穿透：削减目标法防 (0~1)
+  CRIT_RESIST = 'critResist', // 暴击韧性：降低对手暴击率 (0~1)
   CRIT_DAMAGE_REDUCTION = 'critDamageReduction', // 暴击减伤：降低受到暴击倍率 (0~0.5)
-  HEAL_AMPLIFY = 'healAmplify',                  // 治疗增强 (≥0)
+  HEAL_AMPLIFY = 'healAmplify', // 治疗增强 (≥0)
   HEAL_RECEIVED_REDUCTION = 'healReceivedReduction', // 受到的气血治疗削弱 (0~1)
 }
 
@@ -130,19 +134,6 @@ export interface LogCauseRef {
   displayName: string;
 }
 
-/** 机制触发条件中的安全展示原子；id 仅供结构化视图使用。 */
-export interface LogDisplayRef {
-  id: string;
-  displayName: string;
-}
-
-/** 通用的“左项与右项形成某种关系”触发依据。 */
-export interface MechanicTriggerBasisRef {
-  left: LogDisplayRef;
-  relation: LogDisplayRef;
-  right: LogDisplayRef;
-}
-
 export type DamageCalculationMode = 'standard' | 'resolved_final';
 
 export type DamageMitigationMode = 'normal' | 'bypass_defense';
@@ -164,14 +155,6 @@ export enum BuffType {
   BUFF = 'buff',
   DEBUFF = 'debuff',
   CONTROL = 'control',
-}
-
-// ===== 战斗结果 =====
-export interface BattleResult {
-  winner: UnitId;
-  loser: UnitId;
-  turns: number;
-  logs: string[];
 }
 
 // ===== 回合快照 =====
@@ -213,14 +196,6 @@ export interface UnitSnapshot {
   currentShield: number;
   abilities: AbilitySnapshot[];
   baseAttributes: Record<AttributeType, number>;
-}
-
-// ===== 战报日志 =====
-export interface CombatLog {
-  turn: number;
-  phase: CombatPhase;
-  message: string;
-  highlight: boolean;
 }
 
 // 导出事件类型定义

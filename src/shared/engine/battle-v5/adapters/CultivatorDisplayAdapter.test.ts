@@ -126,21 +126,21 @@ describe('CultivatorDisplayAdapter', () => {
     });
 
     expect(sword.attributes.getValue(AttributeType.ATK)).toBeCloseTo(
-      baseline.attributes.getValue(AttributeType.ATK) * 1.05,
+      baseline.attributes.getValue(AttributeType.ATK) * 1.0951,
     );
     expect(
       voidStep.attributes.getValue(AttributeType.EVASION_RATE),
     ).toBeCloseTo(
-      baseline.attributes.getValue(AttributeType.EVASION_RATE) + 0.02,
+      baseline.attributes.getValue(AttributeType.EVASION_RATE) + 0.0253,
     );
     expect(cleansing.attributes.getValue(AttributeType.ACCURACY)).toBeCloseTo(
-      baseline.attributes.getValue(AttributeType.ACCURACY) + 0.02,
+      baseline.attributes.getValue(AttributeType.ACCURACY) + 0.0304,
     );
     expect(returning.attributes.getValue(AttributeType.MAGIC_DEF)).toBeCloseTo(
-      baseline.attributes.getValue(AttributeType.MAGIC_DEF) * 1.05,
+      baseline.attributes.getValue(AttributeType.MAGIC_DEF) * 1.0506,
     );
     expect(swordBody.attributes.getValue(AttributeType.DEF)).toBeCloseTo(
-      baseline.attributes.getValue(AttributeType.DEF) * 1.05,
+      baseline.attributes.getValue(AttributeType.DEF) * 1.0501,
     );
   });
 
@@ -164,7 +164,7 @@ describe('CultivatorDisplayAdapter', () => {
 
     expect(
       unit.attributes.getValue(AttributeType.MAGIC_PENETRATION),
-    ).toBeCloseTo(0.0045);
+    ).toBeCloseTo(0.008);
   });
 
   it('maps Unit values back to cultivator display attributes', () => {

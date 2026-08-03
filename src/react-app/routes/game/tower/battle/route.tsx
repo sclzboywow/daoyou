@@ -1,6 +1,6 @@
 import { BattlePageLayout } from '@app/components/feature/battle/BattlePageLayout';
-import { BattlePlaybackPanel } from '@app/components/feature/battle/BattlePlaybackPanel';
-import { useBattlePlaybackState } from '@app/components/feature/battle/useBattlePlaybackState';
+import { BattlePlaybackPanel } from '@app/components/feature/battle/v3/BattlePlaybackPanel';
+import { useBattlePlaybackState } from '@app/components/feature/battle/v3/useBattlePlaybackState';
 import { CombatResultDialog } from '@app/components/feature/battle/v5/CombatResultDialog';
 import { GameImmersiveLoading } from '@app/components/game-shell';
 import { InkButton } from '@app/components/ui/InkButton';
@@ -90,19 +90,19 @@ export default function TowerBattlePage() {
       <BattlePlaybackPanel battleResult={battleResult} playback={playback} />
 
       <CombatResultDialog
-        key={`tower-route-${battleResult?.turns}-${battleResult?.winner.id ?? 'unknown'}`}
-        dialogKey={`tower-route-${battleResult?.turns}-${battleResult?.winner.id ?? 'unknown'}`}
+        key={`tower-route-${battleResult?.outcome.turns}-${battleResult?.outcome.winner.id ?? 'unknown'}`}
+        dialogKey={`tower-route-${battleResult?.outcome.turns}-${battleResult?.outcome.winner.id ?? 'unknown'}`}
         open={
           !!battleResult && playback.isPlaybackFinished && hasBattleCallback
         }
         title={
-          battleResult?.winner.id === cultivator?.id ? '战局得胜' : '战局失利'
+          battleResult?.outcome.winner.id === cultivator?.id ? '战局得胜' : '战局失利'
         }
         confirmLabel="返回幻境"
         onConfirm={() => navigate('/game/tower')}
         content={
           <p className="leading-8">
-            {battleResult?.winner.id === cultivator?.id
+            {battleResult?.outcome.winner.id === cultivator?.id
               ? '这一重幻影已散，回返蜃楼承接后续机缘。'
               : '你在此处败退，本周这一回幻境也在此收束。'}
           </p>

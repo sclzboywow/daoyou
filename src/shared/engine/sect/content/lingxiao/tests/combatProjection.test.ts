@@ -97,7 +97,7 @@ describe('宗门注册投影', () => {
       ['breaking-edge', 160],
       ['sword-aegis', 180],
       ['nurturing-sword', 180],
-      ['sect-ultimate', 240],
+      ['sect-ultimate', 200],
     ]);
     for (const realm of ['炼气', '化神', '渡劫'] as const) {
       for (const [abilityId, mpCost] of expected) {
@@ -115,7 +115,7 @@ describe('宗门注册投影', () => {
   it.each([
     [60, 3],
     [120, 4],
-    [180, 5],
+    [180, 4],
   ])(
     '可成长BUFF在%i级投影为%i回合，蓄势机制仍固定1回合',
     (level, expectedDuration) => {
@@ -150,13 +150,13 @@ describe('宗门注册投影', () => {
     [0, 1],
     [1, 1],
     [29, 1],
-    [30, 2],
-    [60, 3],
-    [90, 4],
-    [120, 5],
-    [150, 6],
-    [180, 7],
-    [999, 7],
+    [30, 1],
+    [60, 2],
+    [90, 2],
+    [120, 3],
+    [150, 3],
+    [180, 4],
+    [999, 4],
   ])('一剑破妄在%i级驱散%i个正面状态', (level, expectedCount) => {
     for (const pathId of [undefined, 'swift-sword', 'heavy-sword'] as const) {
       const sect = state(pathId);
@@ -307,7 +307,7 @@ describe('宗门注册投影', () => {
     });
     expect(detail.name).toBe('剑荡山河');
     expect(detail.summary).toBe('剑锋纵横，数势相连；前剑未尽，后剑已越其锋。');
-    expect(detail.detailRows).toContain('伤害：7段 × 26.25%物攻');
+    expect(detail.detailRows).toContain('伤害：7段 × 22.54%物攻');
     expect(
       projection.abilities.find(
         (ability) => ability.slug === detail.config.slug,
@@ -396,9 +396,9 @@ describe('宗门注册投影', () => {
   );
 
   it.each([
-    [60, 4, 0.0227],
-    [120, 5, 0.0253],
-    [180, 6, 0.028],
+    [60, 4, 0.0205],
+    [120, 5, 0.0213],
+    [180, 5, 0.0224],
   ])(
     '探虚被动在%i级投影为%i行动、每层%s增伤且不泄漏成长元数据',
     (level, duration, value) => {
@@ -449,11 +449,11 @@ describe('宗门注册投影', () => {
   });
 
   it.each([
-    [1, '60%', '36%'],
-    [60, '70%', '42%'],
-    [100, '75%', '45%'],
-    [120, '80%', '48%'],
-    [180, '90%', '54%'],
+    [1, '60.05%', '36.03%'],
+    [60, '62.95%', '37.77%'],
+    [100, '65.17%', '39.1%'],
+    [120, '66.35%', '39.81%'],
+    [180, '70.2%', '42.12%'],
   ])(
     '%i级节点卡片展示当前实际成长数值',
     (level, returningSwallow, guardedShield) => {
@@ -503,17 +503,17 @@ describe('宗门注册投影', () => {
     const descriptions = new Map(
       [...swiftNodes, ...heavyNodes].map((node) => [node.id, node.description]),
     );
-    expect(descriptions.get('swift-mountain-breaking')).toContain('15%物攻');
-    expect(descriptions.get('swift-sheathing')).toContain('60%物攻');
-    expect(descriptions.get('swift-endless-flow')).toContain('40%物攻');
-    expect(descriptions.get('swift-unending-wind')).toContain('50%物攻');
-    expect(descriptions.get('heavy-heaven-cleaving')).toContain('350%物攻');
-    expect(descriptions.get('heavy-immovable-mountain')).toContain('70%物攻');
-    expect(descriptions.get('heavy-immovable-mountain')).toContain('45%物攻');
+    expect(descriptions.get('swift-mountain-breaking')).toContain('12.88%物攻');
+    expect(descriptions.get('swift-sheathing')).toContain('51.53%物攻');
+    expect(descriptions.get('swift-endless-flow')).toContain('34.35%物攻');
+    expect(descriptions.get('swift-unending-wind')).toContain('43.44%物攻');
+    expect(descriptions.get('heavy-heaven-cleaving')).toContain('300.58%物攻');
+    expect(descriptions.get('heavy-immovable-mountain')).toContain('60.82%物攻');
+    expect(descriptions.get('heavy-immovable-mountain')).toContain('39.1%物攻');
     expect(descriptions.get('heavy-mountain-river-echo')).toContain(
-      '5%最大气血',
+      '4.21%最大气血',
     );
-    expect(descriptions.get('heavy-mountain-river-echo')).toContain('80%物攻');
+    expect(descriptions.get('heavy-mountain-river-echo')).toContain('68.7%物攻');
   });
 
   it('最终神通事实正确合并节点倍率、门槛与跨神通被动', () => {
@@ -533,9 +533,9 @@ describe('宗门注册投影', () => {
     });
     expect(returningPeak.detailRows).toEqual(
       expect.arrayContaining([
-        '伤害：基础相当于93.5%物攻，每点剑意增加30.81%物攻',
+        '伤害：基础相当于80.3%物攻，每点剑意增加26.46%物攻',
         '命中后：剑意：返还2点',
-        '命中后：护盾：相当于45%物攻',
+        '命中后：护盾：相当于38.65%物攻',
       ]),
     );
 
@@ -548,7 +548,7 @@ describe('宗门注册投影', () => {
       abilityId: 'sect-ultimate',
     });
     expect(returningHeaven.detailRows).toContain(
-      '6点剑意时总倍率：297.49%物攻',
+      '6点剑意时总倍率：255.48%物攻',
     );
     expect(returningHeaven.detailRows).not.toContain(
       '6点剑意时总倍率：400%物攻',
@@ -562,7 +562,7 @@ describe('宗门注册投影', () => {
     expect(mountainBreaking.detailRows).toEqual(
       expect.arrayContaining([
         '命中后：状态：消耗全部剑痕',
-        '命中后：每消耗1层剑痕，额外造成相当于15%物攻的伤害',
+        '命中后：每消耗1层剑痕，额外造成相当于12.88%物攻的伤害',
       ]),
     );
 
@@ -662,7 +662,7 @@ describe('宗门注册投影', () => {
         ?.pathBase.detailRows,
     ).toEqual(
       expect.arrayContaining([
-        '伤害：5段 × 36.25%物攻',
+        '伤害：5段 × 31.13%物攻',
         '命中后：剑痕：向目标施加1层，持续目标未来4次行动',
       ]),
     );
@@ -686,14 +686,14 @@ describe('宗门注册投影', () => {
     expect(preview.active).toBe(false);
     expect(preview.activeMeridianSlot).toBe(1);
     expect(shadow.baseline.detailRows).not.toContain(
-      '施展后：护盾：相当于65%物攻',
+      '施展后：护盾：相当于56.48%物攻',
     );
-    expect(shadow.pathBase.detailRows).toContain('施展后：护盾：相当于65%物攻');
+    expect(shadow.pathBase.detailRows).toContain('施展后：护盾：相当于56.48%物攻');
     expect(shadow.pathBase.detailRows).not.toContain(
-      '施展后：护盾：相当于97.5%物攻',
+      '施展后：护盾：相当于84.72%物攻',
     );
     expect(shadow.current?.detailRows).toContain(
-      '施展后：护盾：相当于97.5%物攻',
+      '施展后：护盾：相当于84.72%物攻',
     );
   });
 
@@ -744,8 +744,8 @@ describe('宗门注册投影', () => {
       }).detailRows,
     ).toEqual(
       expect.arrayContaining([
-        '伤害：相当于97.5%物攻',
-        '追击：自身身法高于目标时，追加相当于32.5%物攻',
+        '伤害：相当于83.73%物攻',
+        '追击：自身身法高于目标时，追加相当于27.91%物攻',
       ]),
     );
     expect(
@@ -755,7 +755,7 @@ describe('宗门注册投影', () => {
         abilityId: 'turning-body',
       }).detailRows,
     ).toContain(
-      '命中后：触发：持续期间首次闪避时，反击造成相当于50%物攻的伤害，并获得1点剑意',
+      '命中后：触发：持续期间首次闪避时，反击造成相当于43.44%物攻的伤害，并获得1点剑意',
     );
     expect(
       resolveSectAbility({
@@ -792,7 +792,7 @@ describe('宗门注册投影', () => {
     }).detailRows;
     expect(swordMarkRows).toContain('命中后：剑痕：最多3层');
     expect(swordMarkRows).toContain(
-      '命中后：每层：受到的直接、反击和追击伤害提高2.4%',
+      '命中后：每层：受到的直接、反击和追击伤害提高2.1%',
     );
     expect(
       resolveSectAbility({
@@ -801,7 +801,7 @@ describe('宗门注册投影', () => {
         abilityId: 'turning-body',
       }).detailRows,
     ).toContain(
-      '命中后：触发：持续期间首次闪避时，反击造成相当于50%物攻的伤害、获得1点剑意、向目标施加1层剑痕，持续目标未来4次行动，并获得相当于50%物攻的护盾',
+      '命中后：触发：持续期间首次闪避时，反击造成相当于43.44%物攻的伤害、获得1点剑意、向目标施加1层剑痕，持续目标未来4次行动，并获得相当于43.44%物攻的护盾',
     );
 
     const heavy = state('heavy-sword', ['heavy-immovable-mountain']);
@@ -811,7 +811,7 @@ describe('宗门注册投影', () => {
       abilityId: 'linked-edge',
     }).detailRows;
     expect(armorRendRows).toContain('命中后：裂甲：最多3层');
-    expect(armorRendRows).toContain('命中后：每层：物防-3.6%');
+    expect(armorRendRows).toContain('命中后：每层：物防-3.16%');
     expect(
       resolveSectAbility({
         sect: heavy,
@@ -819,7 +819,7 @@ describe('宗门注册投影', () => {
         abilityId: 'sword-aegis',
       }).detailRows,
     ).toContain(
-      '施展后：触发：持续期间每回合首次受到直接伤害时，反击造成相当于45%物攻的伤害',
+      '施展后：触发：持续期间每回合首次受到直接伤害时，反击造成相当于39.1%物攻的伤害',
     );
   });
 
@@ -841,8 +841,8 @@ describe('宗门注册投影', () => {
     }).detailRows;
     expect(echoRows).toEqual(
       expect.arrayContaining([
-        '命中后：恢复：5%自身最大气血',
-        '命中后：护盾：相当于80%物攻',
+        '命中后：恢复：4.21%自身最大气血',
+        '命中后：护盾：相当于68.7%物攻',
         '参悟·山河回响：每3回合最多触发一次',
       ]),
     );

@@ -23,7 +23,7 @@ import type {
   SectTaskRecordPayload,
   SectTrainingCost,
 } from '@shared/engine/sect';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import type { Quality, RealmStage, RealmType } from '@shared/types/constants';
 import type { Material } from '@shared/types/cultivator';
 import type { SectCommandEffects } from './SectCommandEffects';
@@ -309,7 +309,7 @@ export interface SectBattleGateway {
     strategy: SectBattleStateStrategy,
     seed: string,
   ): {
-    battleResult: BattleRecord;
+    battleResult: BattleRecordV3;
     nextCondition?: CultivatorCondition;
   };
 }

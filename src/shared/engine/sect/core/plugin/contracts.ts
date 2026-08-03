@@ -8,14 +8,13 @@ import type {
   SectPathCompileContext,
   SectPathDefinition,
   SectProjectionContext,
-  SectProjectionInput,
   SectTacticId,
 } from '../domain';
 import type { SectOrganizationModule } from '../organization';
 
 export interface SectNodePlugin {
   readonly definition: import('../domain').SectMeridianNodeDefinition;
-  describe?(context: SectProjectionInput): string;
+  describe?(context: SectProjectionContext): string;
   apply(context: SectNodeApplyContext, builder: SectBuildBuilder): void;
 }
 

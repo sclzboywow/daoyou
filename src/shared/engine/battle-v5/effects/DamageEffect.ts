@@ -1,6 +1,5 @@
 import { DamageParams } from '../core/configs';
 import { executeEffectConfigs } from '../core/effectExecutor';
-import { EventBus } from '../core/EventBus';
 import { DamageRequestEvent } from '../core/events';
 import {
   AttributeType,
@@ -20,7 +19,7 @@ import { EffectRegistry } from '../factories/EffectRegistry';
 import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { StackRule } from '../buffs/Buff';
 import { ActiveSkill } from '../abilities/ActiveSkill';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 import { checkConditions } from '../core/conditionEvaluator';
 
 /**
@@ -32,7 +31,7 @@ export class DamageEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { caster, target, ability, buff } = context;
     if (!target.isAlive()) return;
     const resolvedCaster = buff?.getSource() ?? caster;
@@ -177,7 +176,7 @@ export class DamageEffect extends GameplayEffect {
     const forceCritical = this.params.canCrit === false
       ? false
       : this.params.forceCritical || transform?.forceCritical || conditionCritical;
-    EventBus.instance.publish<DamageRequestEvent>({
+    context.emit<DamageRequestEvent>({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster: resolvedCaster,
@@ -208,7 +207,7 @@ export class DamageEffect extends GameplayEffect {
     }
   }
 
-  private inferDamageType(buff: EffectContext['buff']): DamageType | undefined {
+  private inferDamageType(buff: EffectExecutionContextV3['buff']): DamageType | undefined {
     if (buff?.tags.hasTag(GameplayTags.BUFF.DOT.ROOT)) {
       return DamageType.DOT;
     }

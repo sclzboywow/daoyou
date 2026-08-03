@@ -20,6 +20,7 @@ import { BuffFactory } from '../../factories/BuffFactory';
 import { describeBuffRuntimeSummary } from '../../effects/affixText/buffText';
 import { DamageSystem } from '../../systems/DamageSystem';
 import { Unit } from '../../units/Unit';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 const damageTags = [
   GameplayTags.ABILITY.FUNCTION.DAMAGE,
@@ -52,8 +53,8 @@ describe('通用分层状态与伤害行为原语', () => {
       },
     })!;
 
-    effect.execute({ caster, target });
-    effect.execute({ caster, target });
+    executeTestEffect(effect, { caster, target });
+    executeTestEffect(effect, { caster, target });
 
     expect(target.buffs.getAllBuffs()[0].getLayer()).toBe(5);
     expect(events).toHaveLength(1);
@@ -214,7 +215,7 @@ describe('通用分层状态与伤害行为原语', () => {
       params: { ratio: 1, maxHpRatioPerAction: 1 },
     })!;
 
-    lifesteal.execute({
+    executeTestEffect(lifesteal, {
       caster,
       target,
       triggerEvent: {
@@ -227,7 +228,7 @@ describe('通用分层状态与伤害行为原语', () => {
         damageTaken: 100,
         beforeHp: target.getCurrentHp(),
         remainHp: target.getCurrentHp() - 100,
-        isLethal: false,
+        hpReachedZeroBeforeReactions: false,
         canLifesteal: false,
       },
     });
@@ -283,10 +284,10 @@ describe('通用分层状态与伤害行为原语', () => {
     });
     let event: HealEvent | undefined;
     EventBus.instance.subscribe<HealEvent>('HealEvent', (next) => { event = next; });
-    AbilityFactory.createEffect({
+    executeTestEffect(AbilityFactory.createEffect({
       type: 'heal',
       params: { value: { base: 100 } },
-    })!.execute({ caster, target });
+    }), { caster, target });
 
     expect(event?.healAmount).toBe(100);
     expect(event?.appliedAmount).toBe(50);

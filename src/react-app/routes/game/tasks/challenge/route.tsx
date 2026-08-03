@@ -1,19 +1,19 @@
 import { BattlePageLayout } from '@app/components/feature/battle/BattlePageLayout';
-import { BattlePlaybackPanel } from '@app/components/feature/battle/BattlePlaybackPanel';
-import { useBattlePlaybackState } from '@app/components/feature/battle/useBattlePlaybackState';
+import { BattlePlaybackPanel } from '@app/components/feature/battle/v3/BattlePlaybackPanel';
+import { useBattlePlaybackState } from '@app/components/feature/battle/v3/useBattlePlaybackState';
 import { CombatResultDialog } from '@app/components/feature/battle/v5/CombatResultDialog';
 import { GameImmersiveLoading } from '@app/components/game-shell';
 import { InkButton } from '@app/components/ui/InkButton';
 import { startTaskChallengeOnce } from '@app/lib/tasks/taskClient';
 import type { TaskChallengeResponse } from '@shared/contracts/task';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import { Suspense, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 function TaskChallengePageContent() {
   const navigate = useNavigate();
   const { taskId } = useParams();
-  const [battleResult, setBattleResult] = useState<BattleRecord>();
+  const [battleResult, setBattleResult] = useState<BattleRecordV3>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [challengeTitle, setChallengeTitle] = useState('破境试炼');
@@ -91,8 +91,8 @@ function TaskChallengePageContent() {
       <BattlePlaybackPanel battleResult={battleResult} playback={playback} />
 
       <CombatResultDialog
-        key={`task-challenge-${battleResult?.turns}-${battleResult?.winner.id ?? 'unknown'}`}
-        dialogKey={`task-challenge-${battleResult?.turns}-${battleResult?.winner.id ?? 'unknown'}`}
+        key={`task-challenge-${battleResult?.outcome.turns}-${battleResult?.outcome.winner.id ?? 'unknown'}`}
+        dialogKey={`task-challenge-${battleResult?.outcome.turns}-${battleResult?.outcome.winner.id ?? 'unknown'}`}
         open={!!battleResult && playback.isPlaybackFinished}
         title={isWin ? '试炼已过' : '试炼未过'}
         confirmLabel="返回任务中心"

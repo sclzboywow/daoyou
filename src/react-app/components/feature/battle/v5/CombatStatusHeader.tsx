@@ -1,7 +1,7 @@
 import { InkButton } from '@app/components/ui/InkButton';
-import type { UnitStateSnapshot } from '@shared/engine/battle-v5/systems/state/types';
 import { cn } from '@shared/lib/cn';
 import { getResourceLabel } from '@shared/lib/gameConceptDisplay';
+import type { PublicBattleUnitSnapshotV1 } from '@shared/types/battle';
 import { format } from 'd3-format';
 import {
   useEffect,
@@ -69,15 +69,15 @@ function ResourceRow({
     width: `${shieldPercent}%`,
     left: `${Math.max(0, percent - shieldPercent)}%`,
   };
-  const shieldLabel = !!shield && shield > 0 ? ` (${fmtInt(shield)})` : '';
-
   return (
     <div className="space-y-0.5">
       <div className="flex items-center gap-1.5 text-[11px] leading-4 md:text-xs md:leading-5">
         <span className="text-battle-muted w-7 shrink-0">{label}</span>
         <span className="text-ink min-w-0 flex-1 truncate text-right font-mono">
           {fmtInt(current)} / {fmtInt(max)}
-          {shieldLabel}
+          {!!shield && shield > 0 && (
+            <span className="text-resource-shield"> ({fmtInt(shield)})</span>
+          )}
         </span>
       </div>
       <div className="bg-battle-faint relative h-[3px] overflow-hidden">
@@ -90,7 +90,7 @@ function ResourceRow({
         />
         {!!shield && shield > 0 && (
           <div
-            className="bg-battle-gold-soft absolute top-0 h-full transition-all duration-500 ease-out"
+            className="bg-resource-shield-soft absolute top-0 h-full transition-all duration-500 ease-out"
             style={shieldStyle}
           />
         )}
@@ -122,7 +122,7 @@ function SummaryInfoRow({
   );
 }
 
-function UnitSummary({ unit }: { unit: UnitStateSnapshot }) {
+function UnitSummary({ unit }: { unit: PublicBattleUnitSnapshotV1 }) {
   const statusTags = getCompactStatusTags(unit);
 
   return (
@@ -243,18 +243,18 @@ export function CombatStatusHeader({
   onShowPlayerDetails,
   onShowOpponentDetails,
   controls,
-  statusAction,
+  statusActions = [],
 }: {
-  player: UnitStateSnapshot;
-  opponent: UnitStateSnapshot;
+  player: PublicBattleUnitSnapshotV1;
+  opponent: PublicBattleUnitSnapshotV1;
   onShowPlayerDetails?: () => void;
   onShowOpponentDetails?: () => void;
   controls?: ReactNode;
-  statusAction?: {
+  statusActions?: Array<{
     label: string;
     onClick?: () => void;
     href?: string;
-  };
+  }>;
 }) {
   const dockRef = useRef<HTMLDivElement | null>(null);
   const [isCompact, setIsCompact] = useState(() => isCompactViewport());
@@ -370,7 +370,9 @@ export function CombatStatusHeader({
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2.5">
-                {statusAction && <DockAction {...statusAction} />}
+                {statusActions.map((action) => (
+                  <DockAction key={action.label} {...action} />
+                ))}
                 <button
                   type="button"
                   onClick={toggleCollapsed}
@@ -389,7 +391,9 @@ export function CombatStatusHeader({
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-2.5 gap-y-0.5">
-                  {statusAction && <DockAction {...statusAction} />}
+                  {statusActions.map((action) => (
+                    <DockAction key={action.label} {...action} />
+                  ))}
                   {onShowPlayerDetails && (
                     <button
                       type="button"
@@ -427,11 +431,14 @@ export function CombatStatusHeader({
               )}
 
               {controls && <div className="battle-module">{controls}</div>}
-              {!controls && !hasSkills && !hasActions && !statusAction && (
-                <div className="battle-module text-battle-muted text-[13px] leading-5">
-                  当前暂无技能和操作项
-                </div>
-              )}
+              {!controls &&
+                !hasSkills &&
+                !hasActions &&
+                statusActions.length === 0 && (
+                  <div className="battle-module text-battle-muted text-[13px] leading-5">
+                    当前暂无技能和操作项
+                  </div>
+                )}
             </div>
           )}
         </div>

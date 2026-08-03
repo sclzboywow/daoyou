@@ -150,7 +150,7 @@ describe('幽都战斗与展示投影', () => {
       'forgetful-river-tide': [160, 3],
       'seize-soul': [140, 2],
       'pin-soul': [180, 4],
-      'soul-shall-not-return': [240, 5],
+      'soul-shall-not-return': [200, 5],
     } as const;
     for (const [abilityId, [mpCost, cooldown]] of Object.entries(expected)) {
       const config = resolveSectAbility({

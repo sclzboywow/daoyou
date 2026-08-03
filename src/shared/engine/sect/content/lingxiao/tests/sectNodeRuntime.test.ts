@@ -16,6 +16,8 @@ import {
 import { AbilityFactory } from '@shared/engine/battle-v5/factories/AbilityFactory';
 import { BuffFactory } from '@shared/engine/battle-v5/factories/BuffFactory';
 import { DamageSystem } from '@shared/engine/battle-v5/systems/DamageSystem';
+import { publishTestDamageRequest } from '@shared/engine/battle-v5/tests/setup/combatV3TestHarness';
+import { executeTestEffect } from '@shared/engine/battle-v5/tests/setup/executeTestEffect';
 import { Unit } from '@shared/engine/battle-v5/units/Unit';
 import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -143,9 +145,11 @@ describe('红尘剑宗参悟运行时语义', () => {
     const stance = turning.effects?.find(
       (effect) => effect.type === 'apply_buff',
     );
-    AbilityFactory.createEffect(stance!)?.execute({
+    executeTestEffect(AbilityFactory.createEffect(stance!), {
+      owner,
       caster: owner,
       target: enemy,
+      ability: AbilityFactory.create(turning),
     });
     const dodge = (): void =>
       EventBus.instance.publish<DodgeEvent>({
@@ -220,8 +224,8 @@ describe('红尘剑宗参悟运行时语义', () => {
     const first = request();
     const second = request();
 
-    EventBus.instance.publish(first);
-    EventBus.instance.publish(second);
+    publishTestDamageRequest(first);
+    publishTestDamageRequest(second);
 
     expect(first.damageReductionPctBucket).toBeCloseTo(0.15);
     expect(second.damageReductionPctBucket).toBeUndefined();

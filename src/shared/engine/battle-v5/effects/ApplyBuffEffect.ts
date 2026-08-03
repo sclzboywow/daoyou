@@ -1,13 +1,13 @@
-import { GameplayEffect, EffectContext } from './Effect';
-import { EffectRegistry } from '../factories/EffectRegistry';
-import { ApplyBuffParams } from '../core/configs';
-import { BuffFactory } from '../factories/BuffFactory';
-import { AttributeType, BuffType } from '../core/types';
-import { EventBus } from '../core/EventBus';
-import { battleRandom } from '../core/BattleRandom';
-import { ControlResistEvent } from '../core/events';
 import { getRealmEffectChanceMultiplier } from '@shared/config/realmProgression';
+import { battleRandom } from '../core/BattleRandom';
+import { ApplyBuffParams } from '../core/configs';
 import { executeEffectConfigs } from '../core/effectExecutor';
+import { ControlResistEvent } from '../core/events';
+import { AttributeType, BuffType } from '../core/types';
+import { BuffFactory } from '../factories/BuffFactory';
+import { EffectRegistry } from '../factories/EffectRegistry';
+import { CombatAttributionV3 } from '../v3/origin';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 function clampChance(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -21,7 +21,7 @@ export class ApplyBuffEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { caster } = context;
     const target = this.params.target === 'caster' ? caster : context.target;
     const isHostile = caster !== target;
@@ -64,7 +64,11 @@ export class ApplyBuffEffect extends GameplayEffect {
       const resistChance = Math.max(0, (controlResistance - controlHit) * 100);
 
       if (battleRandom() * 100 < resistChance) {
-        EventBus.instance.publish<ControlResistEvent>({
+        context.commit(target, {
+          type: 'defense',
+          defense: 'resist',
+        });
+        context.emit<ControlResistEvent>({
           type: 'ControlResistEvent',
           timestamp: Date.now(),
           caster,
@@ -79,7 +83,9 @@ export class ApplyBuffEffect extends GameplayEffect {
 
     // 控制类 Buff：根据目标神识抗性缩短持续时间。无限持续 (permanent) 不受影响。
     if (buff.type === BuffType.CONTROL && !buff.isPermanent()) {
-      const controlResistance = target.attributes.getValue(AttributeType.CONTROL_RESISTANCE);
+      const controlResistance = target.attributes.getValue(
+        AttributeType.CONTROL_RESISTANCE,
+      );
       if (controlResistance > 0) {
         const currentDuration = buff.getDuration();
         const adjustedDuration = Math.max(
@@ -93,9 +99,14 @@ export class ApplyBuffEffect extends GameplayEffect {
     target.buffs.addBuff(buff, caster, {
       ability: context.ability,
       buff: context.buff,
+      attribution: CombatAttributionV3.rebind(context.owner, context.origin),
+      trace: context.trace,
     });
   }
 }
 
 // 注册
-EffectRegistry.getInstance().register('apply_buff', (params) => new ApplyBuffEffect(params));
+EffectRegistry.getInstance().register(
+  'apply_buff',
+  (params) => new ApplyBuffEffect(params),
+);

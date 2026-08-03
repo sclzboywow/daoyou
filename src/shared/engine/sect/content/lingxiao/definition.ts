@@ -5,6 +5,12 @@ import {
 import type { SectDefinitionWithoutPaths } from '../../core';
 import { HEAVY_SWORD_PATH_ID, LINGXIAO_SECT_ID } from './ids';
 
+const effects = { damage: 0.17, heal: 0.12, shield: 0.17, status: 0.12 };
+const durationMilestones = [
+  { level: 60, bonus: 1 },
+  { level: 120, bonus: 2 },
+];
+
 export const LINGXIAO_BASE_DEFINITION: SectDefinitionWithoutPaths = {
   id: LINGXIAO_SECT_ID,
   name: '红尘剑宗',
@@ -27,67 +33,77 @@ export const LINGXIAO_BASE_DEFINITION: SectDefinitionWithoutPaths = {
       isPrimary: true,
       description:
         '历代门人将一生所见与问剑所得录入其中。此录不定剑招，只论剑从何起、当向何处。',
-      perLevelDescription: '限制各基础分卷可研习的最高等级。',
+      growthProfile: { curve: 'balanced', effects, durationMilestones },
     },
     {
       id: 'sword-guidance',
       slot: 3,
       name: '《剑气长歌》',
       description: '以气驭剑，使锋芒连绵不绝；剑气养于胸臆，动时如长风振野。',
-      perLevelDescription: '每级提高0.05%物理攻击。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'balanced', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.ATK,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.22,
+      } },
     },
     {
       id: 'void-step',
       slot: 4,
       name: '《凌虚步》',
       description: '御气踏虚，身随剑走；方寸之间腾挪换位，不使自身困于敌势。',
-      perLevelDescription: '每级提高0.02个百分点闪避率。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'early', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.EVASION_RATE,
         type: ModifierType.FIXED,
-        value: 0.0002,
-      },
+        maxValue: 0.05,
+      } },
     },
     {
       id: 'edge-cleansing',
       slot: 2,
       name: '《观微剑意》',
       description: '静观一息之变，明察毫厘之机；敌势未成，破绽已映于剑心。',
-      perLevelDescription: '每级提高0.02个百分点命中。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'early', effects, durationMilestones,
+        countMilestones: [
+          { level: 60, bonus: 1 },
+          { level: 120, bonus: 2 },
+          { level: 180, bonus: 3 },
+        ],
+        panelModifier: {
         attrType: AttributeType.ACCURACY,
         type: ModifierType.FIXED,
-        value: 0.0002,
-      },
+        maxValue: 0.06,
+      } },
     },
     {
       id: 'origin-returning',
       slot: 5,
       name: '《澄心剑诀》',
       description: '收束心神，使剑意澄明；外法虽变化万端，不能动摇持剑之念。',
-      perLevelDescription: '每级提高0.05%法术防御。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'early', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.MAGIC_DEF,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.1,
+      } },
     },
     {
       id: 'sword-nurturing',
       slot: 6,
       name: '《不灭剑体》',
       description: '以身作剑，以骨为脊，经千锤百炼而锋芒不折、形神不摧。',
-      perLevelDescription: '每级提高0.05%物理防御。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'late', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.DEF,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.14,
+      } },
     },
   ],
   abilities: [
@@ -109,7 +125,7 @@ export const LINGXIAO_BASE_DEFINITION: SectDefinitionWithoutPaths = {
       description: '剑意至极，平生所见皆归于一锋。此剑不借天威，只决眼前之局。',
       unlock: { type: 'method', methodId: 'lingxiao-canon', level: 10 },
       role: 'finisher',
-      mpCost: 240,
+      mpCost: 200,
       cooldown: 4,
     },
     {

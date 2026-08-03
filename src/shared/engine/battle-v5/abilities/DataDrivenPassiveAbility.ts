@@ -6,7 +6,11 @@ import {
   claimGlobalUniqueEffect,
   releaseGlobalUniqueEffects,
 } from '../core/runtimeState';
-import { GameplayEffect, EffectContext } from '../effects/Effect';
+import {
+  GameplayEffect,
+  EffectExecutionContextV3,
+  executeGameplayEffectV3,
+} from '../effects/Effect';
 import {
   ListenerRuntimeConfig,
   resolveListenerContext,
@@ -120,15 +124,16 @@ export class DataDrivenPassiveAbility extends PassiveAbility {
 
     const resolved = resolveListenerContext(owner, event, runtime.mapping);
 
-    const context: EffectContext = {
+    const context = EffectExecutionContextV3.passiveAbility({
+      owner,
       caster: resolved.caster,
       target: resolved.target,
       ability: this,
       triggerEvent: event, // 关键：注入触发事件
-    };
+    });
 
     for (const { effect } of effects) {
-      effect.execute(context);
+      executeGameplayEffectV3(effect, context);
     }
   }
 

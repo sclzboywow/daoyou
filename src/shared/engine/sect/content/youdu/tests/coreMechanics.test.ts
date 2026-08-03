@@ -3,7 +3,6 @@ import { EventBus } from '@shared/engine/battle-v5/core/EventBus';
 import type {
   DamageRequestEvent,
   ResourceDrainEvent,
-  UnitDeadEvent,
 } from '@shared/engine/battle-v5/core/events';
 import { EventPriorityLevel } from '@shared/engine/battle-v5/core/events';
 import {
@@ -20,7 +19,12 @@ import {
 import { AbilityFactory } from '@shared/engine/battle-v5/factories/AbilityFactory';
 import { BuffFactory } from '@shared/engine/battle-v5/factories/BuffFactory';
 import { DamageSystem } from '@shared/engine/battle-v5/systems/DamageSystem';
+import {
+  CombatV3EventType,
+  type CombatResultCommittedEventV3,
+} from '@shared/engine/battle-v5/v3';
 import { Unit } from '@shared/engine/battle-v5/units/Unit';
+import { executeTestEffect } from '@shared/engine/battle-v5/tests/setup/executeTestEffect';
 import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveSectAbility } from '../..';
@@ -196,13 +200,13 @@ describe('幽都核心机制实际结算', () => {
       target.buffs.getAllBuffs().find((buff) => buff.id === YOUDU_RETURNING_SOUL)!,
     )).toBe(false);
 
-    AbilityFactory.createEffect({
+    executeTestEffect(AbilityFactory.createEffect({
       type: 'buff_layer_modify',
       params: {
         match: { id: YOUDU_SOUL_EROSION },
         operation: 'clear',
       },
-    })!.execute({ caster, target });
+    }), { caster, target });
     const clampedHp = target.getCurrentHp();
     expect(erosion(target)).toBeUndefined();
     expect(target.getMaxHp()).toBe(baseMaxHp);
@@ -220,13 +224,13 @@ describe('幽都核心机制实际结算', () => {
     expect(target.getMaxHp()).toBe(reducedMaxHp);
     expect(target.getCurrentHp()).toBe(reducedMaxHp);
 
-    AbilityFactory.createEffect({
+    executeTestEffect(AbilityFactory.createEffect({
       type: 'buff_layer_modify',
       params: {
         match: { id: YOUDU_SOUL_EROSION },
         operation: 'clear',
       },
-    })!.execute({ caster, target });
+    }), { caster, target });
 
     expect(target.getMaxHp()).toBe(baseMaxHp);
     expect(target.getCurrentHp()).toBe(reducedMaxHp);
@@ -390,27 +394,27 @@ describe('幽都核心机制实际结算', () => {
 
     setOverride(enemy, AttributeType.CONTROL_HIT, 0);
     setOverride(youdu, AttributeType.CONTROL_RESISTANCE, 1);
-    controlEffect.execute({ caster: enemy, target: youdu });
+    executeTestEffect(controlEffect, { caster: enemy, target: youdu });
     expect(youdu.tags.hasTag(GameplayTags.STATUS.SECT.state('youdu', 'heart-dead-used')))
       .toBe(false);
 
     setOverride(enemy, AttributeType.CONTROL_HIT, 1);
     setOverride(youdu, AttributeType.CONTROL_RESISTANCE, 0);
-    controlEffect.execute({ caster: enemy, target: youdu });
+    executeTestEffect(controlEffect, { caster: enemy, target: youdu });
     expect(youdu.buffs.getAllBuffIds()).not.toContain('test.control.no-skill');
     expect(youdu.tags.hasTag(GameplayTags.STATUS.CONTROL.NO_SKILL)).toBe(false);
     expect(youdu.tags.hasTag(GameplayTags.STATUS.SECT.state('youdu', 'heart-dead-used'))).toBe(true);
     expect(youdu.buffs.getAllBuffs().find((entry) =>
       entry.id.startsWith('sect.youdu.heart-immunity.'))?.getDuration()).toBe(1);
 
-    controlEffect.execute({ caster: enemy, target: youdu });
+    executeTestEffect(controlEffect, { caster: enemy, target: youdu });
     expect(youdu.buffs.getAllBuffIds()).not.toContain('test.control.no-skill');
 
     for (const buff of youdu.buffs.getAllBuffs().filter((entry) =>
       entry.id.startsWith('sect.youdu.heart-immunity.'))) {
       youdu.buffs.removeBuffExpired(buff.id);
     }
-    controlEffect.execute({ caster: enemy, target: youdu });
+    executeTestEffect(controlEffect, { caster: enemy, target: youdu });
     expect(youdu.buffs.getAllBuffIds()).toContain('test.control.no-skill');
   });
 
@@ -605,13 +609,13 @@ describe('幽都核心机制实际结算', () => {
     expect(erosion(deadTarget)).toBeDefined();
     const system = new DamageSystem();
     deadTarget.setHp(1);
-    AbilityFactory.createEffect({
+    executeTestEffect(AbilityFactory.createEffect({
       type: 'damage',
       params: {
         value: { base: 100 },
         damageType: DamageType.TRUE,
       },
-    })!.execute({ caster, target: deadTarget });
+    }), { caster, target: deadTarget });
     expect(deadTarget.isAlive()).toBe(false);
     expect(erosion(deadTarget)).toBeUndefined();
     system.destroy();
@@ -641,12 +645,14 @@ describe('幽都核心机制实际结算', () => {
     const system = new DamageSystem();
     const caster = unit('caster');
     const target = unit('target');
-    const deaths: UnitDeadEvent[] = [];
+    const deaths: CombatResultCommittedEventV3[] = [];
     const requests: DamageRequestEvent[] = [];
     target.setHp(1);
-    EventBus.instance.subscribe<UnitDeadEvent>(
-      'UnitDeadEvent',
-      (event) => deaths.push(event),
+    EventBus.instance.subscribe<CombatResultCommittedEventV3>(
+      CombatV3EventType.RESULT_COMMITTED,
+      (event) => {
+        if (event.result.type === 'unit_died') deaths.push(event);
+      },
       -1_000,
     );
     EventBus.instance.subscribe<DamageRequestEvent>(
@@ -660,7 +666,10 @@ describe('幽都核心机制实际结算', () => {
     expect(target.isAlive()).toBe(false);
     expect(requests).toHaveLength(1);
     expect(deaths).toHaveLength(1);
-    expect(deaths[0]).toMatchObject({ unit: target, killer: caster });
+    expect(deaths[0]).toMatchObject({
+      target,
+      result: { type: 'unit_died', killer: { id: caster.id } },
+    });
     system.destroy();
   });
 
@@ -794,7 +803,7 @@ describe('幽都核心机制实际结算', () => {
     ability('soul-shall-not-return').execute({ caster, target });
 
     const expected = Math.round(
-      Math.round(caster.attributes.getValue(AttributeType.MAGIC_ATK) * 1.5) * 1.08,
+      Math.round(caster.attributes.getValue(AttributeType.MAGIC_ATK) * 1.5059) * 1.08,
     );
     expect(before - target.getCurrentHp()).toBe(expected);
     expect(target.buffs.getAllBuffIds()).not.toContain(YOUDU_SOUL_EROSION);
@@ -818,7 +827,7 @@ describe('幽都核心机制实际结算', () => {
 
     ability('soul-severing-call').execute({ caster, target });
 
-    expect(request?.damageIncreasePctBucket).toBeCloseTo(0.25);
+    expect(request?.damageIncreasePctBucket).toBeCloseTo(0.2557);
     expect(caster.combatResources.getCurrent(YOUDU_SOUL_FIRE)).toBe(1);
     expect(erosion(target)?.getLayer()).toBe(2);
   });

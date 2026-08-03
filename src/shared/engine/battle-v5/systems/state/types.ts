@@ -164,11 +164,10 @@ export interface BattleStateFrame {
   /** 当前行动者 ID（action_pre / action_post 时有效）*/
   actorId?: string;
   /**
-   * 关联的日志 Span ID，用于前端联动（e.g. 点击日志高亮状态帧）。
-   * action_pre 对应同 actor 的 action_pre span；
-   * action_post 对应同 actor 的 action span。
+   * 关联的 V3 战斗序列 ID，用于事实与状态帧联动。
+   * 每个状态帧只能关联一个已经建立的 sequence。
    */
-  sourceSpanId?: string;
+  sourceSequenceId?: string;
   /** 双方单位完整快照，key = unitId */
   units: Record<string, UnitStateSnapshot>;
   /**

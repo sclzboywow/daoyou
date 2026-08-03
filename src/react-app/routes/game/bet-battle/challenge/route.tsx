@@ -1,11 +1,11 @@
 import { BattlePageLayout } from '@app/components/feature/battle/BattlePageLayout';
-import { BattlePlaybackPanel } from '@app/components/feature/battle/BattlePlaybackPanel';
-import { useBattlePlaybackState } from '@app/components/feature/battle/useBattlePlaybackState';
+import { BattlePlaybackPanel } from '@app/components/feature/battle/v3/BattlePlaybackPanel';
+import { useBattlePlaybackState } from '@app/components/feature/battle/v3/useBattlePlaybackState';
 import { CombatResultDialog } from '@app/components/feature/battle/v5/CombatResultDialog';
 import { GameImmersiveLoading } from '@app/components/game-shell';
 import { InkButton } from '@app/components/ui/InkButton';
 import { useResourceMutation } from '@app/lib/resources/mutations';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import { Suspense, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -13,14 +13,14 @@ type SettlementState = {
   isWin: boolean;
   winnerId: string;
   battleId: string;
-  battleRecordV2Id: string;
+  battleRecordV3Id: string;
   resultMessage: string;
 };
 
 function BetBattleChallengePageContent() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [battleResult, setBattleResult] = useState<BattleRecord>();
+  const [battleResult, setBattleResult] = useState<BattleRecordV3>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [settlement, setSettlement] = useState<SettlementState | null>(null);
@@ -56,7 +56,7 @@ function BetBattleChallengePageContent() {
       try {
         const data = await mutate<{
           type: 'battle_result';
-          battleResult: BattleRecord;
+          battleResult: BattleRecordV3;
           settlement: SettlementState;
         }>(
           fetch(`/api/bet-battles/${battleId}/challenge/v5`, {
@@ -131,8 +131,8 @@ function BetBattleChallengePageContent() {
       <BattlePlaybackPanel battleResult={battleResult} playback={playback} />
 
       <CombatResultDialog
-        key={`bet-${battleResult?.turns}-${battleResult?.winner.id ?? 'unknown'}`}
-        dialogKey={`bet-${battleResult?.turns}-${battleResult?.winner.id ?? 'unknown'}`}
+        key={`bet-${battleResult?.outcome.turns}-${battleResult?.outcome.winner.id ?? 'unknown'}`}
+        dialogKey={`bet-${battleResult?.outcome.turns}-${battleResult?.outcome.winner.id ?? 'unknown'}`}
         open={!!battleResult && playback.isPlaybackFinished && !!settlement}
         title={settlement?.isWin ? '赌战胜利' : '赌战失败'}
         confirmLabel="返回赌战台"

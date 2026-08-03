@@ -2,12 +2,14 @@ import {
   ItemDetailModal,
   type ItemDetailPayload,
 } from '@app/components/feature/items';
+import Link from '@app/components/router/AppLink';
 import type { Tier } from '@app/components/ui/InkBadge';
 import { InkBadge, tierColorMap } from '@app/components/ui/InkBadge';
 import { useCultivatorIdentity } from '@app/lib/resources/player';
 import { cn } from '@shared/lib/cn';
 import type {
   ItemShowcaseSnapshotMap,
+  WorldChatBattleShowcasePayload,
   WorldChatItemShowcasePayload,
   WorldChatMessageDTO,
 } from '@shared/types/world-chat';
@@ -60,6 +62,59 @@ function isItemShowcasePayload(
     'snapshot' in payload &&
     typeof payload.itemType === 'string' &&
     typeof payload.itemId === 'string'
+  );
+}
+
+function isBattleShowcasePayload(
+  payload: WorldChatMessageDTO['payload'],
+): payload is WorldChatBattleShowcasePayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'shareCode' in payload &&
+    'winner' in payload &&
+    'loser' in payload &&
+    'turns' in payload &&
+    typeof payload.shareCode === 'string' &&
+    typeof payload.winner === 'object' &&
+    payload.winner !== null &&
+    typeof payload.winner.name === 'string' &&
+    typeof payload.loser === 'object' &&
+    payload.loser !== null &&
+    typeof payload.loser.name === 'string' &&
+    typeof payload.turns === 'number'
+  );
+}
+
+function BattleShowcaseCard({
+  payload,
+}: {
+  payload: WorldChatBattleShowcasePayload;
+}) {
+  return (
+    <Link
+      href={`/battle-replay/${payload.shareCode}`}
+      className="border-ink/15 hover:border-crimson/35 mt-1 block border border-dashed bg-white/55 px-3 py-2 no-underline transition hover:bg-white/80"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="text-teal min-w-0 flex-1 truncate font-semibold">
+          {payload.winner.name}
+        </span>
+        <span className="text-ink-secondary shrink-0 text-xs">胜</span>
+        <span className="text-crimson min-w-0 flex-1 truncate text-right">
+          {payload.loser.name}
+        </span>
+      </div>
+      <div className="text-ink-secondary mt-1 flex items-center justify-between gap-3 text-xs">
+        <span>鏖战 {payload.turns} 回</span>
+        <span className="text-ink">观看战谱 →</span>
+      </div>
+      {payload.text ? (
+        <p className="text-ink border-ink/10 mt-1.5 border-t border-dashed pt-1.5 text-sm leading-6 break-all">
+          {payload.text}
+        </p>
+      ) : null}
+    </Link>
   );
 }
 
@@ -224,6 +279,11 @@ export function WorldChatMessageItem({ message }: WorldChatMessageItemProps) {
     if (!isItemShowcasePayload(message.payload)) return null;
     return parseShowcaseItem(message.payload);
   }, [message]);
+  const battleShowcase =
+    message.messageType === 'battle_showcase' &&
+    isBattleShowcasePayload(message.payload)
+      ? message.payload
+      : null;
 
   return (
     <>
@@ -249,7 +309,11 @@ export function WorldChatMessageItem({ message }: WorldChatMessageItemProps) {
           </span>
         </div>
         <div className="text-sm leading-6 break-all">
-          {message.messageType === 'duel_invite' ? (
+          {message.messageType === 'battle_showcase' && battleShowcase ? (
+            <BattleShowcaseCard payload={battleShowcase} />
+          ) : message.messageType === 'battle_showcase' ? (
+            '【战谱展示】'
+          ) : message.messageType === 'duel_invite' ? (
             message.textContent || '赌战台有新战帖'
           ) : message.messageType === 'item_showcase' && showcaseData ? (
             <span>

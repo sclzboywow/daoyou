@@ -2,7 +2,6 @@ export type LlmSceneId =
   | 'alchemy-formula-analysis'
   | 'alchemy-improvised-copy'
   | 'alchemy-recipe-plan'
-  | 'battle-report'
   | 'breakthrough-story'
   | 'character-generation'
   | 'divine-fortune'

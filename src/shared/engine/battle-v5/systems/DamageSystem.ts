@@ -1,25 +1,26 @@
-import { EventBus } from '../core/EventBus';
-import { battleRandom } from '../core/BattleRandom';
-import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { getRealmDamagePressureMultiplier } from '@shared/config/realmProgression';
+import { GameplayTags } from '@shared/engine/shared/tag-domain';
+import { battleRandom } from '../core/BattleRandom';
+import { EventBus } from '../core/EventBus';
 import {
   DamageEvent,
-  DodgeEvent,
   DamageRequestEvent,
   DamageTakenEvent,
+  DodgeEvent,
   EventPriorityLevel,
   HitCheckEvent,
   ShieldBreakEvent,
   SkillCastEvent,
-  UnitDeadEvent,
 } from '../core/events';
+import { markDamageDealt } from '../core/runtimeState';
 import {
   AttributeType,
   type DamageComponent,
   DamageSource,
   DamageType,
 } from '../core/types';
-import { markDamageDealt } from '../core/runtimeState';
+import { CombatResultEmitterV3 } from '../v3/CombatResultEmitterV3';
+import { CombatAttributionV3 } from '../v3/origin';
 import { calculateSpiritualRootDamageMultiplier } from './spiritualRootResonance';
 
 /**
@@ -117,9 +118,21 @@ export class DamageSystem {
     }
 
     // 发布命中判定事件
-    EventBus.instance.publish(hitCheckEvent);
+    const publishedHitCheck = EventBus.instance.publish(hitCheckEvent);
 
     if (hitCheckEvent.isDodged) {
+      const attribution = CombatAttributionV3.owned(target, {
+        kind: 'mechanic',
+        id: 'evasion',
+        name: '闪避',
+      });
+      if (!publishedHitCheck.trace)
+        throw new Error('Dodge result has no trace');
+      new CombatResultEmitterV3().commit(
+        target,
+        { type: 'defense', defense: 'dodge' },
+        { origin: attribution.origin, parentTrace: publishedHitCheck.trace },
+      );
       EventBus.instance.publish<DodgeEvent>({
         type: 'DodgeEvent',
         timestamp: Date.now(),
@@ -242,7 +255,11 @@ export class DamageSystem {
         0,
         Math.min(0.95, rawCritRate - critResist),
       );
-      if (event.forceCritical || event.isCritical || battleRandom() < effectiveCritRate) {
+      if (
+        event.forceCritical ||
+        event.isCritical ||
+        battleRandom() < effectiveCritRate
+      ) {
         event.isCritical = true;
         const baseCritMult = event.caster.attributes.getValue(
           AttributeType.CRIT_DAMAGE_MULT,
@@ -291,7 +308,7 @@ export class DamageSystem {
     EventBus.instance.publish(damageEvent);
 
     // 直接应用伤害（不再通过订阅 DamageEvent）
-    this._updateTargetHealth(damageEvent);
+    this._updateTargetHealth(damageEvent, damageType);
   }
 
   private _resolveDamageType(event: DamageRequestEvent): DamageType {
@@ -354,14 +371,20 @@ export class DamageSystem {
       // 旧伤害事件兼容：历史生产方仍可读取 defenseScale，但新代码不得写入。
       const legacyAmount = component.amount * scale;
       const legacyDefenseScale = Math.max(0, component.defenseScale ?? 1);
-      return sum + this._applySmoothDefense(
-        legacyAmount,
-        effectiveDef * legacyDefenseScale,
+      return (
+        sum +
+        this._applySmoothDefense(
+          legacyAmount,
+          effectiveDef * legacyDefenseScale,
+        )
       );
     }, 0);
   }
 
-  private _applySmoothDefense(attackBase: number, effectiveDef: number): number {
+  private _applySmoothDefense(
+    attackBase: number,
+    effectiveDef: number,
+  ): number {
     const attack = Math.max(0, attackBase);
     const defense = Math.max(0, effectiveDef);
     if (attack <= 0) return 0;
@@ -382,7 +405,10 @@ export class DamageSystem {
   /**
    * 更新目标气血，发布受击事件
    */
-  private _updateTargetHealth(damageEvent: DamageEvent): void {
+  private _updateTargetHealth(
+    damageEvent: DamageEvent,
+    damageType: DamageType,
+  ): void {
     const {
       target,
       finalDamage,
@@ -397,6 +423,18 @@ export class DamageSystem {
     if (finalDamage <= 0) {
       return;
     }
+
+    const parentTrace = damageEvent.trace;
+    const origin = damageEvent.origin;
+    if (!parentTrace || !origin) {
+      throw new Error(
+        'Damage settlement requires explicit V3 trace and origin',
+      );
+    }
+    const damageResultTrace = EventBus.instance.reserveResolutionTrace(
+      parentTrace.eventId,
+    );
+    const { resolutionId } = damageResultTrace;
 
     // 获取当前状态
     const beforeHp = target.getCurrentHp();
@@ -432,42 +470,67 @@ export class DamageSystem {
 
     // 发布受击事件（包含护盾抵扣和技能/暴击信息）
     // 注意：在这里发布事件，允许监听器（如免死效果）修改单位状态
-    EventBus.instance.publish<DamageTakenEvent>({
-      type: 'DamageTakenEvent',
-      timestamp: Date.now(),
-      caster,
-      target,
-      ability,
-      buff, // 传递 buff
-      damageSource: damageEvent.damageSource,
-      damageType: damageEvent.damageType,
-      calculationMode: damageEvent.calculationMode,
-      cause: damageEvent.cause,
-      damageTags: damageEvent.damageTags,
-      reflectSourceName:
-        damageEvent.damageSource === DamageSource.REFLECT
-          ? caster?.name
-          : undefined,
-      damageTaken: actualHpDamage,
-      beforeHp,
-      remainHp: target.getCurrentHp(), // 此时可能为 0
-      shieldAbsorbed: absorbedAmount,
-      remainShield: target.getCurrentShield(),
-      isLethal: target.getCurrentHp() <= 0,
-      isCritical,
-      critMultiplier,
-      canLifesteal,
+    const damageTakenTrace = EventBus.instance.reserveTrace({
+      resolutionId,
+      parentEventId: parentTrace.eventId,
     });
-
-    // 最终判定：在所有 DamageTakenEvent 监听器执行完后，重新检查存活状态
-    // 如果免死效果生效，target.currentHp 会变为 1，从而跳过此处的阵亡发布
-    if (beforeHp > 0 && target.getCurrentHp() <= 0) {
-      EventBus.instance.publish<UnitDeadEvent>({
-        type: 'UnitDeadEvent',
+    EventBus.instance.runInCausalContext({ origin, trace: parentTrace }, () =>
+      EventBus.instance.publish<DamageTakenEvent>({
+        type: 'DamageTakenEvent',
         timestamp: Date.now(),
-        unit: target,
-        killer: caster,
-      });
+        caster,
+        target,
+        ability,
+        buff, // 传递 buff
+        damageSource: damageEvent.damageSource,
+        damageType,
+        calculationMode: damageEvent.calculationMode,
+        cause: damageEvent.cause,
+        damageTags: damageEvent.damageTags,
+        reflectSourceName:
+          damageEvent.damageSource === DamageSource.REFLECT
+            ? caster?.name
+            : undefined,
+        damageTaken: actualHpDamage,
+        beforeHp,
+        remainHp: target.getCurrentHp(), // 此时可能为 0
+        shieldAbsorbed: absorbedAmount,
+        remainShield: target.getCurrentShield(),
+        hpReachedZeroBeforeReactions: target.getCurrentHp() <= 0,
+        isCritical,
+        critMultiplier,
+        canLifesteal,
+        trace: damageTakenTrace,
+        origin,
+      }),
+    );
+
+    const finalHp = target.getCurrentHp();
+    const damageResult = new CombatResultEmitterV3().commit(
+      target,
+      {
+        type: 'damage',
+        amount: Math.round(actualHpDamage),
+        beforeHp: Math.round(beforeHp),
+        afterHp: Math.round(finalHp),
+        damageType,
+        damageSource: damageEvent.damageSource,
+        critical: isCritical ?? false,
+        shieldAbsorbed: Math.round(absorbedAmount),
+      },
+      { origin, parentTrace, reservedTrace: damageResultTrace },
+    );
+
+    if (beforeHp > 0 && finalHp <= 0) {
+      target.buffs.removeBuffsOnDeath();
+      new CombatResultEmitterV3().commit(
+        target,
+        {
+          type: 'unit_died',
+          killer: caster ? { id: caster.id, name: caster.name } : undefined,
+        },
+        { origin, parentTrace: damageResult.trace! },
+      );
     }
   }
 

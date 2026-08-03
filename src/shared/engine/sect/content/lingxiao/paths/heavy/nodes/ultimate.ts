@@ -4,7 +4,9 @@ import { createLingxiaoNode } from '../../../shared/createLingxiaoNode';
 import { HEAVY_ECHO_COOLDOWN } from '../../../shared/LingxiaoMechanics';
 import {
   growthDuration,
+  growthHealMagnitude,
   growthMagnitude,
+  growthShieldMagnitude,
   nodePercent,
 } from '../../../shared/LingxiaoNodeDescription';
 import { addLingxiaoPassive } from '../../../shared/SwordNodePassives';
@@ -40,7 +42,7 @@ export const HEAVY_ULTIMATE_NODES = [
     },
     (_context, builder) => heavySwordBuild(builder).enable('immovableMountain'),
     (context) =>
-      `《剑心通明》额外提供相当于${nodePercent(growthMagnitude(context, 'origin-returning', HEAVY_IMMOVABLE_SHIELD_COEFFICIENT))}物攻的护盾；未来${growthDuration(context, 'origin-returning', 3)}次自身行动内，每回合首次受到直接伤害时反击，造成相当于${nodePercent(growthMagnitude(context, 'origin-returning', HEAVY_IMMOVABLE_COUNTER_COEFFICIENT))}物攻的伤害。`,
+      `《剑心通明》额外提供相当于${nodePercent(growthShieldMagnitude(context, 'origin-returning', HEAVY_IMMOVABLE_SHIELD_COEFFICIENT))}物攻的护盾；未来${growthDuration(context, 'origin-returning', 3)}次自身行动内，每回合首次受到直接伤害时反击，造成相当于${nodePercent(growthMagnitude(context, 'origin-returning', HEAVY_IMMOVABLE_COUNTER_COEFFICIENT))}物攻的伤害。`,
   ),
   createLingxiaoNode(
     {
@@ -78,6 +80,6 @@ export const HEAVY_ULTIMATE_NODES = [
       });
     },
     (context) =>
-      `施展《此剑平生》后恢复${nodePercent(growthMagnitude(context, 'lingxiao-canon', HEAVY_ECHO_HEAL_RATIO))}最大气血，并获得相当于${nodePercent(growthMagnitude(context, 'lingxiao-canon', HEAVY_ECHO_SHIELD_COEFFICIENT))}物攻的护盾，每3回合最多触发一次。`,
+      `施展《此剑平生》后恢复${nodePercent(growthHealMagnitude(context, 'lingxiao-canon', HEAVY_ECHO_HEAL_RATIO))}最大气血，并获得相当于${nodePercent(growthShieldMagnitude(context, 'lingxiao-canon', HEAVY_ECHO_SHIELD_COEFFICIENT))}物攻的护盾，每3回合最多触发一次。`,
   ),
 ] as const;

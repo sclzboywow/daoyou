@@ -1,10 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BattleEngineV5 } from '../../BattleEngineV5';
 import { GameplayTags } from '../../core';
+import {
+  SeededBattleRandomSource,
+  withBattleRandomSource,
+} from '../../core/BattleRandom';
 import { BuffConfig } from '../../core/configs';
 import { EventBus } from '../../core/EventBus';
 import { ActionPreEvent, DamageRequestEvent } from '../../core/events';
-import { AbilityType, AttributeType, BuffType, DamageSource, ModifierType } from '../../core/types';
+import {
+  AbilityType,
+  AttributeType,
+  BuffType,
+  DamageSource,
+  ModifierType,
+} from '../../core/types';
 import { AbilityFactory } from '../../factories/AbilityFactory';
 import { BuffFactory } from '../../factories/BuffFactory';
 import { Unit } from '../../units/Unit';
@@ -115,9 +125,7 @@ describe('战斗引擎 V5 原子效果全量回归验证 (最终回归版)', () 
     );
 
     const engine = new BattleEngineV5(player, opponent);
-    const result = engine.execute();
-
-    console.log(result.logs);
+    engine.execute();
   });
 
   it('3. 验证【反伤与免死】：锁定 1 血存活', () => {
@@ -204,11 +212,25 @@ describe('战斗引擎 V5 原子效果全量回归验证 (最终回归版)', () 
     const engine = new BattleEngineV5(attacker, defender);
     const result = engine.execute();
 
-    console.log(result.logs);
-
-    expect(result.logs[2]).toContain('对「不死者」造成');
-    const reflectLine = result.logs.find((line) => line.includes('「不死者」反伤'));
-    expect(reflectLine).toContain('对「杀手」造成');
+    const facts = result.sequences.flatMap((sequence) => sequence.facts);
+    expect(
+      facts.some(
+        (fact) =>
+          fact.type === 'damage' &&
+          fact.target.id === defender.id &&
+          fact.origin.kind === 'owned' &&
+          fact.origin.owner.id === attacker.id,
+      ),
+    ).toBe(true);
+    expect(
+      facts.some(
+        (fact) =>
+          fact.type === 'damage' &&
+          fact.target.id === attacker.id &&
+          fact.origin.kind === 'owned' &&
+          fact.origin.owner.id === defender.id,
+      ),
+    ).toBe(true);
   });
 
   it('4. 验证【护盾与焚元】：纯粹分步验证', () => {
@@ -247,15 +269,10 @@ describe('战斗引擎 V5 原子效果全量回归验证 (最终回归版)', () 
 
     const engine = new BattleEngineV5(attacker, defender);
     const result = engine.execute();
-    console.log(result.logs);
-
+    const facts = result.sequences.flatMap((sequence) => sequence.facts);
+    expect(facts.some((fact) => fact.type === 'shield')).toBe(true);
     expect(
-      result.logs.some(
-        (log) =>
-          log.includes('对「护盾者」造成') &&
-          log.includes('抵扣护盾') &&
-          log.includes('护盾已破碎'),
-      ),
+      facts.some((fact) => fact.type === 'damage' && fact.shieldAbsorbed > 0),
     ).toBe(true);
   });
 
@@ -345,10 +362,7 @@ describe('战斗引擎 V5 原子效果全量回归验证 (最终回归版)', () 
       type: BuffType.CONTROL,
       duration: 2,
       stackRule: 'override',
-      tags: [
-        GameplayTags.BUFF.TYPE.DEBUFF,
-        GameplayTags.BUFF.TYPE.CONTROL,
-      ],
+      tags: [GameplayTags.BUFF.TYPE.DEBUFF, GameplayTags.BUFF.TYPE.CONTROL],
       statusTags: [GameplayTags.STATUS.CONTROL.STUNNED],
     };
 
@@ -359,6 +373,7 @@ describe('战斗引擎 V5 原子效果全量回归验证 (最终回归版)', () 
         type: AbilityType.ACTIVE_SKILL,
         priority: 100,
         cooldown: 99,
+        hitPolicy: 'guaranteed',
         tags: [
           GameplayTags.ABILITY.KIND.SKILL,
           GameplayTags.ABILITY.FUNCTION.CONTROL,
@@ -369,22 +384,34 @@ describe('战斗引擎 V5 原子效果全量回归验证 (最终回归版)', () 
     );
 
     const engine = new BattleEngineV5(attacker, defender);
-    const result = engine.execute();
-
-    console.log(
-      '--- 测试【眩晕自动 tick】：被控单位应在跳过回合后自然恢复行动 ---',
-    );
-    console.log(result.logs.join('\n'));
-
-    const stunnedSkipLogs = result.logs.filter((log) =>
-      log.includes('「霜无痕」陷入眩晕，本回合无法行动'),
+    const result = withBattleRandomSource(
+      new SeededBattleRandomSource('control-tick'),
+      () => engine.execute(),
     );
 
-    expect(stunnedSkipLogs).toHaveLength(2);
-    expect(result.logs).toContain('「霜无痕」身上的「眩晕」时效已过');
+    const facts = result.sequences.flatMap((sequence) => sequence.facts);
+    const controlSkips = facts.filter(
+      (fact) =>
+        fact.type === 'mechanic' &&
+        fact.payload.kind === 'control_skip' &&
+        fact.target.id === defender.id,
+    );
+    expect(controlSkips).toHaveLength(2);
     expect(
-      result.logs.some((log) =>
-        log.startsWith('「霜无痕」发起攻击，对「雷震霄」造成'),
+      facts.some(
+        (fact) =>
+          fact.type === 'status' &&
+          fact.operation === 'remove' &&
+          fact.statusName === '眩晕',
+      ),
+    ).toBe(true);
+    expect(
+      facts.some(
+        (fact) =>
+          fact.type === 'damage' &&
+          fact.target.id === attacker.id &&
+          fact.origin.kind === 'owned' &&
+          fact.origin.owner.id === defender.id,
       ),
     ).toBe(true);
   });
@@ -480,23 +507,13 @@ describe('战斗引擎 V5 原子效果全量回归验证 (最终回归版)', () 
     const engine = new BattleEngineV5(attacker, defender);
     const result = engine.execute();
 
-    console.log('战斗日志：', result.logs);
-    console.log(
-      '攻击者气血:',
-      attacker.getCurrentHp(),
-      '法力:',
-      attacker.getCurrentMp(),
-    );
-    console.log(
-      '防御者气血:',
-      defender.getCurrentHp(),
-      '法力:',
-      defender.getCurrentMp(),
-    );
-
     // 验证：伤害应该被免疫为 0，因此魔法盾不应消耗法力
-    expect(result.logs.some((log) => log.includes('免疫了此次伤害'))).toBe(
-      true,
-    );
+    expect(
+      result.sequences
+        .flatMap((sequence) => sequence.facts)
+        .some(
+          (fact) => fact.type === 'defense' && fact.defense === 'damage_immune',
+        ),
+    ).toBe(true);
   });
 });

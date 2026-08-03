@@ -27,7 +27,7 @@ import type { CultivatorCombatInput } from '@shared/engine/battle-v5/adapters/Cu
 import { getBreakthroughPillLabel } from '@shared/lib/breakthroughPill';
 import { isConditionStatusActive } from '@shared/lib/condition';
 import { getConditionStatusTemplate } from '@shared/lib/conditionStatusRegistry';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import type { ConditionStatusKey } from '@shared/types/condition';
 import {
   QUALITY_ORDER,
@@ -74,7 +74,7 @@ interface TaskSyncOptions extends TaskServiceWriteOptions {
 
 export interface TaskChallengeResult {
   task: TaskInstance;
-  battleResult: BattleRecord;
+  battleResult: BattleRecordV3;
   isWin: boolean;
   challengeTitle: string;
   condition: NonNullable<Cultivator['condition']>;

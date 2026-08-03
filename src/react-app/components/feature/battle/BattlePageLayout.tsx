@@ -1,6 +1,6 @@
 import { GameLoadingState } from '@app/components/game-shell/GameLoadingState';
 import { InkButton } from '@app/components/ui/InkButton';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattlePlaybackRecordV3 } from '@shared/types/battle';
 import type { CSSProperties, ReactNode } from 'react';
 
 interface BattlePageLayoutProps {
@@ -8,7 +8,7 @@ interface BattlePageLayoutProps {
   subtitle?: string;
   error?: string;
   loading?: boolean;
-  battleResult?: BattleRecord;
+  battleResult?: BattlePlaybackRecordV3;
   children: ReactNode;
   variant?: 'page' | 'immersive-battle';
   actions?: {

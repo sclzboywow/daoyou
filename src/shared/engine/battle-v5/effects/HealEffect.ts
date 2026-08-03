@@ -1,10 +1,9 @@
 import { HealParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import { HealEvent } from '../core/events';
 import { AttributeType } from '../core/types';
 import { ValueCalculator } from '../core/ValueCalculator';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /**
  * 治疗原子效果
@@ -14,7 +13,7 @@ export class HealEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { caster, ability, buff } = context;
     const target = this.params.recipient === 'caster' ? caster : context.target;
 
@@ -33,8 +32,21 @@ export class HealEffect extends GameplayEffect {
       ? target.restoreMp(healAmount)
       : target.heal(healAmount);
 
+    if (appliedAmount > 0) {
+      context.commit(target, {
+        type: 'recovery',
+        resource: this.params.target === 'mp' ? 'mp' : 'hp',
+        amount: Math.round(appliedAmount),
+        after: Math.round(
+          this.params.target === 'mp'
+            ? target.getCurrentMp()
+            : target.getCurrentHp(),
+        ),
+      });
+    }
+
     // 发布治疗事件用于日志和触发
-    EventBus.instance.publish<HealEvent>({
+    context.emit<HealEvent>({
       type: 'HealEvent',
       timestamp: Date.now(),
       caster,

@@ -46,14 +46,14 @@ export class BattleStateRecorder {
    * @param turn          当前回合数
    * @param units         所有参战单位
    * @param actorId       当前行动者 ID（action_pre / action_post 时传入）
-   * @param sourceSpanId  关联日志 Span ID（可选，供前端联动使用）
+   * @param sourceSequenceId  关联 V3 战斗序列 ID（可选，供前端联动使用）
    */
   record(
     phase: StateFramePhase,
     turn: number,
     units: Unit[],
     actorId?: string,
-    sourceSpanId?: string,
+    sourceSequenceId?: string,
   ): void {
     const snapshots: Record<string, UnitStateSnapshot> = {};
     const deltas: Record<string, UnitStateDelta> = {};
@@ -78,7 +78,7 @@ export class BattleStateRecorder {
       turn,
       phase,
       actorId,
-      sourceSpanId,
+      sourceSequenceId,
       units: snapshots,
       deltas: Object.keys(deltas).length > 0 ? deltas : undefined,
     };

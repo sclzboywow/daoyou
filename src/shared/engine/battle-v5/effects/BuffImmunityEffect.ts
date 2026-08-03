@@ -1,8 +1,7 @@
 import { BuffImmunityParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import { BuffAddEvent, BuffImmuneEvent } from '../core/events';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /**
  * BUFF 免疫原子效果
@@ -12,7 +11,7 @@ export class BuffImmunityEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { triggerEvent, target } = context;
     if (!triggerEvent || triggerEvent.type !== 'BuffAddEvent') {
       return;
@@ -31,7 +30,15 @@ export class BuffImmunityEffect extends GameplayEffect {
     event.isCancelled = true;
     event.immuneTag = matchedTag;
 
-    EventBus.instance.publish<BuffImmuneEvent>({
+    context.commit(target, {
+      type: 'status',
+      operation: 'immune',
+      statusId: event.buff.id,
+      statusName: event.buff.name,
+      statusType: event.buff.type,
+    });
+
+    context.emit<BuffImmuneEvent>({
       type: 'BuffImmuneEvent',
       timestamp: Date.now(),
       target,

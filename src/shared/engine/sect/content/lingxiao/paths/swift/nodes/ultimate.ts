@@ -4,6 +4,7 @@ import { createLingxiaoNode } from '../../../shared/createLingxiaoNode';
 import { SWIFT_ENDLESS_COOLDOWN } from '../../../shared/LingxiaoMechanics';
 import {
   growthMagnitude,
+  growthShieldMagnitude,
   nodePercent,
 } from '../../../shared/LingxiaoNodeDescription';
 import { addLingxiaoPassive } from '../../../shared/SwordNodePassives';
@@ -72,6 +73,6 @@ export const SWIFT_ULTIMATE_NODES = [
     },
     (_context, builder) => swiftSwordBuild(builder).enable('unendingWind'),
     (context) =>
-      `每次《藏锋听雷》持续期间首次闪避时，获得相当于${nodePercent(growthMagnitude(context, 'void-step', SWIFT_UNENDING_WIND_SHIELD_COEFFICIENT))}物攻的护盾，并施加1层剑痕。`,
+      `每次《藏锋听雷》持续期间首次闪避时，获得相当于${nodePercent(growthShieldMagnitude(context, 'void-step', SWIFT_UNENDING_WIND_SHIELD_COEFFICIENT))}物攻的护盾，并施加1层剑痕。`,
   ),
 ] as const;

@@ -11,7 +11,7 @@ export type TaskDetailResponse = ApiSuccess<{
 
 export type TaskChallengeResponse = PlayerStateMutationResponse<{
   task: TaskInstance;
-  battleResult: import('@shared/types/battle').BattleRecord;
+  battleResult: import('@shared/types/battle').BattleRecordV3;
   isWin: boolean;
   challengeTitle: string;
 }>;

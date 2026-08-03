@@ -8,7 +8,10 @@ import {
   executeTowerStartCommand,
 } from '@server/lib/services/TowerApplicationService';
 import { towerService } from '@server/lib/tower/service';
-import { TOWER_ELIGIBLE_REALMS } from '@shared/lib/tower';
+import {
+  TOWER_BLESSING_IDS,
+  TOWER_ELIGIBLE_REALMS,
+} from '@shared/lib/tower';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { readCultivatorRealm } from '@server/lib/services/cultivator/CultivatorFactsReader';
@@ -17,17 +20,7 @@ const router = new Hono<AppEnv>();
 const battleRouter = new Hono<AppEnv>();
 
 const BlessingSchema = z.object({
-  blessingId: z.enum([
-    'vitality_surge',
-    'spirit_surge',
-    'swift_step',
-    'mind_focus',
-    'jade_bones',
-    'sea_of_qi',
-    'breathing_technique',
-    'meridian_cycle',
-    'balanced_dao',
-  ]),
+  blessingId: z.enum(TOWER_BLESSING_IDS),
 });
 
 const BattleIdBodySchema = z.object({

@@ -1,53 +1,59 @@
 import { BuffLayerModifyParams } from '../core/configs';
 import { executeEffectConfigs } from '../core/effectExecutor';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
-import { findMatchingBuffs, publishMechanicLog } from './advancedEffectUtils';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
+import { findMatchingBuffs } from './advancedEffectUtils';
 
 export class BuffLayerModifyEffect extends GameplayEffect {
   constructor(private params: BuffLayerModifyParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
-    const unit = this.params.target === 'caster' ? context.caster : context.target;
+  execute(context: EffectExecutionContextV3): void {
+    const unit =
+      this.params.target === 'caster' ? context.caster : context.target;
     const origin = {
       source: context.caster,
       ability: context.ability,
       buff: context.buff,
+      attribution: context.attribution,
+      trace: context.trace,
+      layerChangeReason: 'modified' as const,
+      statusFactVisibility: this.params.logVisibility,
     };
     for (const buff of findMatchingBuffs(unit, this.params.match)) {
+      if (!context.canExecuteEffect()) break;
       const before = buff.getLayer();
       switch (this.params.operation) {
         case 'add':
-          unit.buffs.modifyBuffLayer(buff.id, Math.max(1, this.params.layers ?? 1), origin);
+          unit.buffs.modifyBuffLayer(
+            buff.id,
+            Math.max(1, this.params.layers ?? 1),
+            origin,
+          );
           break;
         case 'subtract':
-          unit.buffs.modifyBuffLayer(buff.id, -Math.max(1, this.params.layers ?? 1), origin);
+          unit.buffs.modifyBuffLayer(
+            buff.id,
+            -Math.max(1, this.params.layers ?? 1),
+            origin,
+          );
           break;
         case 'clear':
           unit.buffs.setBuffLayer(buff.id, 0, origin);
           break;
         case 'set':
-          unit.buffs.setBuffLayer(buff.id, this.params.layers ?? 1, origin);
+          unit.buffs.setBuffLayer(
+            buff.id,
+            this.params.layers ?? 1,
+            origin,
+          );
           break;
       }
 
-      publishMechanicLog({
-        mechanic: 'buff_layer',
-        source: context.caster,
-        ability: context.ability,
-        sourceBuff: context.buff,
-        target: unit,
-        name: buff.name,
-        displayName: buff.name,
-        visibility: this.params.logVisibility ?? 'player',
-        value: before,
-        detail: this.params.operation,
-      });
-
       const repeat = this.params.scaleEffectsByLayer ? before : 1;
       for (let i = 0; i < repeat; i++) {
+        if (!context.canExecuteEffect()) break;
         executeEffectConfigs(this.params.effects ?? [], context);
       }
     }

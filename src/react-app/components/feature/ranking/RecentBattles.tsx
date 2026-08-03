@@ -31,8 +31,8 @@ export function RecentBattles() {
         const data = await fetchJsonCached<{
           success: boolean;
           data?: BattleSummary[];
-        }>('/api/battle-records/v2?page=1&pageSize=3', {
-          key: 'home:recent-battles:v2:page=1&pageSize=3',
+        }>('/api/battle-records/v3?page=1&pageSize=3', {
+          key: 'home:recent-battles:v3:page=1&pageSize=3',
           ttlMs: 30 * 1000,
         });
         if (cancelled) return;

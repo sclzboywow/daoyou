@@ -1,26 +1,36 @@
 import type { ResourceScaledDamageParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import type { DamageRequestEvent } from '../core/events';
-import { AttributeType, DamageSource, DamageType, type DamageComponent } from '../core/types';
+import {
+  AttributeType,
+  DamageSource,
+  DamageType,
+  type DamageComponent,
+} from '../core/types';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 export class ResourceScaledDamageEffect extends GameplayEffect {
   constructor(private readonly params: ResourceScaledDamageParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
-    const current = context.caster.combatResources.getCurrent(this.params.resourceId);
+  execute(context: EffectExecutionContextV3): void {
+    const current = context.caster.combatResources.getCurrent(
+      this.params.resourceId,
+    );
     const points = Math.min(this.params.maxPoints ?? current, current);
     if (points < (this.params.minPoints ?? 0)) return;
 
-    const coefficient = this.params.baseCoefficient + this.params.coefficientPerPoint * points;
+    const coefficient =
+      this.params.baseCoefficient + this.params.coefficientPerPoint * points;
     const attribute = this.params.attribute ?? AttributeType.ATK;
     const amount = context.caster.attributes.getValue(attribute) * coefficient;
     if (amount <= 0) return;
 
-    const bypassRatio = Math.max(0, Math.min(1, this.params.bypassDefenseRatio ?? 0));
+    const bypassRatio = Math.max(
+      0,
+      Math.min(1, this.params.bypassDefenseRatio ?? 0),
+    );
     const components: DamageComponent[] = [];
     if (bypassRatio < 1) {
       components.push({
@@ -39,7 +49,20 @@ export class ResourceScaledDamageEffect extends GameplayEffect {
       });
     }
 
-    EventBus.instance.publish<DamageRequestEvent>({
+    if (this.params.consume) {
+      context.caster.combatResources.consume(
+        this.params.resourceId,
+        this.params.consume === 'all' ? 'all' : this.params.consume,
+        {
+          attribution: context.attribution,
+          trace: context.trace,
+          caster: context.caster,
+          ability: context.ability,
+        },
+      );
+    }
+
+    context.emit<DamageRequestEvent>({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster: context.caster,
@@ -52,14 +75,6 @@ export class ResourceScaledDamageEffect extends GameplayEffect {
       finalDamage: amount,
       forceCritical: this.params.forceCritical,
     });
-
-    if (this.params.consume) {
-      context.caster.combatResources.consume(
-        this.params.resourceId,
-        this.params.consume === 'all' ? 'all' : this.params.consume,
-        { caster: context.caster, ability: context.ability },
-      );
-    }
   }
 }
 

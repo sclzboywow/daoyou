@@ -84,6 +84,14 @@ const methods = Array.from({ length: 6 }, (_, index) => ({
   name: `样例心法${index + 1}`,
   description: '扩展契约测试心法。',
   isPrimary: index === 0,
+  growthProfile: {
+    curve: 'balanced' as const,
+    effects: { damage: 0.1, heal: 0.1, shield: 0.1, status: 0.1 },
+    durationMilestones: [
+      { level: 60, bonus: 1 },
+      { level: 120, bonus: 2 },
+    ],
+  },
 }));
 const abilities: SectAbilityDefinition[] = methods.map((method, index) =>
   index === 5

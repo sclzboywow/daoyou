@@ -33,6 +33,7 @@ export { InkNav, type InkNavProps } from './InkNav';
 export { InkNotice, type InkNoticeProps } from './InkNotice';
 export { InkSelect, type InkSelectProps } from './InkSelect';
 export { InkStatRow, type InkStatRowProps } from './InkStatRow';
+export { InkSwitch, type InkSwitchProps } from './InkSwitch';
 export {
   InkStatusBar,
   type InkStatusBarProps,

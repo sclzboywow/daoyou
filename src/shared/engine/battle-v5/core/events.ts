@@ -27,7 +27,6 @@ import {
   type DamageComponent,
   type DamageCalculationMode,
   type LogCauseRef,
-  type MechanicTriggerBasisRef,
   DamageSource,
   DamageType,
 } from './types';
@@ -371,17 +370,10 @@ export interface DamageTakenEvent extends CombatEvent {
   remainHp: number;
   shieldAbsorbed?: number; // 护盾抵扣值
   remainShield?: number; // 剩余护盾值
-  isLethal: boolean;
+  hpReachedZeroBeforeReactions: boolean;
   isCritical?: boolean; // 是否暴击
   critMultiplier?: number; // 暴击倍率
   canLifesteal?: boolean;
-}
-
-// ===== 单元死亡事件 =====
-export interface UnitDeadEvent extends CombatEvent {
-  type: 'UnitDeadEvent';
-  unit: Unit;
-  killer?: Unit;
 }
 
 // ===== 标签添加事件 =====
@@ -441,34 +433,6 @@ export interface BuffRemovedEvent extends CombatEvent {
   target: Unit;
   buff: Buff;
   reason: 'manual' | 'expired' | 'dispel' | 'replace'; // 移除原因
-}
-
-export interface MechanicLogEvent extends CombatEvent {
-  type: 'MechanicLogEvent';
-  mechanic:
-    | 'memory_record'
-    | 'memory_release'
-    | 'ability_transform'
-    | 'damage_defer'
-    | 'hp_sacrifice'
-    | 'buff_layer'
-    | 'combat_resource'
-    | 'status_spread'
-    | 'named_trigger'
-    | 'status_transition';
-  target: Unit;
-  source?: Unit;
-  ability?: Ability;
-  sourceBuff?: Buff;
-  name: string;
-  displayName?: string;
-  visibility?: 'player' | 'debug';
-  internalKey?: string;
-  value?: number;
-  detail?: string;
-  operation?: 'apply' | 'refresh' | 'replace' | 'consume';
-  previousDisplayName?: string;
-  triggerBasis?: MechanicTriggerBasisRef;
 }
 
 // ===== BUFF 免疫拦截事件 =====

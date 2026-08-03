@@ -1,6 +1,6 @@
 import { BattlePageLayout } from '@app/components/feature/battle/BattlePageLayout';
-import { BattlePlaybackPanel } from '@app/components/feature/battle/BattlePlaybackPanel';
-import { useBattlePlaybackState } from '@app/components/feature/battle/useBattlePlaybackState';
+import { BattlePlaybackPanel } from '@app/components/feature/battle/v3/BattlePlaybackPanel';
+import { useBattlePlaybackState } from '@app/components/feature/battle/v3/useBattlePlaybackState';
 import { useCultivatorDisplayProjection } from '@app/components/feature/cultivator/useCultivatorDisplayProjection';
 import { GameImmersiveLoading } from '@app/components/game-shell';
 import { CombatResultDialog } from '@app/components/feature/battle/v5/CombatResultDialog';
@@ -12,7 +12,7 @@ import type { TrainingRoomModifierDraft } from '@shared/engine/battle-v5/setup/t
 import { ATTR_LABELS } from '@shared/engine/battle-v5/effects/affixText/attributes';
 import type { CultivatorCombatInput } from '@shared/engine/battle-v5/adapters/CultivatorCombatAdapter';
 import { prepareStandardFullBattle } from '@shared/engine/battle-v5/setup/BattleStateStrategy';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import { simulateBattleV5 } from '@shared/lib/battle/simulateBattleV5';
 import { getResourceText } from '@shared/lib/gameConceptDisplay';
 import {
@@ -222,7 +222,7 @@ export default function TrainingRoomPage() {
   const cultivator = projection.data?.cultivator ?? null;
   const isLoading = projection.loading;
   const [isFighting, setIsFighting] = useState(false);
-  const [battleResult, setBattleResult] = useState<BattleRecord>();
+  const [battleResult, setBattleResult] = useState<BattleRecordV3>();
   const [draft, setDraft] = useState<TrainingRoomDraft>(() => {
     return readTrainingRoomStorage()?.currentDraft ?? createDefaultTrainingRoomDraft();
   });
@@ -353,7 +353,7 @@ export default function TrainingRoomPage() {
     return <GameImmersiveLoading message="识海构筑中……" />;
   }
 
-  const opponentUnitId = battleResult?.opponent || 'dummy';
+  const opponentUnitId = battleResult?.participants.opponent.id || 'dummy';
   const initialOpponentHp =
     battleResult?.stateTimeline.frames[0]?.units[opponentUnitId || '']?.hp
       .current ?? 0;
@@ -554,16 +554,18 @@ export default function TrainingRoomPage() {
         <BattlePlaybackPanel
           battleResult={battleResult}
           playback={playback}
-          statusAction={{
-            label: '离开练功房',
-            onClick: handleLeave,
-          }}
+          statusActions={[
+            {
+              label: '离开练功房',
+              onClick: handleLeave,
+            },
+          ]}
         />
       )}
 
       <CombatResultDialog
-        key={`training-${battleResult?.turns}-${playback.currentOpponentFrame?.hp.current ?? 0}`}
-        dialogKey={`training-${battleResult?.turns}-${playback.currentOpponentFrame?.hp.current ?? 0}`}
+        key={`training-${battleResult?.outcome.turns}-${playback.currentOpponentFrame?.hp.current ?? 0}`}
+        dialogKey={`training-${battleResult?.outcome.turns}-${playback.currentOpponentFrame?.hp.current ?? 0}`}
         open={isEnded}
         title="本次训练结束"
         content={

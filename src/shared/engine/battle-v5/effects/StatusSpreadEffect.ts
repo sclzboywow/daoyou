@@ -1,27 +1,17 @@
 import { StatusSpreadParams } from '../core/configs';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
-import { publishMechanicLog } from './advancedEffectUtils';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 export class StatusSpreadEffect extends GameplayEffect {
   constructor(private params: StatusSpreadParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     void this.params;
-    // Current battle-v5 main flow is 1v1. There is no second enemy target to spread to.
-    publishMechanicLog({
-      mechanic: 'status_spread',
-      source: context.caster,
-      ability: context.ability,
-      sourceBuff: context.buff,
-      target: context.target,
-      name: '状态扩散',
-      displayName: '状态扩散',
-      visibility: 'player',
-      detail: 'no_target',
-    });
+    void context;
+    // Current battle-v5 main flow is 1v1. Without a second target there is no
+    // committed result to publish.
   }
 }
 

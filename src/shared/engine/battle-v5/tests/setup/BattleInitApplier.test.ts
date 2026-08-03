@@ -1,25 +1,32 @@
-import type { Cultivator } from '@shared/types/cultivator';
 import { simulateBattleV5 } from '@server/lib/services/simulateBattleV5';
-import { BuffType, ModifierType, AttributeType } from '../../core/types';
+import { GameplayTags } from '@shared/engine/shared/tag-domain';
+import type {
+  BodyCultivationTrackKey,
+  CultivatorCondition,
+} from '@shared/types/condition';
+import type { Cultivator } from '@shared/types/cultivator';
+import { ActiveSkill } from '../../abilities/ActiveSkill';
+import { TargetPolicy } from '../../abilities/TargetPolicy';
 import { StackRule } from '../../buffs/Buff';
-import { BuffFactory } from '../../factories/BuffFactory';
-import { createBattleUnitsWithInit } from '../../setup/BattleInitApplier';
-import { prepareStandardFullBattle } from '../../setup/BattleStateStrategy';
 import { EventBus } from '../../core/EventBus';
 import {
-  BuffLayerChangedEvent,
   DamageRequestEvent,
   DeathPreventEvent,
   SkillPreCastEvent,
-  UnitDeadEvent,
 } from '../../core/events';
-import { ActiveSkill } from '../../abilities/ActiveSkill';
-import { AbilityId } from '../../core/types';
-import { TargetPolicy } from '../../abilities/TargetPolicy';
-import { GameplayTags } from '@shared/engine/shared/tag-domain';
+import {
+  AbilityId,
+  AttributeType,
+  BuffType,
+  DamageSource,
+  DamageType,
+  ModifierType,
+} from '../../core/types';
+import { BuffFactory } from '../../factories/BuffFactory';
+import { createBattleUnitsWithInit } from '../../setup/BattleInitApplier';
+import { prepareStandardFullBattle } from '../../setup/BattleStateStrategy';
 import { DamageSystem } from '../../systems/DamageSystem';
-import { DamageSource, DamageType } from '../../core/types';
-import type { BodyCultivationTrackKey, CultivatorCondition } from '@shared/types/condition';
+import { publishTestDamageRequest } from './combatV3TestHarness';
 
 function createCultivator(id: string, name: string): Cultivator {
   return {
@@ -50,7 +57,9 @@ function createCultivator(id: string, name: string): Cultivator {
 
 function createBodyCultivationCondition(
   levels: Partial<Record<BodyCultivationTrackKey, number>>,
-  realm: NonNullable<CultivatorCondition['tracks']['bodyCultivation']>['realm'] = 'bronze_skin',
+  realm: NonNullable<
+    CultivatorCondition['tracks']['bodyCultivation']
+  >['realm'] = 'bronze_skin',
 ): CultivatorCondition {
   const track = (key: BodyCultivationTrackKey) => ({
     level: levels[key] ?? 0,
@@ -112,42 +121,46 @@ class HighCostSkill extends ActiveSkill {
 }
 
 describe('BattleInitApplier', () => {
-  test('多层入场 Buff 以一次 0→N 层事件完成初始化', () => {
+  test('多层入场 Buff 静默进入初始状态且不发布战斗事件', () => {
     EventBus.instance.reset();
-    const events: BuffLayerChangedEvent[] = [];
-    EventBus.instance.subscribe<BuffLayerChangedEvent>(
+    const events: string[] = [];
+    for (const eventType of [
+      'BuffAddEvent',
       'BuffLayerChangedEvent',
-      (event) => events.push(event),
-    );
+      'BuffAppliedEvent',
+      'CombatResultCommittedEventV3',
+    ]) {
+      EventBus.instance.subscribe(eventType, () => events.push(eventType));
+    }
     const player = createCultivator('player', '道友');
     const opponent = createCultivator('opponent', '对手');
 
     const { playerUnit } = createBattleUnitsWithInit(player, opponent, {
       player: {
-        startingBuffs: [{
-          source: 'self',
-          stacks: 4,
-          buff: {
-            id: 'test.layered-starting-buff',
-            name: '多层入场状态',
-            type: BuffType.BUFF,
-            duration: 3,
-            stackRule: StackRule.STACK_LAYER,
-            maxLayers: 5,
+        startingBuffs: [
+          {
+            source: 'self',
+            stacks: 4,
+            buff: {
+              id: 'test.layered-starting-buff',
+              name: '多层入场状态',
+              type: BuffType.BUFF,
+              duration: 3,
+              stackRule: StackRule.STACK_LAYER,
+              maxLayers: 5,
+            },
           },
-        }],
+        ],
       },
     });
 
-    expect(playerUnit.buffs.getAllBuffs().find((buff) =>
-      buff.id === 'test.layered-starting-buff')?.getLayer()).toBe(4);
-    expect(events.filter((event) => event.buff.id === 'test.layered-starting-buff'))
-      .toEqual([expect.objectContaining({
-        previousLayer: 0,
-        currentLayer: 4,
-        delta: 4,
-        reason: 'apply',
-      })]);
+    expect(
+      playerUnit.buffs
+        .getAllBuffs()
+        .find((buff) => buff.id === 'test.layered-starting-buff')
+        ?.getLayer(),
+    ).toBe(4);
+    expect(events).toEqual([]);
   });
 
   test('MAX_HP 初始化 modifier 在 buff 触发派生刷新后仍保持有效', () => {
@@ -302,7 +315,10 @@ describe('BattleInitApplier', () => {
       skin: 5,
     });
 
-    const { playerUnit, opponentUnit } = createBattleUnitsWithInit(player, opponent);
+    const { playerUnit, opponentUnit } = createBattleUnitsWithInit(
+      player,
+      opponent,
+    );
 
     expect(playerUnit.getCurrentShield()).toBe(0);
     expect(opponentUnit.getCurrentShield()).toBe(0);
@@ -392,17 +408,13 @@ describe('BattleInitApplier', () => {
         },
       },
     );
-    let deathEvent: UnitDeadEvent | undefined;
     let deathPreventEvent: DeathPreventEvent | undefined;
 
-    eventBus.subscribe<UnitDeadEvent>('UnitDeadEvent', (event) => {
-      deathEvent = event;
-    });
     eventBus.subscribe<DeathPreventEvent>('DeathPreventEvent', (event) => {
       deathPreventEvent = event;
     });
 
-    eventBus.publish<DamageRequestEvent>({
+    publishTestDamageRequest({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster: opponentUnit,
@@ -416,7 +428,6 @@ describe('BattleInitApplier', () => {
     expect(playerUnit.getCurrentHp()).toBe(1);
     expect(playerUnit.isAlive()).toBe(true);
     expect(deathPreventEvent?.target.id).toBe('player');
-    expect(deathEvent).toBeUndefined();
 
     damageSystem.destroy();
     eventBus.reset();
@@ -530,7 +541,7 @@ describe('BattleInitApplier', () => {
 
     const baseAtk = playerUnit.attributes.getValue(AttributeType.ATK);
 
-    eventBus.publish<DamageRequestEvent>({
+    publishTestDamageRequest({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster: opponentUnit,
@@ -547,16 +558,18 @@ describe('BattleInitApplier', () => {
 
     expect(playerUnit.getCurrentHp()).toBeLessThan(35);
     expect(activeBuffs).toHaveLength(1);
-    expect(playerUnit.tags.hasTag(
-      GameplayTags.STATUS.STATE.BODY_BURN_BLOOD_TRIGGERED,
-    )).toBe(true);
+    expect(
+      playerUnit.tags.hasTag(
+        GameplayTags.STATUS.STATE.BODY_BURN_BLOOD_TRIGGERED,
+      ),
+    ).toBe(true);
     expect(playerUnit.attributes.getValue(AttributeType.ATK)).toBeCloseTo(
       baseAtk * 1.2,
     );
 
     playerUnit.buffs.removeBuff('test_body_burn_blood_active');
 
-    eventBus.publish<DamageRequestEvent>({
+    publishTestDamageRequest({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster: opponentUnit,
@@ -832,5 +845,4 @@ describe('BattleInitApplier', () => {
     expect(playerUnit.getCurrentMp()).toBe(afterFirstRefund);
     eventBus.reset();
   });
-
 });

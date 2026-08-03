@@ -1,8 +1,4 @@
-import {
-  standardSectMethodGrowthPolicy,
-  type SectMethodId,
-  type SectProjectionContext,
-} from '../../../core';
+import type { SectMethodId, SectProjectionContext } from '../../../core';
 
 function level(
   context: SectProjectionContext,
@@ -16,7 +12,35 @@ export function growthMagnitude(
   methodId: SectMethodId,
   baseValue: number,
 ): number {
-  return standardSectMethodGrowthPolicy.scaleMagnitude(
+  return context.methodGrowth.scaleEffect(
+    methodId,
+    'damage',
+    baseValue,
+    level(context, methodId),
+  );
+}
+
+export function growthHealMagnitude(
+  context: SectProjectionContext,
+  methodId: SectMethodId,
+  baseValue: number,
+): number {
+  return context.methodGrowth.scaleEffect(
+    methodId,
+    'heal',
+    baseValue,
+    level(context, methodId),
+  );
+}
+
+export function growthShieldMagnitude(
+  context: SectProjectionContext,
+  methodId: SectMethodId,
+  baseValue: number,
+): number {
+  return context.methodGrowth.scaleEffect(
+    methodId,
+    'shield',
     baseValue,
     level(context, methodId),
   );
@@ -27,7 +51,9 @@ export function growthStatusMagnitude(
   methodId: SectMethodId,
   baseValue: number,
 ): number {
-  return standardSectMethodGrowthPolicy.scaleStatusMagnitude(
+  return context.methodGrowth.scaleEffect(
+    methodId,
+    'status',
     baseValue,
     level(context, methodId),
   );
@@ -38,7 +64,8 @@ export function growthDuration(
   methodId: SectMethodId,
   baseDuration: number,
 ): number {
-  return standardSectMethodGrowthPolicy.growDuration(
+  return context.methodGrowth.growDuration(
+    methodId,
     baseDuration,
     level(context, methodId),
   );

@@ -64,7 +64,7 @@ describe('six-attribute gongfa and artifact affixes', () => {
     {
       affixes: GONGFA_AFFIXES,
       id: 'gongfa-foundation-wisdom',
-      modType: ModifierType.ADD,
+      modType: ModifierType.FIXED,
     },
     {
       affixes: ARTIFACT_AFFIXES,
@@ -80,6 +80,20 @@ describe('six-attribute gongfa and artifact affixes', () => {
     expect(modifier.attrType).toBe(AttributeType.CRIT_RATE);
     expect(modifier.modType).toBe(spec.modType);
     expect(`${affix.displayName}${affix.displayDescription}`).toContain('暴击');
+  });
+
+  it.each([
+    ['gongfa-foundation-heal-amplify', AttributeType.HEAL_AMPLIFY],
+    ['gongfa-foundation-control-hit', AttributeType.CONTROL_HIT],
+    [
+      'gongfa-foundation-control-resistance',
+      AttributeType.CONTROL_RESISTANCE,
+    ],
+  ])('%s uses fixed percentage-point semantics', (id, attrType) => {
+    const { modifier } = getSingleAttributeModifier(GONGFA_AFFIXES, id);
+
+    expect(modifier.attrType).toBe(attrType);
+    expect(modifier.modType).toBe(ModifierType.FIXED);
   });
 
   it('keeps legacy wisdom ids and aligns material semantics with each role', () => {

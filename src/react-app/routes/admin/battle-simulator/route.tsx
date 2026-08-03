@@ -107,7 +107,7 @@ function DuelResultView({ result }: { result: AdminBattleDuelResult }) {
         <summary className="text-ink cursor-pointer font-semibold">
           结构化日志
         </summary>
-        <JsonPanel value={result.logSpans} />
+        <JsonPanel value={result.sequences} />
       </details>
 
       <details className="space-y-2">

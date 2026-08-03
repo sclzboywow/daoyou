@@ -8,7 +8,8 @@ import {
   readRecentRemovedBuff,
 } from '../core/runtimeState';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { CombatAttributionV3 } from '../v3/origin';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 import { findMatchingBuffs, matchesBuff } from './advancedEffectUtils';
 
 export class BuffCopyEffect extends GameplayEffect {
@@ -16,7 +17,7 @@ export class BuffCopyEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const buffAddEvent =
       context.triggerEvent?.type === 'BuffAddEvent'
         ? (context.triggerEvent as BuffAddEvent)
@@ -40,15 +41,21 @@ export class BuffCopyEffect extends GameplayEffect {
     const triggerKey = `buff_copy:${context.ability?.id ?? 'effect'}:${this.params.id ?? sourceBuff.id}`;
     const state = getBattleRuntimeState(triggerOwner);
     const maxTriggers = this.params.maxTriggers;
-    if (maxTriggers !== undefined && (state.counters.get(triggerKey) ?? 0) >= maxTriggers) {
+    if (
+      maxTriggers !== undefined &&
+      (state.counters.get(triggerKey) ?? 0) >= maxTriggers
+    ) {
       return;
     }
 
     const cloned = sourceBuff.clone();
     if (this.params.durationDelta && cloned.getMaxDuration() > 0) {
-      cloned.refreshToDuration(Math.max(1, cloned.getMaxDuration() + this.params.durationDelta));
+      cloned.refreshToDuration(
+        Math.max(1, cloned.getMaxDuration() + this.params.durationDelta),
+      );
     }
-    const receiver = this.params.target === 'target' ? context.target : context.caster;
+    const receiver =
+      this.params.target === 'target' ? context.target : context.caster;
     if (maxTriggers !== undefined) {
       state.counters.set(triggerKey, (state.counters.get(triggerKey) ?? 0) + 1);
     }
@@ -69,7 +76,12 @@ export class BuffCopyEffect extends GameplayEffect {
       return;
     }
     try {
-      receiver.buffs.addBuff(cloned, context.caster);
+      receiver.buffs.addBuff(cloned, context.caster, {
+        ability: context.ability,
+        buff: context.buff,
+        attribution: CombatAttributionV3.rebind(context.owner, context.origin),
+        trace: context.trace,
+      });
     } finally {
       endRuntimeGuard(receiver, copyKey);
     }

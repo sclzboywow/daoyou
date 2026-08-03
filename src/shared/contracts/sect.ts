@@ -12,7 +12,7 @@ import type {
   SectTaskRewardSnapshot,
 } from '@shared/engine/sect';
 import { StandardSectRules } from '@shared/engine/sect';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import type { CultivationProgress } from '@shared/types/cultivator';
 import { z } from 'zod';
 import type { PlayerStateMutationResponse } from './player';
@@ -217,7 +217,7 @@ export interface SectTaskSettlementData {
 }
 
 export interface SectBattleOutcomeData {
-  battle: BattleRecord;
+  battle: BattleRecordV3;
   won: boolean;
   challengeTitle: string;
   taskFulfilled: boolean;

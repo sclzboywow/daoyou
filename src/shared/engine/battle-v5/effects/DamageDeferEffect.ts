@@ -1,27 +1,30 @@
-import { AttributeType, DamageSource, DamageType } from '../core/types';
+import { GameplayTags } from '@shared/engine/shared/tag-domain';
+import { ValueCalculator } from '../core/ValueCalculator';
 import { DamageDeferParams } from '../core/configs';
 import { DamageEvent } from '../core/events';
 import { nextRuntimeSequence, rememberAmount } from '../core/runtimeState';
+import { AttributeType, DamageSource, DamageType } from '../core/types';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { GameplayTags } from '@shared/engine/shared/tag-domain';
-import { EffectContext, GameplayEffect } from './Effect';
+import { CombatMechanicCodeV3 } from '../v3/mechanics';
+import { CombatAttributionV3 } from '../v3/origin';
 import { DelayedRuntimeBuff } from './DelayedEffect';
-import { publishMechanicLog } from './advancedEffectUtils';
-import { ValueCalculator } from '../core/ValueCalculator';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
+import { commitMechanicResultV3 } from './advancedEffectUtils';
 
 export class DamageDeferEffect extends GameplayEffect {
   constructor(private params: DamageDeferParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     if (!context.triggerEvent || context.triggerEvent.type !== 'DamageEvent') {
       return;
     }
     const event = context.triggerEvent as DamageEvent;
     if (
       this.params.thresholdMaxHpRatio !== undefined &&
-      event.finalDamage < event.target.getMaxHp() * this.params.thresholdMaxHpRatio
+      event.finalDamage <
+        event.target.getMaxHp() * this.params.thresholdMaxHpRatio
     ) {
       return;
     }
@@ -39,16 +42,15 @@ export class DamageDeferEffect extends GameplayEffect {
         : Number.POSITIVE_INFINITY;
       rememberAmount(event.target, this.params.memory.key, deferred, cap);
     }
-    publishMechanicLog({
-      mechanic: 'damage_defer',
-      source: event.caster,
-      ability: event.ability,
+    commitMechanicResultV3(context, {
+      code: CombatMechanicCodeV3.DAMAGE_DEFER,
       target: event.target,
-      name: '延迟伤害',
-      displayName: '延迟伤害',
       visibility: 'player',
-      value: deferred,
-      detail: `${this.params.delayTurns}`,
+      payload: {
+        kind: 'damage_defer',
+        amount: deferred,
+        turns: this.params.delayTurns,
+      },
     });
 
     event.target.buffs.addBuff(
@@ -61,7 +63,11 @@ export class DamageDeferEffect extends GameplayEffect {
           {
             type: 'damage',
             params: {
-              value: { base: deferred, attribute: AttributeType.MAGIC_ATK, coefficient: 0 },
+              value: {
+                base: deferred,
+                attribute: AttributeType.MAGIC_ATK,
+                coefficient: 0,
+              },
               damageType: event.damageType ?? DamageType.TRUE,
               damageSource: DamageSource.DELAYED,
             },
@@ -70,6 +76,12 @@ export class DamageDeferEffect extends GameplayEffect {
         tags: [GameplayTags.BUFF.TYPE.DEBUFF],
       }),
       event.caster,
+      {
+        ability: context.ability,
+        buff: context.buff,
+        attribution: CombatAttributionV3.rebind(context.owner, context.origin),
+        trace: context.trace,
+      },
     );
   }
 }

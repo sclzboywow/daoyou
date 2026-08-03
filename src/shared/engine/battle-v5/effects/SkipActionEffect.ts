@@ -1,16 +1,15 @@
 import type { SkipActionParams } from '../core/configs';
 import { queueSkippedActions } from '../core/runtimeState';
-import { EventBus } from '../core/EventBus';
 import type { ActionStateEvent } from '../core/events';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 export class SkipActionEffect extends GameplayEffect {
   constructor(private readonly params: SkipActionParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const count = this.params.count ?? 1;
     const name = this.params.name ?? '调息';
     const sourceAbility = context.ability
@@ -23,7 +22,14 @@ export class SkipActionEffect extends GameplayEffect {
       name,
       sourceAbility,
     );
-    EventBus.instance.publish<ActionStateEvent>({
+    context.commit(context.caster, {
+      type: 'action_state',
+      stateType: 'rest',
+      phase: 'entered',
+      name,
+      remainingActions: count,
+    });
+    context.emit<ActionStateEvent>({
       type: 'ActionStateEvent',
       timestamp: Date.now(),
       unit: context.caster,

@@ -1,9 +1,9 @@
 import { ManaBurnParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import { ManaBurnEvent } from '../core/events';
 import { ValueCalculator } from '../core/ValueCalculator';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { CombatMechanicCodeV3 } from '../v3/mechanics';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /**
  * 焚元原子效果
@@ -14,7 +14,7 @@ export class ManaBurnEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { caster, target, ability } = context;
 
     // 使用统一计算器计算削减量
@@ -30,8 +30,14 @@ export class ManaBurnEffect extends GameplayEffect {
     const actualBurned = target.takeMp(burnAmount);
     if (actualBurned <= 0) return;
 
+    context.commit(target, {
+      type: 'mechanic',
+      code: CombatMechanicCodeV3.MANA_BURN,
+      payload: { kind: 'mana_burn', amount: Math.round(actualBurned) },
+    });
+
     // 发布焚元事件
-    EventBus.instance.publish<ManaBurnEvent>({
+    context.emit<ManaBurnEvent>({
       type: 'ManaBurnEvent',
       timestamp: Date.now(),
       caster,

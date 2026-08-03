@@ -1,8 +1,7 @@
 import type { RefundPaidCostParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import type { HealEvent } from '../core/events';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /** 按本次施法快照中的实际支付法力返还资源。 */
 export class RefundPaidCostEffect extends GameplayEffect {
@@ -10,7 +9,7 @@ export class RefundPaidCostEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const snapshot = context.castSnapshot;
     if (!snapshot || (this.params.resource ?? 'mp') !== 'mp') return;
     const paid = Math.max(
@@ -24,7 +23,15 @@ export class RefundPaidCostEffect extends GameplayEffect {
     if (requested <= 0) return;
 
     const applied = context.caster.restoreMp(requested);
-    EventBus.instance.publish<HealEvent>({
+    if (applied > 0) {
+      context.commit(context.caster, {
+        type: 'recovery',
+        resource: 'mp',
+        amount: Math.round(applied),
+        after: Math.round(context.caster.getCurrentMp()),
+      });
+    }
+    context.emit<HealEvent>({
       type: 'HealEvent',
       timestamp: Date.now(),
       caster: context.caster,

@@ -1,6 +1,8 @@
+import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { Buff, StackRule } from '../buffs/Buff';
 import { DelayedEffectParams } from '../core/configs';
 import { executeEffectConfigs } from '../core/effectExecutor';
+import { EventBus } from '../core/EventBus';
 import {
   ActionPostEvent,
   DamageTakenEvent,
@@ -12,8 +14,8 @@ import { rememberAmount, setDelayedBuffEffects } from '../core/runtimeState';
 import { BuffType } from '../core/types';
 import { ValueCalculator } from '../core/ValueCalculator';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { GameplayTags } from '@shared/engine/shared/tag-domain';
-import { EffectContext, GameplayEffect } from './Effect';
+import { CombatAttributionV3 } from '../v3/origin';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 export class DelayedRuntimeBuff extends Buff {
   private remainingTurns: number;
@@ -60,16 +62,34 @@ export class DelayedRuntimeBuff extends Buff {
     this.triggerCount += 1;
 
     const owner = this._owner;
-    owner.buffs.removeBuff(this.id);
+    const attribution = this.getCombatAttributionV3();
+    if (!attribution) {
+      throw new Error(`Delayed buff ${this.id} has no CombatAttributionV3`);
+    }
+    const trace = EventBus.instance.getCurrentTrace();
+    if (!trace) {
+      throw new Error(`Delayed buff ${this.id} trigger has no causal trace`);
+    }
+    owner.buffs.removeBuff(this.id, { attribution, trace });
     this.executeDelayedEffects(owner);
   }
 
-  private executeDelayedEffects(owner: EffectContext['target']): void {
-    executeEffectConfigs(this.params.effects, {
-      caster: this._source ?? owner,
-      target: owner,
-      buff: this,
-    });
+  private executeDelayedEffects(
+    owner: EffectExecutionContextV3['target'],
+  ): void {
+    const attribution = this.getCombatAttributionV3();
+    if (!attribution) {
+      throw new Error(`Delayed buff ${this.id} has no CombatAttributionV3`);
+    }
+    executeEffectConfigs(
+      this.params.effects,
+      EffectExecutionContextV3.buff({
+        owner: attribution.owner,
+        caster: this._source ?? owner,
+        target: owner,
+        buff: this,
+      }),
+    );
   }
 
   private subscribeRecordEvent(): void {
@@ -156,7 +176,9 @@ export class DelayedRuntimeBuff extends Buff {
     return record.maxStored;
   }
 
-  override onDeactivate(reason?: 'manual' | 'expired' | 'dispel' | 'replace'): void {
+  override onDeactivate(
+    reason?: import('../buffs/Buff').BuffDeactivateReason,
+  ): void {
     const owner = this._owner;
     if (owner && this.params.statusTags) {
       owner.tags.removeTags(this.params.statusTags);
@@ -174,9 +196,7 @@ export class DelayedRuntimeBuff extends Buff {
   }
 
   override clone(): DelayedRuntimeBuff {
-    const cloned = new DelayedRuntimeBuff(this.params);
-    cloned.setSource(this._source);
-    return cloned;
+    return new DelayedRuntimeBuff(this.params);
   }
 }
 
@@ -185,8 +205,17 @@ export class DelayedEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
-    context.target.buffs.addBuff(new DelayedRuntimeBuff(this.params), context.caster);
+  execute(context: EffectExecutionContextV3): void {
+    context.target.buffs.addBuff(
+      new DelayedRuntimeBuff(this.params),
+      context.caster,
+      {
+        ability: context.ability,
+        buff: context.buff,
+        attribution: CombatAttributionV3.rebind(context.owner, context.origin),
+        trace: context.trace,
+      },
+    );
   }
 }
 

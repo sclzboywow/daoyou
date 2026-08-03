@@ -1,10 +1,9 @@
 import type { LifestealParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import type { DamageTakenEvent, HealEvent } from '../core/events';
 import { claimActionAmount } from '../core/runtimeState';
 import { DamageSource } from '../core/types';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import type { EffectContext } from './Effect';
+import type { EffectExecutionContextV3 } from './Effect';
 import { GameplayEffect } from './Effect';
 
 export class LifestealEffect extends GameplayEffect {
@@ -12,7 +11,7 @@ export class LifestealEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     if (context.triggerEvent?.type !== 'DamageTakenEvent') return;
     const event = context.triggerEvent as DamageTakenEvent;
     if (event.canLifesteal === false) return;
@@ -26,7 +25,15 @@ export class LifestealEffect extends GameplayEffect {
     );
     if (amount <= 0) return;
     const appliedAmount = context.caster.heal(amount);
-    EventBus.instance.publish<HealEvent>({
+    if (appliedAmount > 0) {
+      context.commit(context.caster, {
+        type: 'recovery',
+        resource: 'hp',
+        amount: Math.round(appliedAmount),
+        after: Math.round(context.caster.getCurrentHp()),
+      });
+    }
+    context.emit<HealEvent>({
       type: 'HealEvent',
       timestamp: Date.now(),
       caster: context.caster,

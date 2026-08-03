@@ -2,7 +2,7 @@ import { PercentDamageModifierParams } from '../core/configs';
 import { DamageRequestEvent } from '../core/events';
 import { DamageSource } from '../core/types';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /**
  * 百分比增减伤原子效果
@@ -13,7 +13,7 @@ export class PercentDamageModifierEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { triggerEvent } = context;
     if (!triggerEvent || triggerEvent.type !== 'DamageRequestEvent') return;
 

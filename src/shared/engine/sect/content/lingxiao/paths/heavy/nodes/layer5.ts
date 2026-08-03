@@ -2,7 +2,7 @@ import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { DAMAGE_MODIFIER_PRIORITY } from '../../../../../core';
 import { createLingxiaoNode } from '../../../shared/createLingxiaoNode';
 import {
-  growthMagnitude,
+  growthShieldMagnitude,
   nodePercent,
 } from '../../../shared/LingxiaoNodeDescription';
 import { addLingxiaoPassive } from '../../../shared/SwordNodePassives';
@@ -72,6 +72,6 @@ export const HEAVY_LAYER_5_NODES = [
     },
     (_context, builder) => heavySwordBuild(builder).enable('returningPeak'),
     (context) =>
-      `《此剑平生》伤害降低15%；施展后返还2点剑意，并获得相当于${nodePercent(growthMagnitude(context, 'lingxiao-canon', HEAVY_RETURNING_PEAK_SHIELD_COEFFICIENT))}物攻的护盾。`,
+      `《此剑平生》伤害降低15%；施展后返还2点剑意，并获得相当于${nodePercent(growthShieldMagnitude(context, 'lingxiao-canon', HEAVY_RETURNING_PEAK_SHIELD_COEFFICIENT))}物攻的护盾。`,
   ),
 ] as const;

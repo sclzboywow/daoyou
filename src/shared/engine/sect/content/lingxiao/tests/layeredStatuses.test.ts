@@ -72,7 +72,7 @@ describe('红尘剑宗分层状态', () => {
   beforeEach(() => EventBus.instance.reset());
 
   it.each([1, 2, 3])(
-    '剑痕%i层提高对应伤害2.8%%/层并排除反伤与DOT',
+    '剑痕%i层提高对应伤害2.24%%/层并排除反伤与DOT',
     (layers) => {
       const target = new Unit('target', '目标', {});
       const caster = new Unit('caster', '施法者', {});
@@ -95,20 +95,20 @@ describe('红尘剑宗分层状态', () => {
         return event.damageIncreasePctBucket ?? 0;
       };
       expect(request(DamageSource.DIRECT, DamageType.PHYSICAL)).toBeCloseTo(
-        0.028 * layers,
+        0.0224 * layers,
       );
       expect(request(DamageSource.COUNTER, DamageType.PHYSICAL)).toBeCloseTo(
-        0.028 * layers,
+        0.0224 * layers,
       );
       expect(request(DamageSource.FOLLOW_UP, DamageType.PHYSICAL)).toBeCloseTo(
-        0.028 * layers,
+        0.0224 * layers,
       );
       expect(request(DamageSource.REFLECT, DamageType.PHYSICAL)).toBe(0);
       expect(request(DamageSource.DIRECT, DamageType.DOT)).toBe(0);
     },
   );
 
-  it.each([1, 2, 3])('裂甲%i层降低4.2%%物防/层，移除后完整恢复', (layers) => {
+  it.each([1, 2, 3])('裂甲%i层降低3.36%%物防/层，移除后完整恢复', (layers) => {
     const target = new Unit('target', '目标', {});
     const caster = new Unit('caster', '施法者', {});
     const config = statusConfig('heavy-sword', LINGXIAO_ARMOR_REND_BUFF);
@@ -117,7 +117,7 @@ describe('红尘剑宗分层状态', () => {
       target.buffs.addBuff(BuffFactory.create(config), caster);
     }
     expect(target.attributes.getValue(AttributeType.DEF)).toBeCloseTo(
-      baseline * (1 - 0.042 * layers),
+      baseline * (1 - 0.0336 * layers),
     );
     target.buffs.removeBuff(LINGXIAO_ARMOR_REND_BUFF);
     expect(target.attributes.getValue(AttributeType.DEF)).toBe(baseline);
@@ -130,11 +130,11 @@ describe('红尘剑宗分层状态', () => {
     const first = BuffFactory.create(config);
     target.buffs.addBuff(first, caster);
     first.tickDuration();
-    expect(first.getDuration()).toBe(5);
+    expect(first.getDuration()).toBe(4);
     for (let index = 0; index < 4; index += 1) {
       target.buffs.addBuff(BuffFactory.create(config), caster);
     }
     expect(first.getLayer()).toBe(3);
-    expect(first.getDuration()).toBe(6);
+    expect(first.getDuration()).toBe(5);
   });
 });

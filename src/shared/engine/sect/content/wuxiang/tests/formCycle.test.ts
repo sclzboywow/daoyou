@@ -255,7 +255,7 @@ describe('无相禅宗三相循环', () => {
       cast(defaultAttack, owner, enemy),
     );
 
-    expect(segments).toEqual([0.6]);
+    expect(segments).toEqual([0.601]);
     expect(enemy.buffs.getAllBuffIds()).toContain(
       'sect.wuxiang.mirror.heart-vow',
     );
@@ -303,7 +303,7 @@ describe('无相禅宗三相循环', () => {
       cast(threeKnocks, owner, enemy),
     );
 
-    expect(segments).toEqual([0.28, 0.28, 0.28, 0.25, 0.25, 0.35]);
+    expect(segments).toEqual([0.2804, 0.2804, 0.2804, 0.2504, 0.2504, 0.3506]);
     expect(
       enemy.buffs
         .getAllBuffs()
@@ -354,15 +354,15 @@ describe('无相禅宗三相循环', () => {
         damageTaken: 65,
         beforeHp: owner.getCurrentHp(),
         remainHp: owner.getCurrentHp(),
-        isLethal: false,
+        hpReachedZeroBeforeReactions: false,
       });
     }
 
-    expect(reductions).toEqual([0.35, 0.35]);
+    expect(reductions).toEqual([0.3502, 0.3502]);
     expect(counters).toHaveLength(2);
     expect(
       counters.map((event) => event.damageComponents?.[0]?.segmentMultiplier),
-    ).toEqual([0.45, 0.45]);
+    ).toEqual([0.4502, 0.4502]);
   });
 
   it('净化没有可选目标仍是合法结算，并消费一次魔相', () => {
@@ -401,7 +401,7 @@ describe('无相禅宗三相循环', () => {
         damageTaken: 100,
         beforeHp: owner.getCurrentHp(),
         remainHp: owner.getCurrentHp(),
-        isLethal: false,
+        hpReachedZeroBeforeReactions: false,
       });
 
     beginRuntimeAction(enemy);
@@ -467,7 +467,7 @@ describe('无相禅宗三相循环', () => {
 
     cast(defaultAttack, owner, enemy);
 
-    expect(segments).toEqual([0.6, 0.35, 0.3, 0.6]);
+    expect(segments).toEqual([0.601, 0.3506, 0.3005, 0.601]);
     expect(
       owner.buffs
         .getAllBuffs()
@@ -493,7 +493,7 @@ describe('无相禅宗三相循环', () => {
       const cost = Math.ceil(before * 0.06);
       return {
         healed: owner.getCurrentHp() - (before - cost),
-        expected: Math.round(owner.getMaxHp() * 0.025),
+        expected: Math.round(owner.getMaxHp() * 0.0251),
       };
     };
 
@@ -511,8 +511,8 @@ describe('无相禅宗三相循环', () => {
       return damageSegments(knocks, () => cast(knocks, owner, enemy));
     };
 
-    expect(executeAt(0.5)).toEqual([0.25, 0.25, 0.25]);
-    expect(executeAt(0.48)).toEqual([0.25, 0.25, 0.25, 0.25]);
+    expect(executeAt(0.5)).toEqual([0.2504, 0.2504, 0.2504]);
+    expect(executeAt(0.48)).toEqual([0.2504, 0.2504, 0.2504, 0.2504]);
   });
 
   it('连续两次魔相使用同一 B，不存在第一门与第二门分支', () => {
@@ -531,8 +531,8 @@ describe('无相禅宗三相循环', () => {
       cast(defaultAttack, owner, enemy),
     );
 
-    expect(first).toEqual([0.6, 0.35]);
-    expect(second).toEqual([0.6, 0.35]);
+    expect(first).toEqual([0.601, 0.3506]);
+    expect(second).toEqual([0.601, 0.3506]);
     expect(readAbilityMode(owner, WUXIANG_FORM_MODE)).toBeUndefined();
   });
 
@@ -555,7 +555,7 @@ describe('无相禅宗三相循环', () => {
       damageTaken: 100,
       beforeHp: enemy.getCurrentHp() + 100,
       remainHp: enemy.getCurrentHp(),
-      isLethal: false,
+      hpReachedZeroBeforeReactions: false,
     });
     expect(owner.getCurrentHp()).toBe(beforeAttack + 25);
 

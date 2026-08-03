@@ -769,10 +769,10 @@ describe('EnemyGenerator', () => {
     const bossResult = simulateBattleV5(
       prepareStandardFullBattle({ player, opponent: bossEnemy }),
     );
-    expect(normalResult.winner).toBeDefined();
-    expect(normalResult.logs.length).toBeGreaterThan(0);
-    expect(bossResult.winner).toBeDefined();
-    expect(bossResult.logs.length).toBeGreaterThan(0);
+    expect(normalResult.outcome.winner).toBeDefined();
+    expect(normalResult.sequences.length).toBeGreaterThan(0);
+    expect(bossResult.outcome.winner).toBeDefined();
+    expect(bossResult.sequences.length).toBeGreaterThan(0);
   });
 
   it('keeps early and mid difficulty enemies within baseline combat pressure', () => {
@@ -811,17 +811,17 @@ describe('EnemyGenerator', () => {
     expect(
       simulateBattleV5(
         prepareStandardFullBattle({ player, opponent: lowEnemy }),
-      ).winner.id,
+      ).outcome.winner.id,
     ).toBe(player.id);
     expect(
       simulateBattleV5(
         prepareStandardFullBattle({ player, opponent: midEnemy }),
-      ).turns,
+      ).outcome.turns,
     ).toBeGreaterThan(3);
     expect(
       simulateBattleV5(
         prepareStandardFullBattle({ player, opponent: eliteEnemy }),
-      ).turns,
+      ).outcome.turns,
     ).toBeGreaterThan(1);
   });
 

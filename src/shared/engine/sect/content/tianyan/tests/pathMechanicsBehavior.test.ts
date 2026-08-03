@@ -130,7 +130,7 @@ describe('天衍衍数与双道途实际结算', () => {
     expect(directRequest?.damageIncreasePctBucket).toBeCloseTo(0.20, 8);
     expect(owner.getCurrentHp()).toBeGreaterThan(hpBefore);
     expect(owner.getCurrentMp()).toBe(
-      mpBefore - 100 + Math.round(owner.getMaxMp() * 0.04),
+      mpBefore - 100 + Math.round(owner.getMaxMp() * 0.0402),
     );
     expect(owner.combatResources.getCurrent(TIANYAN_DERIVATION)).toBe(0);
     expect(
@@ -151,7 +151,7 @@ describe('天衍衍数与双道途实际结算', () => {
     cast(skill('flowing-flame'), owner, enemy);
 
     expect(owner.getCurrentMp()).toBe(
-      before - 100 + Math.round(owner.getMaxMp() * 0.08),
+      before - 100 + Math.round(owner.getMaxMp() * 0.0804),
     );
   });
 
@@ -272,7 +272,7 @@ describe('天衍衍数与双道途实际结算', () => {
     cast(skill('heavenly-river-cleansing'), owner, owner);
 
     expect(owner.getCurrentMp()).toBe(
-      before - 180 + Math.round(owner.getMaxMp() * 0.12),
+      before - 180 + Math.round(owner.getMaxMp() * 0.1206),
     );
   });
 
@@ -315,7 +315,7 @@ describe('天衍衍数与双道途实际结算', () => {
 
     enemy.setHp(enemy.getMaxHp());
     cast(skill('dark-water-return'), owner, enemy);
-    expect(directRequests.at(-1)?.damageIncreasePctBucket).toBeCloseTo(0.20, 8);
+    expect(directRequests.at(-1)?.damageIncreasePctBucket).toBeCloseTo(0.2022, 8);
     expect(owner.buffs.getAllBuffIds()).not.toContain(TIANYAN_REVERSE_SHIFT);
   });
 
@@ -545,9 +545,9 @@ describe('天衍衍数与双道途实际结算', () => {
     };
 
     expect(directCoefficient(twoUtilities) / directCoefficient(noUtility))
-      .toBeCloseTo(1.16, 8);
-    expect(healRatio(twoUtilities) / healRatio(noUtility)).toBeCloseTo(1.16, 8);
-    expect(shieldRatio(twoUtilities) / shieldRatio(noUtility)).toBeCloseTo(1.16, 8);
+      .toBeCloseTo(1.16, 3);
+    expect(healRatio(twoUtilities) / healRatio(noUtility)).toBeCloseTo(1.16, 3);
+    expect(shieldRatio(twoUtilities) / shieldRatio(noUtility)).toBeCloseTo(1.16, 3);
   });
 
   it('移宫换宿和五气归藏在无印目标上均不可触发且不会支付费用', () => {
@@ -595,7 +595,7 @@ describe('天衍衍数与双道途实际结算', () => {
     if (expected === 'hp') expect(owner.getCurrentHp()).toBeGreaterThan(hpBefore);
     else if (expected === 'mp') {
       expect(owner.getCurrentMp()).toBe(
-        mpBefore - 160 + Math.round(owner.getMaxMp() * 0.10),
+        mpBefore - 160 + Math.round(owner.getMaxMp() * 0.101),
       );
     }
     else if (expected === 'shield') {

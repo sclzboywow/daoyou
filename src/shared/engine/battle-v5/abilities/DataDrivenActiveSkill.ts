@@ -1,7 +1,4 @@
-import { ActiveSkill, ActiveSkillConfig } from './ActiveSkill';
 import { GlobalUniqueConfig } from '../core/configs';
-import { GameplayEffect, EffectContext } from '../effects/Effect';
-import { AbilityId, CombatEvent } from '../core/types';
 import {
   ListenerRuntimeConfig,
   resolveListenerContext,
@@ -11,11 +8,18 @@ import {
   claimGlobalUniqueEffect,
   releaseGlobalUniqueEffects,
 } from '../core/runtimeState';
+import { AbilityId, CombatEvent } from '../core/types';
+import {
+  EffectExecutionContextV3,
+  executeGameplayEffectV3,
+  GameplayEffect,
+} from '../effects/Effect';
 import { Unit } from '../units/Unit';
+import { ActiveSkill, ActiveSkillConfig } from './ActiveSkill';
 
 /**
  * 数据驱动的主动技能 (Data-Driven Active Skill)
- * 
+ *
  * 职责：
  * - 作为原子效果 (GameplayEffect) 的容器
  * - 按照顺序执行所有原子效果
@@ -93,28 +97,32 @@ export class DataDrivenActiveSkill extends ActiveSkill {
    * 依次触发所有装配的效果
    */
   protected executeSkill(caster: Unit, target: Unit): void {
-    const context: EffectContext = {
+    const context = EffectExecutionContextV3.activeAbility({
+      owner: caster,
       caster,
       target,
       ability: this,
       castSnapshot: this.castSnapshot,
-    };
+    });
 
     // 依次执行效果链
     for (const effect of this._effects) {
-      effect.execute(context);
+      if (!context.canExecuteEffect()) break;
+      executeGameplayEffectV3(effect, context);
     }
   }
 
   protected override executeCastEffects(caster: Unit, target: Unit): void {
-    const context: EffectContext = {
+    const context = EffectExecutionContextV3.activeAbility({
+      owner: caster,
       caster,
       target,
       ability: this,
       castSnapshot: this.castSnapshot,
-    };
+    });
     for (const effect of this._castEffects) {
-      effect.execute(context);
+      if (!context.canExecuteEffect()) break;
+      executeGameplayEffectV3(effect, context);
     }
   }
 
@@ -139,15 +147,16 @@ export class DataDrivenActiveSkill extends ActiveSkill {
     }
 
     const resolved = resolveListenerContext(owner, event, runtime.mapping);
-    const context: EffectContext = {
+    const context = EffectExecutionContextV3.passiveAbility({
+      owner,
       caster: resolved.caster,
       target: resolved.target,
       ability: this,
       triggerEvent: event,
-    };
+    });
 
     for (const { effect } of effects) {
-      effect.execute(context);
+      executeGameplayEffectV3(effect, context);
     }
   }
 

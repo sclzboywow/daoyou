@@ -45,6 +45,8 @@
   --color-battle-gold-soft: rgba(239, 191, 4, 0.58);
   --color-resource-hp: #c1121f;
   --color-resource-mp: #1685a9;
+  --color-resource-shield: #936100;
+  --color-resource-shield-soft: rgba(239, 191, 4, 0.58);
   --color-battle-log-ability: #8f2433;
   --color-battle-log-damage-generic: #9f2f3f;
   --color-battle-log-damage-physical: #b4232f;
@@ -53,7 +55,7 @@
   --color-battle-log-damage-dot: #8a4b18;
   --color-battle-log-positive: #2f6f4e;
   --color-battle-log-negative: #9f2f3f;
-  --color-battle-log-shield: #376a63;
+  --color-battle-log-shield: var(--color-resource-shield);
   --color-battle-log-resource: #765200;
   --color-battle-log-buff: #2f6f4e;
   --color-battle-log-debuff: #9f2f3f;
@@ -197,54 +199,10 @@ body {
   }
 }
 
-/* 战报样式增强 */
+/* 战报只定义字体环境；字号和行高由结构化日志组件按层级管理。 */
 .battle-report {
   font-family: var(--font-lxgwwenkai), serif;
-  line-height: 1.8;
   text-align: left;
-}
-
-/* 
- * 字体大小规范 (Typography Standards)
- * - .font-heading: 显式 display 标题字体 (Ma Shan Zheng)
- * - text-base (1rem/16px): 主要正文、标准按钮、输入框
- * - text-sm (0.875rem/14px): 次要信息、小按钮、标签
- * - text-xs (0.75rem/12px): 极少数提示、元数据、微型标注。禁止用于按钮。
- */
-
-.battle-report turn {
-  color: var(--color-crimson);
-  font-weight: bold;
-}
-
-.battle-report name {
-  color: var(--color-ink);
-  font-weight: 600;
-}
-
-.battle-report skill {
-  color: var(--color-teal);
-  font-weight: 600;
-}
-
-.battle-report damage {
-  color: var(--color-crimson);
-  font-weight: bold;
-}
-
-.battle-report heal {
-  color: var(--color-teal);
-  font-weight: bold;
-}
-
-.battle-report effect {
-  color: var(--color-wood);
-  font-style: italic;
-}
-
-.battle-report result {
-  color: var(--color-crimson);
-  font-weight: bold;
 }
 
 /* 动画 */

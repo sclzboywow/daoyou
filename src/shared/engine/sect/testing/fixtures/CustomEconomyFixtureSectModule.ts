@@ -1,7 +1,7 @@
 import {
   BaseSectModule,
+  StandardSectMethodGrowthPolicy,
   StandardSectCapabilityPolicy,
-  standardSectMethodGrowthPolicy,
   standardSectProgression,
   type SectBuildBuilder,
   type SectDefinition,
@@ -152,7 +152,7 @@ class CustomEconomyFixtureSectModule extends BaseSectModule {
       fixtureDefinition,
       Array.from(FIXTURE_SECT_MODULE.paths.values()),
       standardSectProgression,
-      standardSectMethodGrowthPolicy,
+      new StandardSectMethodGrowthPolicy(fixtureDefinition.methods),
       fixtureOrganization,
       {
         check: (context) => FIXTURE_SECT_MODULE.checkAdmission(context),

@@ -11,13 +11,13 @@ import type {
   BattleUnitInitFragment,
 } from '@shared/engine/battle-v5/setup/types';
 import { simulateBattleV5 } from '@shared/lib/battle/simulateBattleV5';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import type { CultivatorCondition } from '@shared/types/condition';
 import { ConditionService } from './ConditionService';
 
 export interface PersistentWorldBattleExecution {
   context: PreparedBattleContext;
-  battleResult: BattleRecord;
+  battleResult: BattleRecordV3;
   conditionBaseline: CultivatorCondition;
   nextCondition: CultivatorCondition;
   didLose: boolean;
@@ -112,10 +112,10 @@ export function executePersistentWorldBattle(args: {
     args.randomSource,
   );
   const playerId = args.player.id ?? args.player.name;
-  const didLose = battleResult.winner.id !== playerId;
+  const didLose = battleResult.outcome.winner.id !== playerId;
   const playerSnapshot = didLose
-    ? battleResult.loserSnapshot
-    : battleResult.winnerSnapshot;
+    ? battleResult.finalSnapshots.loser
+    : battleResult.finalSnapshots.winner;
   if (!playerSnapshot) {
     throw new Error('战斗终局缺少玩家状态快照');
   }

@@ -55,24 +55,19 @@ describe('护盾 Buff 真实战斗验证', () => {
     const engine = new BattleEngineV5(player, opponent);
     const result = engine.execute();
 
-    // 4. 分析日志
-    console.log('--- 护盾战斗验证战报 ---');
-    result.logs.forEach((log) => console.log(log));
-    console.log('------------------------');
-
-    // 验证护盾生成日志（新格式：施放【不动如山】，为 XXX 施加 XXX 点护盾）
-    const hasShieldGenLog = result.logs.some(
-      (l) => l.includes('不动如山') && l.includes('施加') && l.includes('护盾'),
-    );
-    expect(hasShieldGenLog).toBe(true);
-
-    // 验证护盾抵扣日志
-    const hasAbsorbLog = result.logs.some((l) => l.includes('护盾'));
-    expect(hasAbsorbLog).toBe(true);
-
-    // 验证护盾破碎日志（新格式：抵扣护盾 XXX 点，护盾已破碎）
-    const hasShieldBreakLog = result.logs.some((l) => l.includes('护盾已破碎'));
-
-    expect(hasShieldBreakLog).toBe(true);
+    const facts = result.sequences.flatMap((sequence) => sequence.facts);
+    expect(
+      facts.some(
+        (fact) =>
+          fact.type === 'shield' &&
+          fact.origin.kind === 'owned' &&
+          fact.origin.carrier.name === '不动如山',
+      ),
+    ).toBe(true);
+    expect(
+      facts.some(
+        (fact) => fact.type === 'damage' && fact.shieldAbsorbed > 0,
+      ),
+    ).toBe(true);
   });
 });

@@ -26,9 +26,10 @@ import { AbilityFactory } from '../../factories/AbilityFactory';
 import { BattleEngineV5 } from '../../BattleEngineV5';
 import { ActionExecutionSystem } from '../../systems/ActionExecutionSystem';
 import { DamageSystem } from '../../systems/DamageSystem';
-import { LogAggregator } from '../../systems/log/LogAggregator';
-import { LogCollector } from '../../systems/log/LogCollector';
+import { CombatRecordBuilderV3 } from '../../v3/CombatRecordBuilderV3';
 import { Unit } from '../../units/Unit';
+import { executeTestEffect } from '../setup/executeTestEffect';
+import { publishTestDamageRequest } from '../setup/combatV3TestHarness';
 import { vi } from 'vitest';
 
 class TrackingSkill extends ActiveSkill {
@@ -357,9 +358,7 @@ describe('DamageSystem hit check', () => {
 
   it('control resistance should be collected as a resist log entry', () => {
     const actionExecutionSystem = new ActionExecutionSystem();
-    const aggregator = new LogAggregator();
-    const collector = new LogCollector(aggregator);
-    collector.subscribe(EventBus.instance);
+    const builder = new CombatRecordBuilderV3(EventBus.instance);
 
     const caster = new Unit('caster', '施法者', {
       [AttributeType.WILLPOWER]: 0,
@@ -396,19 +395,28 @@ describe('DamageSystem hit check', () => {
       ],
     });
 
-    EventBus.instance.publish<SkillPreCastEvent>({
-      type: 'SkillPreCastEvent',
-      timestamp: Date.now(),
-      caster,
-      target,
-      ability: skill,
-      isInterrupted: false,
-    });
+    builder.runInSequence(
+      { id: 'sequence:control-resist', phase: 'action', turn: 1 },
+      () => {
+        EventBus.instance.publish<SkillPreCastEvent>({
+          type: 'SkillPreCastEvent',
+          timestamp: Date.now(),
+          caster,
+          target,
+          ability: skill,
+          isInterrupted: false,
+        });
+      },
+    );
 
-    const entries = aggregator.getSpans().flatMap((span) => span.entries);
-    expect(entries.some((entry) => entry.type === 'resist')).toBe(true);
+    const facts = builder.getSequences().flatMap((sequence) => sequence.facts);
+    expect(
+      facts.some(
+        (fact) => fact.type === 'defense' && fact.defense === 'resist',
+      ),
+    ).toBe(true);
 
-    collector.unsubscribe(EventBus.instance);
+    builder.destroy();
     actionExecutionSystem.destroy();
   });
 });
@@ -470,7 +478,7 @@ describe('DamageSystem direct mitigation', () => {
       },
     });
 
-    damageEffect.execute({
+    executeTestEffect(damageEffect, {
       caster: attacker,
       target: defender,
     });
@@ -520,7 +528,7 @@ describe('DamageSystem direct mitigation', () => {
       .mockReturnValueOnce(0.99)
       .mockReturnValueOnce(0.5);
 
-    EventBus.instance.publish(event);
+    publishTestDamageRequest(event);
 
     const defense = defender.attributes.getValue(AttributeType.DEF);
     const mitigatedBase = (100 * 100) / (100 + defense);
@@ -547,12 +555,12 @@ describe('DamageSystem direct mitigation', () => {
       .mockReturnValueOnce(0.99)
       .mockReturnValueOnce(0.5);
 
-    new DamageEffect({
+    executeTestEffect(new DamageEffect({
       value: {
         base: 40,
         targetMaxHpRatio: 0.1,
       },
-    }).execute({
+    }), {
       caster: attacker,
       target: defender,
     });
@@ -596,7 +604,7 @@ describe('DamageSystem direct mitigation', () => {
       finalDamage: 100,
     };
 
-    EventBus.instance.publish(event);
+    publishTestDamageRequest(event);
 
     expect(event.finalDamage).toBe(116);
 
@@ -623,7 +631,7 @@ describe('DamageSystem direct mitigation', () => {
       finalDamage: 100,
     };
 
-    EventBus.instance.publish(event);
+    publishTestDamageRequest(event);
 
     expect(event.finalDamage).toBe(100);
 
@@ -661,7 +669,7 @@ describe('DamageSystem direct mitigation', () => {
       finalDamage: 100,
     };
 
-    EventBus.instance.publish(event);
+    publishTestDamageRequest(event);
 
     expect(event.finalDamage).toBe(106);
 
@@ -704,7 +712,7 @@ describe('DamageSystem direct mitigation', () => {
       finalDamage: 100,
     };
 
-    EventBus.instance.publish(event);
+    publishTestDamageRequest(event);
 
     expect(event.finalDamage).toBe(119);
 
@@ -731,7 +739,7 @@ describe('DamageSystem direct mitigation', () => {
       finalDamage: 100,
     };
 
-    EventBus.instance.publish(event);
+    publishTestDamageRequest(event);
 
     expect(event.finalDamage).toBe(100);
 
@@ -751,7 +759,7 @@ describe('DamageSystem direct mitigation', () => {
 
     EventBus.instance.subscribe<DamageTakenEvent>('DamageTakenEvent', (event) => {
       if (event.target === defender) {
-        reflect.execute({
+        executeTestEffect(reflect, {
           caster: defender,
           target: defender,
           triggerEvent: event,
@@ -769,7 +777,7 @@ describe('DamageSystem direct mitigation', () => {
       .mockReturnValueOnce(0.5)
       .mockReturnValueOnce(0.5);
 
-    EventBus.instance.publish<DamageRequestEvent>({
+    publishTestDamageRequest({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster: attacker,
@@ -817,7 +825,7 @@ describe('DamageSystem direct mitigation', () => {
       finalDamage: 100,
     };
 
-    EventBus.instance.publish(event);
+    publishTestDamageRequest(event);
 
     expect(event.finalDamage).toBe(116);
 

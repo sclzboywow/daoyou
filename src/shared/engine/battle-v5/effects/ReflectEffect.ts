@@ -1,6 +1,5 @@
-import { GameplayEffect, EffectContext } from './Effect';
+import { GameplayEffect, EffectExecutionContextV3 } from './Effect';
 import { DamageRequestEvent, DamageTakenEvent } from '../core/events';
-import { EventBus } from '../core/EventBus';
 import { EffectRegistry } from '../factories/EffectRegistry';
 import { ReflectParams } from '../core/configs';
 import { DamageSource } from '../core';
@@ -15,7 +14,7 @@ export class ReflectEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { triggerEvent, target } = context;
 
     // 需要感知受击伤害
@@ -56,7 +55,7 @@ export class ReflectEffect extends GameplayEffect {
 
     // 给攻击者发送伤害请求
     if (attacker && attacker.isAlive()) {
-      EventBus.instance.publish<DamageRequestEvent>({
+      context.emit<DamageRequestEvent>({
         type: 'DamageRequestEvent',
         timestamp: Date.now(),
         caster: target,

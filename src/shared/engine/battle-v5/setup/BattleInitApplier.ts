@@ -7,9 +7,7 @@ import type { AttributeModifierConfig } from '../core/configs';
 import { AttributeType } from '../core/types';
 import { BuffFactory } from '../factories/BuffFactory';
 import { Unit } from '../units/Unit';
-import {
-  getCombatStatusTemplate,
-} from './CombatStatusTemplateRegistry';
+import { getCombatStatusTemplate } from './CombatStatusTemplateRegistry';
 import type {
   BattleInitConfigV5,
   BattleUnitInitSpec,
@@ -97,7 +95,7 @@ function applyStartingBuffs(
     const source = entry.source === 'opponent' ? counterpart : unit;
     const targetLayers = Math.max(1, Math.floor(entry.stacks ?? 1));
     buff.setLayer(targetLayers);
-    unit.buffs.addBuff(buff, source);
+    unit.buffs.initializeBuff(buff, source);
 
     if (!buff.isPermanent()) {
       buff.refreshToDuration(entry.buff.duration);
@@ -120,7 +118,11 @@ function applyStatusRefs(
 
     const fragment = template.toBattleInit(status);
     applyBaseAttributeOverrides(unit, fragment);
-    mountModifierConfigs(unit, fragment.modifiers, `status:${status.templateId}`);
+    mountModifierConfigs(
+      unit,
+      fragment.modifiers,
+      `status:${status.templateId}`,
+    );
     applyStartingBuffs(unit, counterpart, fragment);
 
     if (fragment.resourceState) {
@@ -146,7 +148,10 @@ function applyResourceState(
 
   const resolvedHp = resolveCurrentResource(resourceState.hp, unit.getMaxHp());
   const resolvedMp = resolveCurrentResource(resourceState.mp, unit.getMaxMp());
-  const resolvedShield = resolveShieldResource(resourceState.shield, unit.getMaxHp());
+  const resolvedShield = resolveShieldResource(
+    resourceState.shield,
+    unit.getMaxHp(),
+  );
   unit.initializeResources({
     hp: resolvedHp,
     mp: resolvedMp,
@@ -176,10 +181,7 @@ function mergeBodyCultivationInit(
   return {
     ...spec,
     resourceState: spec?.resourceState,
-    startingBuffs: [
-      ...(spec?.startingBuffs ?? []),
-      ...bodyStartingBuffs,
-    ],
+    startingBuffs: [...(spec?.startingBuffs ?? []), ...bodyStartingBuffs],
   };
 }
 
@@ -195,7 +197,11 @@ function applyUnitInit(
 
   applyBaseAttributeOverrides(unit, spec);
   mountModifierConfigs(unit, spec.modifiers, `direct:${unit.id}`);
-  const deferredResourceState = applyStatusRefs(unit, counterpart, spec.statusRefs);
+  const deferredResourceState = applyStatusRefs(
+    unit,
+    counterpart,
+    spec.statusRefs,
+  );
   applyStartingBuffs(unit, counterpart, spec);
   unit.updateDerivedStats();
   applyResourceState(unit, spec, deferredResourceState);

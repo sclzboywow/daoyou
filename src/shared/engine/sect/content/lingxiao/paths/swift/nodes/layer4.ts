@@ -3,6 +3,7 @@ import { DAMAGE_MODIFIER_PRIORITY } from '../../../../../core';
 import { createLingxiaoNode } from '../../../shared/createLingxiaoNode';
 import {
   growthMagnitude,
+  growthShieldMagnitude,
   nodePercent,
 } from '../../../shared/LingxiaoNodeDescription';
 import { addLingxiaoPassive } from '../../../shared/SwordNodePassives';
@@ -81,6 +82,6 @@ export const SWIFT_LAYER_4_NODES = [
     },
     (_context, builder) => swiftSwordBuild(builder).enable('sheathing'),
     (context) =>
-      `《此剑平生》伤害降低15%；施展后返还2点剑意，并获得相当于${nodePercent(growthMagnitude(context, 'lingxiao-canon', SWIFT_SHEATHING_SHIELD_COEFFICIENT))}物攻的护盾。剑有出时，也应有归处。`,
+      `《此剑平生》伤害降低15%；施展后返还2点剑意，并获得相当于${nodePercent(growthShieldMagnitude(context, 'lingxiao-canon', SWIFT_SHEATHING_SHIELD_COEFFICIENT))}物攻的护盾。剑有出时，也应有归处。`,
   ),
 ] as const;

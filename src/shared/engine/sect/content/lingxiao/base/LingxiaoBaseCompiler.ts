@@ -202,6 +202,7 @@ export function compileLingxiaoBase(
     effects: [
       sectEffects.physicalDamage(0.95),
       sectEffects.dispelPositiveBuffsByMethod(
+        'edge-cleansing',
         1,
         context.sect.methods['edge-cleansing'],
         context.methodGrowth,

@@ -1,3 +1,4 @@
+import type { BattleRecordUnitSummary } from './battle';
 import type { ElementType, Quality } from './constants';
 import type { Artifact, Consumable, Material } from './cultivator';
 
@@ -5,7 +6,8 @@ export type WorldChatMessageChannel = 'system' | 'world' | 'sect';
 
 export type WorldChatChannel = WorldChatMessageChannel;
 
-export type WorldChatMessageType = 'text' | 'duel_invite' | 'item_showcase';
+export type WorldChatMessageType =
+  'text' | 'duel_invite' | 'item_showcase' | 'battle_showcase';
 
 export interface WorldChatTextPayload {
   text: string;
@@ -23,11 +25,7 @@ export interface WorldChatDuelInvitePayload {
 }
 
 export type WorldChatShowcaseItemType =
-  | 'artifact'
-  | 'material'
-  | 'consumable'
-  | 'skill'
-  | 'gongfa';
+  'artifact' | 'material' | 'consumable' | 'skill' | 'gongfa';
 
 export type ItemShowcaseSnapshotMap = {
   artifact: Pick<
@@ -80,10 +78,20 @@ export interface WorldChatItemShowcasePayload {
   text?: string;
 }
 
+export interface WorldChatBattleShowcasePayload {
+  shareCode: string;
+  winner: BattleRecordUnitSummary;
+  loser: BattleRecordUnitSummary;
+  turns: number;
+  battleCreatedAt: string;
+  text?: string;
+}
+
 export interface WorldChatPayloadMap {
   text: WorldChatTextPayload;
   duel_invite: WorldChatDuelInvitePayload;
   item_showcase: WorldChatItemShowcasePayload;
+  battle_showcase: WorldChatBattleShowcasePayload;
 }
 
 export type WorldChatPayload = WorldChatPayloadMap[WorldChatMessageType];

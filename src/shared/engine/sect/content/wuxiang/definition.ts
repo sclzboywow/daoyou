@@ -10,6 +10,12 @@ import {
   WUXIANG_WAR_INTENT,
 } from './ids';
 
+const effects = { damage: 0.12, heal: 0.2, shield: 0.2, status: 0.18 };
+const durationMilestones = [
+  { level: 60, bonus: 1 },
+  { level: 120, bonus: 2 },
+];
+
 export const WUXIANG_BASE_DEFINITION: SectDefinitionWithoutPaths = {
   id: WUXIANG_SECT_ID,
   name: '无相禅宗',
@@ -31,67 +37,72 @@ export const WUXIANG_BASE_DEFINITION: SectDefinitionWithoutPaths = {
       name: '《无相真解》',
       isPrimary: true,
       description: '观色身诸相皆无定相，于一念之间容佛、容魔，亦容无相。',
-      perLevelDescription: '限制各分卷可研习的最高等级。',
+      growthProfile: { curve: 'balanced', effects, durationMilestones },
     },
     {
       id: 'blood-lotus',
       slot: 2,
       name: '《血海生莲》',
       description: '血海不净，莲亦由此而生；知其污浊，方能借之渡身。',
-      perLevelDescription: '每级提高0.05%最大气血。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'balanced', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.MAX_HP,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.2,
+      } },
     },
     {
       id: 'white-bone',
       slot: 3,
       name: '《白骨照身》',
       description: '去皮肉浮相，见白骨本真；以朽坏之身承受来力。',
-      perLevelDescription: '每级提高0.05%物理防御。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'early', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.DEF,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.16,
+      } },
     },
     {
       id: 'wrathful-ming',
       slot: 4,
       name: '《明王降魔》',
       description: '明王怒目，不为嗔心，只借烈相斩断迟疑。',
-      perLevelDescription: '每级提高0.05%物理攻击。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'late', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.ATK,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.14,
+      } },
     },
     {
       id: 'six-senses',
       slot: 5,
       name: '《六根守识》',
       description: '声色香味触法皆至于前，心识自守，不随外境转移。',
-      perLevelDescription: '每级提高0.02%控制抗性。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'early', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.CONTROL_RESISTANCE,
         type: ModifierType.FIXED,
-        value: 0.0002,
-      },
+        maxValue: 0.1,
+      } },
     },
     {
       id: 'reed-crossing-method',
       slot: 6,
       name: '《一苇渡苦》',
       description: '苦海无边，轻身不待舟楫；一苇所向，只问彼岸。',
-      perLevelDescription: '每级提高0.05%法术防御。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'balanced', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.MAGIC_DEF,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.12,
+      } },
     },
   ],
   abilities: [

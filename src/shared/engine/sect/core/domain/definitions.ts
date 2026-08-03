@@ -1,7 +1,8 @@
+import type { AbilityCostConfig } from '@shared/engine/battle-v5/core/configs';
 import type {
-  AbilityCostConfig,
-  AttributeModifierConfig,
-} from '@shared/engine/battle-v5/core/configs';
+  AttributeType,
+  ModifierType,
+} from '@shared/engine/battle-v5/core/types';
 import type { RealmStage, RealmType } from '@shared/types/constants';
 
 export type PlayerRaceId = 'human';
@@ -28,6 +29,26 @@ export interface SectTrainingCost {
   spiritStones: number;
 }
 
+export type SectMethodGrowthCurve = 'early' | 'balanced' | 'late';
+export type SectMethodEffectCategory = 'damage' | 'heal' | 'shield' | 'status';
+
+export interface SectMethodGrowthMilestone {
+  level: number;
+  bonus: number;
+}
+
+export interface SectMethodGrowthProfile {
+  curve: SectMethodGrowthCurve;
+  panelModifier?: {
+    attrType: AttributeType;
+    type: ModifierType;
+    maxValue: number;
+  };
+  effects: Record<SectMethodEffectCategory, number>;
+  durationMilestones?: SectMethodGrowthMilestone[];
+  countMilestones?: SectMethodGrowthMilestone[];
+}
+
 export interface SectRequirementDefinition {
   minRealm?: RealmType;
   minRealmStage?: RealmStage;
@@ -40,8 +61,7 @@ export interface SectHeartMethodDefinition {
   name: string;
   description: string;
   isPrimary?: boolean;
-  modifierPerLevel?: AttributeModifierConfig;
-  perLevelDescription?: string;
+  growthProfile: SectMethodGrowthProfile;
 }
 
 interface SectAbilityDefinitionBase {

@@ -1,14 +1,14 @@
 import { DynamicScalarParams } from '../core/configs';
 import { DamageRequestEvent } from '../core/events';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 export class DynamicScalarEffect extends GameplayEffect {
   constructor(private params: DynamicScalarParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     if (!context.triggerEvent || context.triggerEvent.type !== 'DamageRequestEvent') {
       return;
     }

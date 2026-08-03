@@ -1,10 +1,9 @@
 import { DamageImmunityParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import { DamageEvent, DamageImmuneEvent } from '../core/events';
 import { DamageType } from '../core/types';
 import { EffectRegistry } from '../factories/EffectRegistry';
 import { GameplayTags } from '@shared/engine/shared/tag-domain';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /**
  * 伤害免疫原子效果
@@ -14,7 +13,7 @@ export class DamageImmunityEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { triggerEvent, target } = context;
     if (!triggerEvent || triggerEvent.type !== 'DamageEvent') {
       return;
@@ -35,7 +34,13 @@ export class DamageImmunityEffect extends GameplayEffect {
     const blockedDamage = event.finalDamage;
     event.finalDamage = 0;
 
-    EventBus.instance.publish<DamageImmuneEvent>({
+    context.commit(target, {
+      type: 'defense',
+      defense: 'damage_immune',
+      amount: Math.round(blockedDamage),
+    });
+
+    context.emit<DamageImmuneEvent>({
       type: 'DamageImmuneEvent',
       timestamp: Date.now(),
       caster: event.caster,

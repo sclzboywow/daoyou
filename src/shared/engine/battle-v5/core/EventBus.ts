@@ -1,3 +1,9 @@
+import type {
+  CombatOriginV3,
+  CombatSequenceScopeV3,
+  CombatTraceV3,
+  ResolvedCombatSequenceScopeV3,
+} from '../v3/types';
 import { CombatEvent, EventPriority } from './types';
 
 type EventHandler<T extends CombatEvent> = (event: T) => void;
@@ -15,6 +21,7 @@ interface EventSubscriber {
 export class EventBus {
   private static _instance: EventBus;
   private static readonly DEFAULT_MAX_HISTORY_SIZE = 1000;
+  private static readonly UNSCOPED_SEQUENCE_ID = 'sequence_v3_unscoped';
 
   public static get instance(): EventBus {
     if (!this._instance) {
@@ -25,6 +32,16 @@ export class EventBus {
 
   private _subscribers = new Map<string, EventSubscriber[]>();
   private _eventHistory: CombatEvent[] = [];
+  private _sequenceStack: ResolvedCombatSequenceScopeV3[] = [];
+  private _causalContextStack: Array<{
+    trace?: CombatTraceV3;
+    origin?: CombatOriginV3;
+  }> = [];
+  private _sequenceCounter = 0;
+  private _eventCounter = 0;
+  private _ordinalCounter = 0;
+  private _resolutionCounter = 0;
+  private _narrativeCauseCounter = 0;
   private readonly _maxHistorySize = EventBus.DEFAULT_MAX_HISTORY_SIZE;
 
   private constructor() {}
@@ -46,7 +63,8 @@ export class EventBus {
 
     const subscribers = this._subscribers.get(eventType)!;
     // Wrap handler to accept CombatEvent base type
-    const wrappedHandler: (event: CombatEvent) => void = handler as EventHandler<CombatEvent>;
+    const wrappedHandler: (event: CombatEvent) => void =
+      handler as EventHandler<CombatEvent>;
 
     subscribers.push({ wrappedHandler, priority });
 
@@ -68,7 +86,9 @@ export class EventBus {
 
     // Filter by comparing wrapped handlers using reference equality
     const wrappedHandler = handler as EventHandler<CombatEvent>;
-    const filtered = subscribers.filter((s) => s.wrappedHandler !== wrappedHandler);
+    const filtered = subscribers.filter(
+      (s) => s.wrappedHandler !== wrappedHandler,
+    );
 
     if (filtered.length === 0) {
       // Remove the event type entirely if no subscribers left
@@ -82,24 +102,148 @@ export class EventBus {
    * Publish an event to all subscribers
    * Automatically sets timestamp if not provided
    */
-  public publish<T extends CombatEvent>(event: T): void {
-    // Automatically set timestamp if not provided
-    const eventWithTimestamp = event.timestamp !== undefined
-      ? event
-      : { ...event, timestamp: Date.now() } as T;
+  public publish<T extends CombatEvent>(event: T): T {
+    return this._dispatch(this._prepare(event));
+  }
 
+  /**
+   * Publish an immutable result event. Unlike gameplay request events, result
+   * events cannot be changed by subscribers during synchronous dispatch.
+   */
+  public publishImmutable<T extends CombatEvent>(event: T): T {
+    const prepared = this._prepare(event);
+    if (prepared.trace) Object.freeze(prepared.trace);
+    Object.freeze(prepared);
+    return this._dispatch(prepared);
+  }
+
+  private _prepare<T extends CombatEvent>(event: T): T {
+    const sequence = this._sequenceStack[this._sequenceStack.length - 1];
+    const parentContext =
+      this._causalContextStack[this._causalContextStack.length - 1];
+    const reservedTrace = event.trace;
+    const eventId = reservedTrace?.eventId ?? this.nextEventId();
+    const eventWithTimestamp = Object.assign(event, {
+      timestamp: event.timestamp ?? Date.now(),
+      trace: {
+        eventId,
+        sequenceId:
+          reservedTrace?.sequenceId ??
+          sequence?.id ??
+          EventBus.UNSCOPED_SEQUENCE_ID,
+        ordinal: reservedTrace?.ordinal ?? ++this._ordinalCounter,
+        parentEventId:
+          reservedTrace?.parentEventId ?? parentContext?.trace?.eventId,
+        resolutionId:
+          reservedTrace?.resolutionId ?? parentContext?.trace?.resolutionId,
+        narrativeCauseId:
+          reservedTrace?.narrativeCauseId ??
+          parentContext?.trace?.narrativeCauseId,
+      },
+      origin: event.origin ?? parentContext?.origin,
+    }) as T;
+
+    return eventWithTimestamp;
+  }
+
+  private _dispatch<T extends CombatEvent>(eventWithTimestamp: T): T {
     this._eventHistory.push(eventWithTimestamp);
     if (this._eventHistory.length > this._maxHistorySize) {
       this._eventHistory.shift();
     }
 
-    const subscribers = this._subscribers.get(event.type);
-    if (!subscribers) return;
+    const subscribers = this._subscribers.get(eventWithTimestamp.type);
+    if (!subscribers) return eventWithTimestamp;
     const dispatchList = [...subscribers];
-
-    for (const subscriber of dispatchList) {
-      subscriber.wrappedHandler(eventWithTimestamp);
+    this._causalContextStack.push({
+      trace: eventWithTimestamp.trace!,
+      origin: eventWithTimestamp.origin,
+    });
+    try {
+      for (const subscriber of dispatchList) {
+        subscriber.wrappedHandler(eventWithTimestamp);
+      }
+    } finally {
+      this._causalContextStack.pop();
     }
+    return eventWithTimestamp;
+  }
+
+  public runInSequence<T>(
+    scope: CombatSequenceScopeV3,
+    callback: (scope: ResolvedCombatSequenceScopeV3) => T,
+  ): T {
+    const resolved: ResolvedCombatSequenceScopeV3 = {
+      ...scope,
+      id: scope.id ?? `sequence_v3_${++this._sequenceCounter}`,
+    };
+    this._sequenceStack.push(resolved);
+    try {
+      return callback(resolved);
+    } finally {
+      this._sequenceStack.pop();
+    }
+  }
+
+  public runInCausalContext<T>(
+    context: { origin?: CombatOriginV3; trace?: CombatTraceV3 },
+    callback: () => T,
+  ): T {
+    this._causalContextStack.push(context);
+    try {
+      return callback();
+    } finally {
+      this._causalContextStack.pop();
+    }
+  }
+
+  public reserveTrace(options?: {
+    resolutionId?: string;
+    parentEventId?: string;
+    narrativeCauseId?: string;
+  }): CombatTraceV3 {
+    const sequence = this.getCurrentSequence();
+    const parentTrace = this.getCurrentTrace();
+    return {
+      eventId: this.nextEventId(),
+      sequenceId: sequence?.id ?? EventBus.UNSCOPED_SEQUENCE_ID,
+      ordinal: ++this._ordinalCounter,
+      parentEventId: options?.parentEventId ?? parentTrace?.eventId,
+      resolutionId: options?.resolutionId ?? parentTrace?.resolutionId,
+      narrativeCauseId:
+        options?.narrativeCauseId ?? parentTrace?.narrativeCauseId,
+    };
+  }
+
+  public nextNarrativeCauseId(): string {
+    return `narrative_v3_${++this._narrativeCauseCounter}`;
+  }
+
+  public reserveResolutionTrace(parentEventId?: string): CombatTraceV3 & {
+    resolutionId: string;
+  } {
+    const resolutionId = `resolution_v3_${++this._resolutionCounter}`;
+    return {
+      ...this.reserveTrace({ resolutionId, parentEventId }),
+      resolutionId,
+    };
+  }
+
+  public getCurrentSequence(): ResolvedCombatSequenceScopeV3 | undefined {
+    return this._sequenceStack[this._sequenceStack.length - 1];
+  }
+
+  public getCurrentOrigin(): CombatOriginV3 | undefined {
+    return this._causalContextStack[this._causalContextStack.length - 1]
+      ?.origin;
+  }
+
+  public getCurrentTrace(): CombatTraceV3 | undefined {
+    return this._causalContextStack[this._causalContextStack.length - 1]?.trace;
+  }
+
+  private nextEventId(): string {
+    return `event_v3_${++this._eventCounter}`;
   }
 
   /**
@@ -131,5 +275,12 @@ export class EventBus {
   public reset(): void {
     this._subscribers.clear();
     this._eventHistory = [];
+    this._sequenceStack = [];
+    this._causalContextStack = [];
+    this._sequenceCounter = 0;
+    this._eventCounter = 0;
+    this._ordinalCounter = 0;
+    this._resolutionCounter = 0;
+    this._narrativeCauseCounter = 0;
   }
 }

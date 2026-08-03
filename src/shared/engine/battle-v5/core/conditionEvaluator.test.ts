@@ -74,7 +74,7 @@ describe('conditionEvaluator damage type conditions', () => {
             damageTaken: 100,
             beforeHp: 100,
             remainHp: 0,
-            isLethal: true,
+            hpReachedZeroBeforeReactions: true,
           },
         },
         condition,

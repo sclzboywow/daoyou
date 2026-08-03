@@ -1,13 +1,20 @@
 import { ActiveSkill } from '../abilities/ActiveSkill';
 import { Buff } from '../buffs/Buff';
-import { AbilityConfig, EffectConfig } from './configs';
 import { Unit } from '../units/Unit';
+import type { CombatAttributionV3 } from '../v3/origin';
+import type { CombatTraceV3 } from '../v3/types';
 import type {
   ActionHitPolicy,
   ActionInterruptPolicy,
   ActionStateAbilityView,
   ActionStateView,
 } from './actionState';
+import { AbilityConfig, EffectConfig } from './configs';
+
+export interface RuntimeMutationScopeV3 {
+  attribution: CombatAttributionV3;
+  trace: CombatTraceV3;
+}
 
 export interface QueuedActionRuntime {
   ability: AbilityConfig;
@@ -75,7 +82,10 @@ export interface AbilityModeRuntime {
 
 const unitState = new WeakMap<Unit, BattleRuntimeState>();
 const delayedBuffEffects = new WeakMap<Buff, EffectConfig[]>();
-const activeAbilityTransforms = new WeakMap<ActiveSkill, PendingAbilityTransform>();
+const activeAbilityTransforms = new WeakMap<
+  ActiveSkill,
+  PendingAbilityTransform
+>();
 const buffAppliedAtAction = new WeakMap<Buff, number>();
 
 export function getBattleRuntimeState(unit: Unit): BattleRuntimeState {
@@ -116,7 +126,9 @@ export function queueSkippedActions(
   }
 }
 
-export function consumeSkippedAction(unit: Unit): SkippedActionRuntime | undefined {
+export function consumeSkippedAction(
+  unit: Unit,
+): SkippedActionRuntime | undefined {
   return getBattleRuntimeState(unit).skippedActions.shift();
 }
 
@@ -143,7 +155,9 @@ export function peekQueuedAction(unit: Unit): QueuedActionRuntime | undefined {
   return getBattleRuntimeState(unit).queuedAction;
 }
 
-export function consumeQueuedAction(unit: Unit): QueuedActionRuntime | undefined {
+export function consumeQueuedAction(
+  unit: Unit,
+): QueuedActionRuntime | undefined {
   const state = getBattleRuntimeState(unit);
   const queued = state.queuedAction;
   state.queuedAction = undefined;
@@ -193,7 +207,10 @@ export function getActionStateViews(unit: Unit): ActionStateView[] {
   return views;
 }
 
-export function readAbilityMode(unit: Unit, key: string): AbilityModeRuntime | undefined {
+export function readAbilityMode(
+  unit: Unit,
+  key: string,
+): AbilityModeRuntime | undefined {
   return getBattleRuntimeState(unit).abilityModes.get(key);
 }
 
@@ -204,6 +221,7 @@ export function setAbilityMode(unit: Unit, mode: AbilityModeRuntime): void {
 export function advanceAbilityMode(
   unit: Unit,
   key: string,
+  scope?: RuntimeMutationScopeV3,
 ): AbilityModeRuntime | undefined {
   const state = getBattleRuntimeState(unit);
   const current = state.abilityModes.get(key);
@@ -215,7 +233,7 @@ export function advanceAbilityMode(
   if (next.remainingUses <= 0) {
     state.abilityModes.delete(key);
     for (const buffId of next.cleanupBuffIds ?? []) {
-      unit.buffs.removeBuff(buffId);
+      unit.buffs.removeBuff(buffId, scope);
     }
     return undefined;
   }
@@ -223,12 +241,16 @@ export function advanceAbilityMode(
   return next;
 }
 
-export function clearAbilityMode(unit: Unit, key: string): void {
+export function clearAbilityMode(
+  unit: Unit,
+  key: string,
+  scope?: RuntimeMutationScopeV3,
+): void {
   const state = getBattleRuntimeState(unit);
   const mode = state.abilityModes.get(key);
   state.abilityModes.delete(key);
   for (const buffId of mode?.cleanupBuffIds ?? []) {
-    unit.buffs.removeBuff(buffId);
+    unit.buffs.removeBuff(buffId, scope);
   }
 }
 
@@ -242,7 +264,10 @@ export function claimActionAmount(
   const current = state.actionAmounts.get(key);
   const used = current?.action === state.actionSequence ? current.amount : 0;
   const applied = Math.max(0, Math.min(requested, cap - used));
-  state.actionAmounts.set(key, { action: state.actionSequence, amount: used + applied });
+  state.actionAmounts.set(key, {
+    action: state.actionSequence,
+    amount: used + applied,
+  });
   return applied;
 }
 
@@ -251,7 +276,9 @@ export function markBuffAppliedAtCurrentAction(unit: Unit, buff: Buff): void {
 }
 
 export function shouldTickBuffDuration(unit: Unit, buff: Buff): boolean {
-  return buffAppliedAtAction.get(buff) !== getBattleRuntimeState(unit).actionSequence;
+  return (
+    buffAppliedAtAction.get(buff) !== getBattleRuntimeState(unit).actionSequence
+  );
 }
 
 export function beginRuntimeAction(unit: Unit): void {
@@ -266,7 +293,11 @@ export function readRuntimeCounter(unit: Unit, key: string): number {
   return getBattleRuntimeState(unit).counters.get(key) ?? 0;
 }
 
-export function writeRuntimeCounter(unit: Unit, key: string, value: number): number {
+export function writeRuntimeCounter(
+  unit: Unit,
+  key: string,
+  value: number,
+): number {
   const normalized = Number.isFinite(value) ? Math.trunc(value) : 0;
   if (normalized === 0) {
     getBattleRuntimeState(unit).counters.delete(key);
@@ -352,7 +383,9 @@ export function addAbilityTransform(
   transform: PendingAbilityTransform,
 ): void {
   const state = getBattleRuntimeState(unit);
-  state.transforms = state.transforms.filter((item) => item.id !== transform.id);
+  state.transforms = state.transforms.filter(
+    (item) => item.id !== transform.id,
+  );
   state.transforms.push(transform);
 }
 
@@ -444,6 +477,9 @@ export function rememberRemovedBuff(unit: Unit, buff: Buff): void {
   state.removedBuffs = state.removedBuffs.slice(0, 5);
 }
 
-export function readRecentRemovedBuff(unit: Unit, predicate: (buff: Buff) => boolean): Buff | undefined {
+export function readRecentRemovedBuff(
+  unit: Unit,
+  predicate: (buff: Buff) => boolean,
+): Buff | undefined {
   return getBattleRuntimeState(unit).removedBuffs.find(predicate);
 }

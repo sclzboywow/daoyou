@@ -1,10 +1,9 @@
-import { AbilityId, AbilityType } from '../core/types';
+import { checkConditions } from '../core/conditionEvaluator';
 import type {
   AbilityCostConfig,
   AbilitySelectionProfile,
   ConditionConfig,
 } from '../core/configs';
-import { checkConditions } from '../core/conditionEvaluator';
 import { EventBus } from '../core/EventBus';
 import type { AbilityCostPaidEvent } from '../core/events';
 import {
@@ -12,6 +11,7 @@ import {
   endAbilityTransform,
   peekAbilityTransform,
 } from '../core/runtimeState';
+import { AbilityId, AbilityType } from '../core/types';
 import { Unit } from '../units/Unit';
 import { Ability, AbilityContext, type AbilityCastSnapshot } from './Ability';
 import { TargetPolicy } from './TargetPolicy';
@@ -81,10 +81,18 @@ export abstract class ActiveSkill extends Ability {
       this._costConfigs = config.costs.map((cost) => ({ ...cost }));
     } else {
       if (config.mpCost) {
-        this._costConfigs.push({ resource: 'mp', mode: 'flat', amount: config.mpCost });
+        this._costConfigs.push({
+          resource: 'mp',
+          mode: 'flat',
+          amount: config.mpCost,
+        });
       }
       if (config.hpCost) {
-        this._costConfigs.push({ resource: 'hp', mode: 'flat', amount: config.hpCost });
+        this._costConfigs.push({
+          resource: 'hp',
+          mode: 'flat',
+          amount: config.hpCost,
+        });
       }
     }
 
@@ -181,19 +189,28 @@ export abstract class ActiveSkill extends Ability {
   // ===== 资源消耗 =====
 
   get resourceCosts(): ResourceCost[] {
-    if (this._castSnapshot) return this._castSnapshot.costs.map((cost) => ({ ...cost }));
+    if (this._castSnapshot)
+      return this._castSnapshot.costs.map((cost) => ({ ...cost }));
     const owner = this.getOwner();
     if (owner) return this.resolveCosts(owner);
     return this._costConfigs.flatMap((cost) =>
       cost.mode === 'flat'
-        ? [{ type: cost.resource, amount: Math.max(0, Math.ceil(cost.amount)), mode: cost.mode }]
+        ? [
+            {
+              type: cost.resource,
+              amount: Math.max(0, Math.ceil(cost.amount)),
+              mode: cost.mode,
+            },
+          ]
         : [],
     );
   }
 
   get costConfigs(): AbilityCostConfig[] {
     const owner = this.getOwner();
-    return (owner ? this.getCostConfigs(owner) : this._costConfigs).map((cost) => ({ ...cost }));
+    return (owner ? this.getCostConfigs(owner) : this._costConfigs).map(
+      (cost) => ({ ...cost }),
+    );
   }
 
   // 兼容旧 API - 获取法力消耗
@@ -204,7 +221,9 @@ export abstract class ActiveSkill extends Ability {
 
   // 兼容旧 API - 设置法力消耗
   setManaCost(value: number): void {
-    const existingIndex = this._costConfigs.findIndex((cost) => cost.resource === 'mp');
+    const existingIndex = this._costConfigs.findIndex(
+      (cost) => cost.resource === 'mp',
+    );
     if (existingIndex >= 0) {
       if (value === 0) {
         this._costConfigs.splice(existingIndex, 1);
@@ -288,27 +307,34 @@ export abstract class ActiveSkill extends Ability {
   }
 
   private resolveCosts(caster: Unit): ResourceCost[] {
-    return this.getCostConfigs(caster).filter((cost) =>
-      !cost.conditions?.length || checkConditions(
-        { caster, target: caster, ability: this },
-        cost.conditions,
-      ),
-    ).map((cost) => {
-      if (cost.mode === 'flat') {
+    return this.getCostConfigs(caster)
+      .filter(
+        (cost) =>
+          !cost.conditions?.length ||
+          checkConditions(
+            { caster, target: caster, ability: this },
+            cost.conditions,
+          ),
+      )
+      .map((cost) => {
+        if (cost.mode === 'flat') {
+          return {
+            type: cost.resource,
+            amount: Math.max(0, Math.ceil(cost.amount)),
+            mode: cost.mode,
+            retain: cost.retain,
+          };
+        }
         return {
-          type: cost.resource,
-          amount: Math.max(0, Math.ceil(cost.amount)),
+          type: 'hp' as const,
+          amount: Math.max(
+            cost.minimum ?? 1,
+            Math.ceil(caster.getCurrentHp() * cost.ratio),
+          ),
           mode: cost.mode,
-          retain: cost.retain,
+          retain: cost.retain ?? 1,
         };
-      }
-      return {
-        type: 'hp' as const,
-        amount: Math.max(cost.minimum ?? 1, Math.ceil(caster.getCurrentHp() * cost.ratio)),
-        mode: cost.mode,
-        retain: cost.retain ?? 1,
-      };
-    });
+      });
   }
 
   // ===== 核心方法重写 =====
@@ -325,7 +351,8 @@ export abstract class ActiveSkill extends Ability {
     if (!this.isReady()) return false;
 
     // 资源检查
-    const caster = this.getOwner() ?? context.caster;
+    const caster = this.getOwner();
+    if (!caster) return false;
     if (!this.hasEnoughResources(caster)) return false;
     if (
       this.castConditions.length > 0 &&
@@ -333,7 +360,8 @@ export abstract class ActiveSkill extends Ability {
         { caster, target: context.target, ability: this },
         this.castConditions,
       )
-    ) return false;
+    )
+      return false;
 
     return true;
   }
@@ -352,12 +380,16 @@ export abstract class ActiveSkill extends Ability {
       casterHpBeforeCost: casterHp,
       casterHpAfterCost: casterHp,
       casterHpRatioAfterCost:
-        context.caster.getMaxHp() > 0 ? casterHp / context.caster.getMaxHp() : 0,
+        context.caster.getMaxHp() > 0
+          ? casterHp / context.caster.getMaxHp()
+          : 0,
       casterMpBeforeCost: casterMp,
       casterMpAfterCost: casterMp,
       targetHpBeforeEffects: targetHp,
       targetHpRatioBeforeEffects:
-        context.target.getMaxHp() > 0 ? targetHp / context.target.getMaxHp() : 0,
+        context.target.getMaxHp() > 0
+          ? targetHp / context.target.getMaxHp()
+          : 0,
     });
   }
 
@@ -390,12 +422,14 @@ export abstract class ActiveSkill extends Ability {
     const target = this._castSnapshot?.target ?? context.target;
     // 消耗资源
     const payment = this.consumeResources(context.caster);
-    const beforeRatio = context.caster.getMaxHp() > 0
-      ? payment.beforeHp / context.caster.getMaxHp()
-      : 0;
-    const afterRatio = context.caster.getMaxHp() > 0
-      ? payment.afterHp / context.caster.getMaxHp()
-      : 0;
+    const beforeRatio =
+      context.caster.getMaxHp() > 0
+        ? payment.beforeHp / context.caster.getMaxHp()
+        : 0;
+    const afterRatio =
+      context.caster.getMaxHp() > 0
+        ? payment.afterHp / context.caster.getMaxHp()
+        : 0;
     this._castSnapshot = Object.freeze({
       ...this._castSnapshot!,
       casterHpBeforeCost: payment.beforeHp,
@@ -404,7 +438,7 @@ export abstract class ActiveSkill extends Ability {
       casterMpBeforeCost: payment.beforeMp,
       casterMpAfterCost: payment.afterMp,
     });
-    EventBus.instance.publish<AbilityCostPaidEvent>({
+    const costPaidEvent = EventBus.instance.publish<AbilityCostPaidEvent>({
       type: 'AbilityCostPaidEvent',
       timestamp: Date.now(),
       caster: context.caster,
@@ -419,6 +453,16 @@ export abstract class ActiveSkill extends Ability {
       afterHpRatio: afterRatio,
     });
 
+    EventBus.instance.runInCausalContext(
+      {
+        origin: costPaidEvent.origin,
+        trace: costPaidEvent.trace!,
+      },
+      () => this.executePaidCast(context, target),
+    );
+  }
+
+  private executePaidCast(context: AbilityContext, target: Unit): void {
     // 启动冷却
     this.startCooldown();
     const transform = peekAbilityTransform(context.caster, this);

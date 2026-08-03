@@ -81,6 +81,7 @@ export class SectEffectFactory {
   }
 
   dispelPositiveBuffsByMethod(
+    methodId: import('../domain').SectMethodId,
     baseCount: number,
     methodLevel: number | undefined,
     methodGrowth: SectMethodGrowthPolicy,
@@ -90,6 +91,7 @@ export class SectEffectFactory {
       params: {
         targetTag: GameplayTags.BUFF.TYPE.BUFF,
         maxCount: methodGrowth.growCount(
+          methodId,
           baseCount,
           methodLevel,
         ),

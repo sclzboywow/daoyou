@@ -1,7 +1,7 @@
 import { BuffDurationModifyParams } from '../core/configs';
 import { BuffAddEvent } from '../core/events';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /**
  * BUFF 持续时间扰动效果
@@ -12,7 +12,7 @@ export class BuffDurationModifyEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { triggerEvent } = context;
 
     if (!triggerEvent || triggerEvent.type !== 'BuffAddEvent') {

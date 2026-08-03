@@ -1,10 +1,13 @@
-import type { AbilityCostConfig, AbilitySelectionProfile } from '../core/configs';
+import { GameplayTagContainer } from '@shared/engine/shared/tag-domain';
+import type {
+  AbilityCostConfig,
+  AbilitySelectionProfile,
+} from '../core/configs';
+import { EventBus } from '../core/EventBus';
 import { AbilityId, AbilityType, CombatEvent } from '../core/types';
+import { Unit } from '../units/Unit';
 
 export type { AbilityId };
-import { Unit } from '../units/Unit';
-import { EventBus } from '../core/EventBus';
-import { GameplayTagContainer } from '@shared/engine/shared/tag-domain';
 
 type EventHandler = (event: CombatEvent) => void;
 
@@ -22,12 +25,14 @@ export interface AbilityCastSnapshot {
   readonly target: Unit;
   readonly targetId: string;
   readonly selectionProfile?: AbilitySelectionProfile;
-  readonly costs: ReadonlyArray<Readonly<{
-    type: AbilityCostConfig['resource'];
-    amount: number;
-    mode?: AbilityCostConfig['mode'];
-    retain?: number;
-  }>>;
+  readonly costs: ReadonlyArray<
+    Readonly<{
+      type: AbilityCostConfig['resource'];
+      amount: number;
+      mode?: AbilityCostConfig['mode'];
+      retain?: number;
+    }>
+  >;
   readonly casterHpBeforeCost: number;
   readonly casterHpAfterCost: number;
   readonly casterHpRatioAfterCost: number;
@@ -66,7 +71,7 @@ export class Ability {
   // 核心属性
   private _owner: Unit | null = null;
   private _active: boolean = false;
-  private _priority: number = 0;  // 执行优先级（数值越大越优先）
+  private _priority: number = 0; // 执行优先级（数值越大越优先）
 
   // 标签容器
   readonly tags: GameplayTagContainer;
@@ -77,7 +82,12 @@ export class Ability {
     handler: EventHandler;
   }> = [];
 
-  constructor(id: AbilityId, name: string, type: AbilityType, description?: string) {
+  constructor(
+    id: AbilityId,
+    name: string,
+    type: AbilityType,
+    description?: string,
+  ) {
     this.id = id;
     this._baseName = name;
     this._baseDescription = description;
@@ -149,7 +159,10 @@ export class Ability {
   protected onDeactivate(): void {
     // 自动取消所有事件订阅
     for (const subscription of this._eventSubscriptions) {
-      EventBus.instance.unsubscribe(subscription.eventType, subscription.handler);
+      EventBus.instance.unsubscribe(
+        subscription.eventType,
+        subscription.handler,
+      );
     }
     this._eventSubscriptions = [];
   }
@@ -162,7 +175,7 @@ export class Ability {
   protected subscribeEvent(
     eventType: string,
     handler: EventHandler,
-    priority?: number
+    priority?: number,
   ): void {
     EventBus.instance.subscribe(eventType, handler, priority);
     this._eventSubscriptions.push({ eventType, handler });
@@ -176,9 +189,8 @@ export class Ability {
    * @returns 是否可以执行
    */
   canTrigger(context: AbilityContext): boolean {
-    const owner = this._owner ?? context.caster;
-    if (!owner) return false;
-    return true;
+    void context;
+    return this._owner !== null;
   }
 
   /**

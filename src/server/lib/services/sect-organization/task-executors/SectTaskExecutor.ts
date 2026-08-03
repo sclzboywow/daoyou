@@ -626,7 +626,7 @@ export class BattleTaskExecutor extends BaseTaskExecutor<
         ),
       });
     }
-    const won = battle.winner.id === player.id;
+    const won = battle.outcome.winner.id === player.id;
     return {
       completed: won,
       completionSettlement: 'deferred',

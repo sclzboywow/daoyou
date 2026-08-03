@@ -1,6 +1,6 @@
 import { checkConditions } from '../core/conditionEvaluator';
 import { ConditionConfig, EffectConfig } from '../core/configs';
-import { EffectContext, GameplayEffect } from '../effects/Effect';
+import { EffectExecutionContextV3, GameplayEffect } from '../effects/Effect';
 
 /**
  * 效果构造器类型定义
@@ -64,7 +64,7 @@ export class EffectRegistry {
     conditions: ConditionConfig[],
   ): GameplayEffect {
     return {
-      execute: (context: EffectContext) => {
+      execute: (context: EffectExecutionContextV3) => {
         if (this.checkConditions(context, conditions)) {
           effect.execute(context);
         }
@@ -76,7 +76,7 @@ export class EffectRegistry {
    * 检查所有条件是否满足
    */
   private checkConditions(
-    context: EffectContext,
+    context: EffectExecutionContextV3,
     conditions: ConditionConfig[],
   ): boolean {
     return checkConditions(context, conditions);

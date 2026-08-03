@@ -1,9 +1,10 @@
 import { BattlePageLayout } from '@app/components/feature/battle/BattlePageLayout';
-import { BattlePlaybackPanel } from '@app/components/feature/battle/BattlePlaybackPanel';
-import { useBattlePlaybackState } from '@app/components/feature/battle/useBattlePlaybackState';
-import Link from '@app/components/router/AppLink';
+import { BattleShareDialog } from '@app/components/feature/battle/share/BattleShareDialog';
+import { BattlePlaybackPanel } from '@app/components/feature/battle/v3/BattlePlaybackPanel';
+import { useBattlePlaybackState } from '@app/components/feature/battle/v3/useBattlePlaybackState';
 import { GameImmersiveLoading } from '@app/components/game-shell';
-import type { BattleRecord as BattleRecordNative } from '@shared/types/battle';
+import Link from '@app/components/router/AppLink';
+import type { BattleRecordV3 as BattleRecordNative } from '@shared/types/battle';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 
@@ -11,7 +12,6 @@ type BattleRecordRow = {
   id: string;
   createdAt: string | null;
   battleResult: BattleRecordNative;
-  battleReport?: string | null;
 };
 
 type BattleRecordResponse = {
@@ -25,6 +25,7 @@ export default function BattleReplayPage() {
 
   const [record, setRecord] = useState<BattleRecordRow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shareOpen, setShareOpen] = useState(false);
   const battleResult = record?.battleResult;
   const playback = useBattlePlaybackState(battleResult);
 
@@ -34,7 +35,7 @@ export default function BattleReplayPage() {
     const fetchBattleRecord = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/battle-records/v2/${id}`, {
+        const res = await fetch(`/api/battle-records/v3/${id}`, {
           cache: 'no-store',
         });
         if (!res.ok) return;
@@ -59,7 +60,7 @@ export default function BattleReplayPage() {
   if (!record && !loading) {
     return (
       <div className="flex h-full items-center justify-center px-4 py-20">
-        <div className="border-battle-rule-strong bg-[rgba(248,243,230,0.92)] max-w-md border border-dashed px-5 py-5 text-center">
+        <div className="border-battle-rule-strong max-w-md border border-dashed bg-[rgba(248,243,230,0.92)] px-5 py-5 text-center">
           <p className="text-ink mb-4">未找到该战斗记录</p>
           <Link
             href="/game/battle/history"
@@ -83,24 +84,19 @@ export default function BattleReplayPage() {
       <BattlePlaybackPanel
         battleResult={battleResult}
         playback={playback}
-        statusAction={{
-          label: '返回战绩',
-          href: '/game/battle/history',
-        }}
-        unsupportedNotice={
-          <div className="space-y-3 text-center">
-            <p className="text-ink-secondary">
-              该战斗记录不支持新版回放（缺少关键时间线数据）。
-            </p>
-            <Link
-              href="/game/battle/history"
-              className="text-ink hover:text-crimson"
-            >
-              [返回战绩]
-            </Link>
-          </div>
-        }
+        statusActions={[
+          { label: '分享', onClick: () => setShareOpen(true) },
+          { label: '返回战绩', href: '/game/battle/history' },
+        ]}
       />
+      {battleResult ? (
+        <BattleShareDialog
+          isOpen={shareOpen}
+          battleRecordId={record.id}
+          summary={battleResult.outcome}
+          onClose={() => setShareOpen(false)}
+        />
+      ) : null}
     </BattlePageLayout>
   );
 }

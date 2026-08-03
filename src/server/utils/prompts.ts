@@ -1,25 +1,8 @@
 import { renderPrompt } from '@server/lib/prompts';
-import type { LogSpan } from '@shared/engine/battle-v5/systems/log/types';
-import type { CultivatorCombatInput } from '@shared/engine/battle-v5/adapters/CultivatorCombatAdapter';
 import type { RealmStage, RealmType } from '@shared/types/constants';
 import type { Attributes, Cultivator } from '@shared/types/cultivator';
 import { getAttributeInfo } from '@shared/lib/gameConceptDisplay';
 import type { BreakthroughModifiers } from './breakthroughCalculator';
-
-interface BattlePromptPayload {
-  player: CultivatorCombatInput;
-  opponent: CultivatorCombatInput;
-  battleResult: {
-    winnerId: string;
-    turns: number;
-    /** 玩家剩余气血 */
-    playerHp?: number;
-    /** 对手剩余气血 */
-    opponentHp?: number;
-    /** v5 结构化日志。AI 战报基于此分回合叙事 */
-    logSpans: LogSpan[];
-  };
-}
 
 export type RetreatStoryCultivator = Pick<
   Cultivator,
@@ -45,73 +28,6 @@ function summarizeFateNames(
   cultivator: Pick<Cultivator, 'pre_heaven_fates'>,
 ): string {
   return cultivator.pre_heaven_fates?.map((fate) => fate.name).join('，') ?? '无';
-}
-
-function formatSpansAsBattleLog(spans: LogSpan[]): string {
-  const byTurn = new Map<number, string[]>();
-  for (const span of spans) {
-    if (span.type !== 'action' && span.type !== 'action_after') continue;
-    const lines = byTurn.get(span.turn) ?? [];
-    for (const entry of span.entries) {
-      const text =
-        typeof (entry as unknown as { text?: string }).text === 'string'
-          ? (entry as unknown as { text: string }).text
-          : JSON.stringify(entry);
-      lines.push(text);
-    }
-    byTurn.set(span.turn, lines);
-  }
-  const turns = [...byTurn.keys()].sort((a, b) => a - b);
-  return turns
-    .map((turn) => `【第${turn}回合】\n${(byTurn.get(turn) ?? []).join('\n')}`)
-    .join('\n');
-}
-
-function summarizeCultivator(cultivator: CultivatorCombatInput): string {
-  const attrs = cultivator.attributes;
-  const roots = cultivator.spiritual_roots
-    .map((root) => `${root.element}`)
-    .join('，');
-  const skills =
-    cultivator.skills
-      ?.map((skill) => `${skill.name}(${skill.element}/todo(待填充))`)
-      .join('，') ?? '无';
-  const cultivations =
-    cultivator.cultivations
-      ?.map((cultivation) => `${cultivation.name}`)
-      .join('，') ?? '无';
-  const fates =
-    cultivator.pre_heaven_fates?.map((fate) => `${fate.name}`).join('，') ??
-    '无';
-  return `姓名：${cultivator.name}
-境界：${cultivator.realm}${cultivator.realm_stage}
-灵根/属性：${roots}
-属性：体魄${attrs.vitality} 力道${attrs.strength} 灵力${attrs.spirit} 根骨${attrs.endurance} 身法${attrs.speed} 神识${attrs.willpower}
-神通：${skills}
-功法：${cultivations}
-先天气运/体质：${fates}`;
-}
-
-export function getBattleReportPrompt({
-  player,
-  opponent,
-  battleResult,
-}: BattlePromptPayload): [string, string] {
-  const winner = battleResult.winnerId === opponent.id ? opponent : player;
-  const battleLog = formatSpansAsBattleLog(battleResult.logSpans ?? []);
-  const { system, user } = renderPrompt('battle-report', {
-    playerSummary: summarizeCultivator(player),
-    opponentSummary: summarizeCultivator(opponent),
-    battleLog,
-    winnerName: winner.name,
-    turns: battleResult.turns,
-    playerName: player.name,
-    playerHp: battleResult.playerHp ?? '未知',
-    opponentName: opponent.name,
-    opponentHp: battleResult.opponentHp ?? '未知',
-  });
-
-  return [system, user];
 }
 
 export interface BreakthroughStoryPayload {

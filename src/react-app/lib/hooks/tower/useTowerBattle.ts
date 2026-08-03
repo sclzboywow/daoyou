@@ -5,7 +5,7 @@ import type {
   TowerSettlement,
   TowerState,
 } from '@shared/lib/tower';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import { useCallback, useState } from 'react';
 
 export interface TowerBattleCallbackData {
@@ -16,13 +16,13 @@ export interface TowerBattleCallbackData {
 }
 
 type TowerBattlePayload = {
-  battleResult?: BattleRecord;
+  battleResult?: BattleRecordV3;
   callbackData?: TowerBattleCallbackData;
 };
 
 export function useTowerBattle() {
   const { pushToast } = useInkUI();
-  const [battleResult, setBattleResult] = useState<BattleRecord>();
+  const [battleResult, setBattleResult] = useState<BattleRecordV3>();
   const [loading, setLoading] = useState(false);
 
   const executeBattle = useCallback(

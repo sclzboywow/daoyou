@@ -262,6 +262,75 @@ describe('AffixRegistry tag validation', () => {
     ).toThrow("must use ModifierType.ADD");
   });
 
+  it('应要求功法概率属性使用 FIXED', () => {
+    const validRegistry = new AffixRegistry();
+    const invalidRegistry = new AffixRegistry();
+    const invalidRandomRegistry = new AffixRegistry();
+    const buildGongfaCritAffix = (modType: ModifierType) =>
+      buildAffix({
+        applicableTo: ['gongfa'],
+        effectTemplate: {
+          type: 'attribute_modifier',
+          params: {
+            attrType: AttributeType.CRIT_RATE,
+            modType,
+            value: 0.04,
+          },
+        },
+      });
+
+    expect(() =>
+      validRegistry.register([
+        buildGongfaCritAffix(ModifierType.FIXED),
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      invalidRegistry.register([
+        buildGongfaCritAffix(ModifierType.ADD),
+      ]),
+    ).toThrow("must use ModifierType.FIXED");
+    expect(() =>
+      invalidRandomRegistry.register([
+        buildAffix({
+          applicableTo: ['gongfa'],
+          effectTemplate: {
+            type: 'random_attribute_modifier',
+            params: {
+              pickCount: 1,
+              pool: [
+                {
+                  attrType: AttributeType.CRIT_RATE,
+                  modType: ModifierType.ADD,
+                  value: 0.04,
+                },
+              ],
+            },
+          },
+        }),
+      ]),
+    ).toThrow("must use ModifierType.FIXED");
+  });
+
+  it('应要求功法数值属性使用 ADD', () => {
+    const registry = new AffixRegistry();
+
+    expect(() =>
+      registry.register([
+        buildAffix({
+          applicableTo: ['gongfa'],
+          effectTemplate: {
+            type: 'attribute_modifier',
+            params: {
+              attrType: AttributeType.ATK,
+              modType: ModifierType.FIXED,
+              value: 0.04,
+            },
+          },
+        }),
+      ]),
+    ).toThrow("must use ModifierType.ADD");
+  });
+
   it('应拒绝 skill 声明 listenerSpec', () => {
     const registry = new AffixRegistry();
 

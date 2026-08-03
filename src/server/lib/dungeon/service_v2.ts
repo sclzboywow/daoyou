@@ -2,7 +2,7 @@ import { renderPrompt } from '@server/lib/prompts';
 import { publishLocalTransactionMessageBestEffort } from '@server/lib/mq/localTransactionMessagePublisher';
 import { createTaskProgressMessage } from '@server/lib/mq/task-progress/message';
 import { findActiveCultivatorOwnerId } from '@server/lib/repositories/cultivatorRepository';
-import type { BattleRecord } from '@server/lib/services/battleResult';
+import type { BattleRecordV3 } from '@server/lib/services/battleResult';
 import {
   loadCultivatorCombatInput,
   loadCultivatorDungeonPromptFacts,
@@ -1475,7 +1475,7 @@ export class DungeonService {
 
   async handleBattleCallback(
     cultivatorId: string,
-    battleResult: BattleRecord,
+    battleResult: BattleRecordV3,
     nextCondition: CultivatorCondition,
     didLose: boolean,
     options: DungeonFlowOptions = {},
@@ -1501,8 +1501,8 @@ export class DungeonService {
 
     // Construct Narrative
     const enemyName = didLose
-      ? battleResult.winner.name
-      : battleResult.loser.name;
+      ? battleResult.outcome.winner.name
+      : battleResult.outcome.loser.name;
     const isWin = !didLose;
     if (!options.deferPersistence) {
       await updateCultivator(cultivatorId, { condition: nextCondition });
@@ -1542,7 +1542,7 @@ export class DungeonService {
       };
     }
 
-    const outcomeText = `历经 ${battleResult.turns} 个回合的苦战，你成功击败了 ${enemyName}。虽然负了些伤，但总算化险为夷。`;
+    const outcomeText = `历经 ${battleResult.outcome.turns} 个回合的苦战，你成功击败了 ${enemyName}。虽然负了些伤，但总算化险为夷。`;
     lastHistory.outcome = outcomeText;
 
     // FIX: Instead of calling AI immediately, enter LOOTING state
@@ -1875,7 +1875,7 @@ export class DungeonService {
    */
   async recoverAfterBattleCallbackFailure(
     cultivatorId: string,
-    battleResult: BattleRecord,
+    battleResult: BattleRecordV3,
     nextCondition: CultivatorCondition,
     didLose: boolean,
     reason?: string,
@@ -1899,8 +1899,8 @@ export class DungeonService {
     delete state.activeBattleId;
 
     const enemyName = didLose
-      ? battleResult.winner.name
-      : battleResult.loser.name;
+      ? battleResult.outcome.winner.name
+      : battleResult.outcome.loser.name;
     const isWin = !didLose;
     const lastHistory = state.history[state.history.length - 1];
     if (!options.deferPersistence) {

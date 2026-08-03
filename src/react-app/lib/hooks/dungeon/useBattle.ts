@@ -1,5 +1,5 @@
 import type { ResourceOperation } from '@shared/engine/resource/types';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import { consumeResourceMutation } from '@app/lib/resources/mutations';
 import {
   DungeonRound,
@@ -17,7 +17,7 @@ interface BattleCallbackData {
 }
 
 type BattleExecutionResult = {
-  battleResult?: BattleRecord;
+  battleResult?: BattleRecordV3;
   callbackData: BattleCallbackData | null;
 };
 
@@ -39,7 +39,7 @@ function getBattleExecutionRequestId(battleId: string) {
  * 负责处理副本中的战斗执行
  */
 export function useBattle() {
-  const [battleResult, setBattleResult] = useState<BattleRecord>();
+  const [battleResult, setBattleResult] = useState<BattleRecordV3>();
   const [battleEnd, setBattleEnd] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -78,7 +78,7 @@ export function useBattle() {
               res,
             );
             const result = {
-              battleResult: data.battleResult as BattleRecord,
+              battleResult: data.battleResult as BattleRecordV3,
               callbackData: data.callbackData as BattleCallbackData,
             };
 

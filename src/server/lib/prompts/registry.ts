@@ -1,7 +1,6 @@
 import alchemyFormulaAnalysisPrompt from '@server/prompts/alchemy-formula-analysis.md?raw';
 import alchemyImprovisedCopyPrompt from '@server/prompts/alchemy-improvised-copy.md?raw';
 import alchemyRecipePlanPrompt from '@server/prompts/alchemy-recipe-plan.md?raw';
-import battleReportPrompt from '@server/prompts/battle-report.md?raw';
 import breakthroughStoryPrompt from '@server/prompts/breakthrough-story.md?raw';
 import characterGenerationPrompt from '@server/prompts/character-generation.md?raw';
 import divineFortunePrompt from '@server/prompts/divine-fortune.md?raw';
@@ -34,7 +33,6 @@ const bundledPromptSources: Record<string, string> = {
   'alchemy-formula-analysis.md': alchemyFormulaAnalysisPrompt,
   'alchemy-improvised-copy.md': alchemyImprovisedCopyPrompt,
   'alchemy-recipe-plan.md': alchemyRecipePlanPrompt,
-  'battle-report.md': battleReportPrompt,
   'breakthrough-story.md': breakthroughStoryPrompt,
   'character-generation.md': characterGenerationPrompt,
   'divine-fortune.md': divineFortunePrompt,

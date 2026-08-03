@@ -1,8 +1,7 @@
 import { MagicShieldParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import { DamageEvent, ManaShieldAbsorbEvent } from '../core/events';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /**
  * 魔法盾原子效果
@@ -13,7 +12,7 @@ export class MagicShieldEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { triggerEvent } = context;
     if (!triggerEvent || triggerEvent.type !== 'DamageEvent') {
       return;
@@ -40,7 +39,14 @@ export class MagicShieldEffect extends GameplayEffect {
 
     damageEvent.finalDamage = Math.max(0, damageEvent.finalDamage - mpConsumed);
 
-    EventBus.instance.publish<ManaShieldAbsorbEvent>({
+    context.commit(damageEvent.target, {
+      type: 'defense',
+      defense: 'mana_shield',
+      amount: Math.round(mpConsumed),
+      detail: `消耗${Math.round(mpConsumed)}点法力`,
+    });
+
+    context.emit<ManaShieldAbsorbEvent>({
       type: 'ManaShieldAbsorbEvent',
       timestamp: Date.now(),
       caster: damageEvent.caster,

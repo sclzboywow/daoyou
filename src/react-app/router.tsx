@@ -76,6 +76,11 @@ export const router = createBrowserRouter(
     >
       <Route index lazy={lazyRoute(() => import('@app/routes/index/route'))} />
       <Route
+        path="/battle-replay/:shareCode"
+        lazy={lazyRoute(() => import('@app/routes/battle-replay/route'))}
+        handle={title('公开战谱')}
+      />
+      <Route
         id={AUTH_LAYOUT_ROUTE_ID}
         lazy={lazyRoute(() => import('@app/routes/auth/layout'))}
       >

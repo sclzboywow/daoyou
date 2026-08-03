@@ -10,6 +10,12 @@ import {
   TIANYAN_SECT_ID,
 } from './ids';
 
+const effects = { damage: 0.16, heal: 0.16, shield: 0.16, status: 0.18 };
+const durationMilestones = [
+  { level: 60, bonus: 1 },
+  { level: 120, bonus: 2 },
+];
+
 export const TIANYAN_BASE_DEFINITION: SectDefinitionWithoutPaths = {
   id: TIANYAN_SECT_ID,
   name: '天衍圣地',
@@ -32,7 +38,7 @@ export const TIANYAN_BASE_DEFINITION: SectDefinitionWithoutPaths = {
       isPrimary: true,
       description:
         '以太初为纸，以五行为字。经中不求写尽天数，只教门人辨明一法之后仍有多少去处。',
-      perLevelDescription: '限制其余五卷可研习的最高等级。',
+      growthProfile: { curve: 'balanced', effects, durationMilestones },
     },
     {
       id: 'wood-vitality',
@@ -40,12 +46,13 @@ export const TIANYAN_BASE_DEFINITION: SectDefinitionWithoutPaths = {
       name: '《青华生元录》',
       description:
         '草木荣枯并非两事；生机藏在未尽之处，也藏在愿意重新开始的一息里。',
-      perLevelDescription: '每级提高0.05%最大气血。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'early', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.MAX_HP,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.12,
+      } },
     },
     {
       id: 'fire-illumination',
@@ -53,12 +60,13 @@ export const TIANYAN_BASE_DEFINITION: SectDefinitionWithoutPaths = {
       name: '《离明流火章》',
       description:
         '火能照见，也能焚去。持火者先辨所燃为何，方知余烬应当归向何处。',
-      perLevelDescription: '每级提高0.05%法术攻击。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'balanced', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.MAGIC_ATK,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.18,
+      } },
     },
     {
       id: 'earth-bearing',
@@ -66,12 +74,13 @@ export const TIANYAN_BASE_DEFINITION: SectDefinitionWithoutPaths = {
       name: '《坤舆载物篇》',
       description:
         '地不与万物争先，却承受每一次落下的重量；能载其重，才能改其势。',
-      perLevelDescription: '每级提高0.05%法术防御。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'early', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.MAGIC_DEF,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.14,
+      } },
     },
     {
       id: 'metal-severing',
@@ -79,24 +88,26 @@ export const TIANYAN_BASE_DEFINITION: SectDefinitionWithoutPaths = {
       name: '《太白裁虚诀》',
       description:
         '金气不只断形，也裁去遮蔽与虚妄。锋芒所至，应先知道何物不必留下。',
-      perLevelDescription: '每级提高0.01个百分点法术穿透。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'late', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.MAGIC_PENETRATION,
         type: ModifierType.FIXED,
-        value: 0.0001,
-      },
+        maxValue: 0.08,
+      } },
     },
     {
       id: 'water-flowing',
       slot: 6,
       name: '《玄冥行川法》',
       description: '水无常形，不与一岸相争。去路既改，仍能在曲折中守住归处。',
-      perLevelDescription: '每级提高0.05%最大法力。',
-      modifierPerLevel: {
+      growthProfile: {
+        curve: 'balanced', effects, durationMilestones,
+        panelModifier: {
         attrType: AttributeType.MAX_MP,
         type: ModifierType.ADD,
-        value: 0.0005,
-      },
+        maxValue: 0.18,
+      } },
     },
   ],
   abilities: [

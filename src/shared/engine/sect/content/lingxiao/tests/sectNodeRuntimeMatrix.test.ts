@@ -287,7 +287,7 @@ function runtimeFingerprint(
     remainHp: owner.getCurrentHp(),
     shieldAbsorbed: 300,
     remainShield: 700,
-    isLethal: false,
+    hpReachedZeroBeforeReactions: false,
   });
   bus.publish<ShieldBreakEvent>({
     type: 'ShieldBreakEvent',

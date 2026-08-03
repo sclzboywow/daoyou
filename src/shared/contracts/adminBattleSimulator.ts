@@ -1,8 +1,8 @@
-import type { LogSpan } from '@shared/engine/battle-v5/systems/log/types';
+import type { UnitStateSnapshot } from '@shared/engine/battle-v5/systems/state/types';
 import type {
-  BattleStateTimeline,
-  UnitStateSnapshot,
-} from '@shared/engine/battle-v5/systems/state/types';
+  BattleStateTimelineV3,
+  CombatSequenceV3,
+} from '@shared/engine/battle-v5/v3';
 import {
   ENEMY_RACE_VALUES,
   REALM_STAGE_VALUES,
@@ -143,8 +143,8 @@ export interface AdminBattleDuelResult {
     b: AdminBattleFinalUnitState;
   };
   logs: string[];
-  logSpans: LogSpan[];
-  stateTimeline: BattleStateTimeline;
+  sequences: CombatSequenceV3[];
+  stateTimeline: BattleStateTimelineV3;
 }
 
 export interface AdminBattleMonteCarloSample {

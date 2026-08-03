@@ -16,6 +16,7 @@ import { calculateSpiritualRootDamageMultiplier } from '../../systems/spiritualR
 import { Unit } from '../../units/Unit';
 import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 function unit(id: string): Unit {
   return new Unit(id, id, {});
@@ -132,10 +133,10 @@ describe('天衍所需通用 battle-v5 扩展', () => {
       dispelPolicy: 'protected',
     }), target);
 
-    new BuffCopyEffect({
+    executeTestEffect(new BuffCopyEffect({
       match: { id: 'test.protected-seal' },
       target: 'caster',
-    }).execute({ caster, target });
+    }), { caster, target });
 
     expect(caster.buffs.getAllBuffIds()).not.toContain('test.protected-seal');
   });
@@ -154,7 +155,7 @@ describe('天衍所需通用 battle-v5 扩展', () => {
     target.updateDerivedStats();
     const before = caster.attributes.getValue(AttributeType.CONTROL_HIT);
 
-    EffectRegistry.getInstance().create({
+    executeTestEffect(EffectRegistry.getInstance().create({
       type: 'apply_buff',
       params: {
         controlHitBonus: 0.5,
@@ -167,7 +168,7 @@ describe('天衍所需通用 battle-v5 扩展', () => {
           stackRule: StackRule.REFRESH_DURATION,
         },
       },
-    })?.execute({ caster, target });
+    }), { caster, target });
 
     expect(target.buffs.getAllBuffIds()).toContain('test.scoped-control');
     expect(caster.attributes.getValue(AttributeType.CONTROL_HIT)).toBe(before);
@@ -181,10 +182,10 @@ describe('天衍所需通用 battle-v5 扩展', () => {
     const events: HealEvent[] = [];
     EventBus.instance.subscribe<HealEvent>('HealEvent', (event) => events.push(event));
 
-    EffectRegistry.getInstance().create({
+    executeTestEffect(EffectRegistry.getInstance().create({
       type: 'refund_paid_cost',
       params: { ratio: 0.2 },
-    })?.execute({
+    }), {
       caster,
       target,
       castSnapshot: {
@@ -213,10 +214,10 @@ describe('天衍所需通用 battle-v5 扩展', () => {
     const events: HealEvent[] = [];
     EventBus.instance.subscribe<HealEvent>('HealEvent', (event) => events.push(event));
 
-    EffectRegistry.getInstance().create({
+    executeTestEffect(EffectRegistry.getInstance().create({
       type: 'refund_paid_cost',
       params: { amount: 80 },
-    })?.execute({
+    }), {
       caster,
       target,
       castSnapshot: {
@@ -248,10 +249,10 @@ describe('天衍所需通用 battle-v5 扩展', () => {
     const events: HealEvent[] = [];
     EventBus.instance.subscribe<HealEvent>('HealEvent', (event) => events.push(event));
 
-    EffectRegistry.getInstance().create({
+    executeTestEffect(EffectRegistry.getInstance().create({
       type: 'refund_paid_cost',
       params: { amount: 20 },
-    })?.execute({
+    }), {
       caster,
       target,
       castSnapshot: {
@@ -280,10 +281,10 @@ describe('天衍所需通用 battle-v5 扩展', () => {
     const events: HealEvent[] = [];
     EventBus.instance.subscribe<HealEvent>('HealEvent', (event) => events.push(event));
 
-    EffectRegistry.getInstance().create({
+    executeTestEffect(EffectRegistry.getInstance().create({
       type: 'refund_paid_cost',
       params: { amount: 20 },
-    })?.execute({
+    }), {
       caster,
       target,
       castSnapshot: {

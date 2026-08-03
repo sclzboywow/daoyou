@@ -5,7 +5,6 @@ import { EventBus } from '@shared/engine/battle-v5/core/EventBus';
 import type {
   DamageRequestEvent,
   DeathPreventEvent,
-  UnitDeadEvent,
 } from '@shared/engine/battle-v5/core/events';
 import {
   AttributeType,
@@ -18,6 +17,7 @@ import { DamageSystem } from '@shared/engine/battle-v5/systems/DamageSystem';
 import { Unit } from '@shared/engine/battle-v5/units/Unit';
 import { getBodyCultivationBattleInitHooks } from '@shared/lib/bodyCultivation/effects';
 import type { CultivatorCondition } from '@shared/types/condition';
+import { publishTestDamageRequest } from '@shared/engine/battle-v5/tests/setup/combatV3TestHarness';
 
 describe('death_prevent artifact affix integration', () => {
   beforeEach(() => {
@@ -81,7 +81,7 @@ describe('death_prevent artifact affix integration', () => {
   }
 
   function dealLethalDamage(attacker: Unit, defender: Unit): void {
-    EventBus.instance.publish<DamageRequestEvent>({
+    publishTestDamageRequest({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster: attacker,
@@ -97,11 +97,6 @@ describe('death_prevent artifact affix integration', () => {
     const attacker = createUnit('attacker', '破阵者');
     const defender = createUnit('defender', '持符者');
     const damageSystem = new DamageSystem();
-    let deathEvent: UnitDeadEvent | undefined;
-
-    EventBus.instance.subscribe<UnitDeadEvent>('UnitDeadEvent', (event) => {
-      deathEvent = event;
-    });
 
     const artifact = composeProductFromAffixIds({
       productType: 'artifact',
@@ -126,7 +121,6 @@ describe('death_prevent artifact affix integration', () => {
 
     expect(defender.getCurrentHp()).toBe(1);
     expect(defender.isAlive()).toBe(true);
-    expect(deathEvent).toBeUndefined();
     expect(
       EventBus.instance
         .getEventHistory()

@@ -53,9 +53,9 @@ import {
 import {
   TIANYAN_ELEMENTS,
   TIANYAN_ELEMENT_ABILITY_TAGS,
-  TIANYAN_REACTION_ELEMENT_BUFF_TAG,
-  TIANYAN_LANDING_BASE_DAMAGE,
   TIANYAN_ELEMENT_NAMES,
+  TIANYAN_LANDING_BASE_DAMAGE,
+  TIANYAN_REACTION_ELEMENT_BUFF_TAG,
   getTianyanReaction,
   nextGeneratingElement,
   tianyanReactionElementMarkerTag,
@@ -115,7 +115,9 @@ const sectAbilityTag = (abilityId: string) =>
   GameplayTags.ABILITY.SECT.ability(TIANYAN_SECT_ID, abilityId);
 
 const definition = (id: string) => {
-  const result = TIANYAN_BASE_DEFINITION.abilities.find((entry) => entry.id === id);
+  const result = TIANYAN_BASE_DEFINITION.abilities.find(
+    (entry) => entry.id === id,
+  );
   if (!result) throw new Error(`天衍神通定义缺失: ${id}`);
   return result;
 };
@@ -149,7 +151,10 @@ function buff(
   };
 }
 
-const selfBuff = (buffConfig: BuffConfig, conditions?: ConditionConfig[]): EffectConfig => ({
+const selfBuff = (
+  buffConfig: BuffConfig,
+  conditions?: ConditionConfig[],
+): EffectConfig => ({
   type: 'apply_buff',
   conditions,
   params: { target: 'caster', buffConfig },
@@ -196,10 +201,17 @@ const healHp = (
   },
 });
 
-const healMp = (ratio: number, conditions?: ConditionConfig[]): EffectConfig => ({
+const healMp = (
+  ratio: number,
+  conditions?: ConditionConfig[],
+): EffectConfig => ({
   type: 'heal',
   conditions,
-  params: { value: { targetMaxMpRatio: ratio }, recipient: 'caster', target: 'mp' },
+  params: {
+    value: { targetMaxMpRatio: ratio },
+    recipient: 'caster',
+    target: 'mp',
+  },
 });
 
 const shieldMagic = (
@@ -210,7 +222,10 @@ const shieldMagic = (
   type: 'shield',
   conditions,
   params: {
-    value: { attribute: AttributeType.MAGIC_ATK, coefficient: coefficient * multiplier },
+    value: {
+      attribute: AttributeType.MAGIC_ATK,
+      coefficient: coefficient * multiplier,
+    },
     target: 'caster',
   },
 });
@@ -272,10 +287,13 @@ function periodicDamageBuff(
       GameplayTags.BUFF.SECT.namespace(TIANYAN_SECT_ID, id),
       mismatchImmunityTag,
     ],
-    statusTags: element === 'fire' && id === TIANYAN_BURN
-      ? [GameplayTags.STATUS.STATE.BURNED]
-      : undefined,
-    stackRule: isLayeredBurn ? StackRule.STACK_LAYER : StackRule.REFRESH_DURATION,
+    statusTags:
+      element === 'fire' && id === TIANYAN_BURN
+        ? [GameplayTags.STATUS.STATE.BURNED]
+        : undefined,
+    stackRule: isLayeredBurn
+      ? StackRule.STACK_LAYER
+      : StackRule.REFRESH_DURATION,
     maxLayers: isLayeredBurn ? 2 : undefined,
     listeners: [
       {
@@ -287,16 +305,18 @@ function periodicDamageBuff(
         effects: [
           periodic,
           ...(isLayeredBurn
-            ? [{
-                type: 'buff_layer_modify',
-                params: {
-                  match: { id },
-                  operation: 'subtract',
-                  layers: 1,
-                  target: 'target',
-                  logVisibility: 'debug',
-                },
-              } satisfies EffectConfig]
+            ? [
+                {
+                  type: 'buff_layer_modify',
+                  params: {
+                    match: { id },
+                    operation: 'subtract',
+                    layers: 1,
+                    target: 'target',
+                    logVisibility: 'debug',
+                  },
+                } satisfies EffectConfig,
+              ]
             : []),
         ],
       },
@@ -317,10 +337,18 @@ function slowBuff(id: string, value: number, duration: number): BuffConfig {
   });
 }
 
-function magicAttackDownBuff(id: string, value: number, duration: number): BuffConfig {
+function magicAttackDownBuff(
+  id: string,
+  value: number,
+  duration: number,
+): BuffConfig {
   return buff(id, '法攻削弱', BuffType.DEBUFF, duration, {
     modifiers: [
-      { attrType: AttributeType.MAGIC_ATK, type: ModifierType.ADD, value: -value },
+      {
+        attrType: AttributeType.MAGIC_ATK,
+        type: ModifierType.ADD,
+        value: -value,
+      },
     ],
   });
 }
@@ -377,7 +405,11 @@ function oneUseDamageBuff(
         effects: [
           {
             type: 'percent_damage_modifier',
-            params: { mode: 'increase', value, allowedDamageSources: [DamageSource.DIRECT] },
+            params: {
+              mode: 'increase',
+              value,
+              allowedDamageSources: [DamageSource.DIRECT],
+            },
           },
           {
             type: 'buff_layer_modify',
@@ -404,7 +436,8 @@ function nextReactionDamageBuff(
   for (const incoming of TIANYAN_ELEMENTS) {
     for (const oldSeal of TIANYAN_ELEMENTS) {
       const relation = getTianyanReaction(oldSeal, incoming);
-      if (relation.kind !== 'generation' && relation.kind !== 'overcoming') continue;
+      if (relation.kind !== 'generation' && relation.kind !== 'overcoming')
+        continue;
       listeners.push({
         id: `${id}.${oldSeal}-to-${incoming}`,
         eventType: GameplayTags.EVENT.DAMAGE_REQUEST,
@@ -482,10 +515,12 @@ function directDamage(
   };
   const allowHiddenEdge = options.allowHiddenEdge ?? true;
   const withoutEdge = condition('has_not_tag', {
-    scope: 'caster', tag: hiddenEdgeState,
+    scope: 'caster',
+    tag: hiddenEdgeState,
   });
   const withEdge = condition('has_tag_on', {
-    scope: 'caster', tag: hiddenEdgeState,
+    scope: 'caster',
+    tag: hiddenEdgeState,
   });
   if (!allowHiddenEdge) {
     return [
@@ -544,20 +579,6 @@ function reactionLog(reaction: TianyanReactionDefinition): EffectConfig {
       internalKey: `sect.tianyan.reaction.${reaction.id}`,
       displayName: reaction.name ?? '五行反应',
       target: 'target',
-      triggerBasis: {
-        left: {
-          id: `sect.tianyan.seal.${reaction.oldSeal}`,
-          displayName: `${TIANYAN_ELEMENT_NAMES[reaction.oldSeal]}印`,
-        },
-        relation: {
-          id: `sect.tianyan.relation.${reaction.kind}`,
-          displayName: reaction.kind === 'generation' ? '化生' : '冲克',
-        },
-        right: {
-          id: `sect.tianyan.element.${reaction.incoming}`,
-          displayName: `${TIANYAN_ELEMENT_NAMES[reaction.incoming]}术`,
-        },
-      },
     },
   };
 }
@@ -588,9 +609,10 @@ function followUp(
   };
 }
 
-function reactionValueConditions(
-  settings: TianyanBuildSettings,
-): { normal?: ConditionConfig[]; empowered?: ConditionConfig[] } {
+function reactionValueConditions(settings: TianyanBuildSettings): {
+  normal?: ConditionConfig[];
+  empowered?: ConditionConfig[];
+} {
   if (settings.pathId !== TIANYAN_LUOSHU_PATH_ID) return {};
   return {
     normal: [resourceBelowThree],
@@ -637,7 +659,9 @@ function reactionEffects(
       case 'cold-spring':
         return [];
       case 'flourish':
-        return [healHp(0.15 * valueBonus, undefined, settings.loadoutMultiplier)];
+        return [
+          healHp(0.15 * valueBonus, undefined, settings.loadoutMultiplier),
+        ];
       default:
         return [];
     }
@@ -729,16 +753,22 @@ function reactionEffects(
       ];
     }
     case 'root-collapse': {
-      const basic = buff('sect.tianyan.root-collapse', '崩根', BuffType.DEBUFF, 2, {
-        stackPriority: settings.rootCollapseMagicDefReduction * valueBonus,
-        modifiers: [
-          {
-            attrType: AttributeType.MAGIC_DEF,
-            type: ModifierType.ADD,
-            value: -settings.rootCollapseMagicDefReduction * valueBonus,
-          },
-        ],
-      });
+      const basic = buff(
+        'sect.tianyan.root-collapse',
+        '崩根',
+        BuffType.DEBUFF,
+        2,
+        {
+          stackPriority: settings.rootCollapseMagicDefReduction * valueBonus,
+          modifiers: [
+            {
+              attrType: AttributeType.MAGIC_DEF,
+              type: ModifierType.ADD,
+              value: -settings.rootCollapseMagicDefReduction * valueBonus,
+            },
+          ],
+        },
+      );
       const empowered = buff(
         'sect.tianyan.root-collapse',
         '崩根',
@@ -758,7 +788,9 @@ function reactionEffects(
       return [
         followUp(reaction, reaction.followUpRatio ?? 0.5, 'wood'),
         targetBuff(basic, conditions.normal),
-        ...(conditions.empowered ? [targetBuff(empowered, conditions.empowered)] : []),
+        ...(conditions.empowered
+          ? [targetBuff(empowered, conditions.empowered)]
+          : []),
       ];
     }
     case 'sever-meridian': {
@@ -787,8 +819,16 @@ function reactionEffects(
         buff('sect.tianyan.melt-metal', '熔金', BuffType.DEBUFF, 2, {
           stackPriority: value,
           modifiers: [
-            { attrType: AttributeType.ATK, type: ModifierType.ADD, value: -value },
-            { attrType: AttributeType.MAGIC_ATK, type: ModifierType.ADD, value: -value },
+            {
+              attrType: AttributeType.ATK,
+              type: ModifierType.ADD,
+              value: -value,
+            },
+            {
+              attrType: AttributeType.MAGIC_ATK,
+              type: ModifierType.ADD,
+              value: -value,
+            },
           ],
         });
       return [
@@ -846,7 +886,10 @@ function sealPlacement(
   if (reaction && settings.pathId === TIANYAN_HETU_PATH_ID) {
     return [
       {
-        ...applySealEffect(incoming, settings.sealDuration + settings.hetuSealExtension),
+        ...applySealEffect(
+          incoming,
+          settings.sealDuration + settings.hetuSealExtension,
+        ),
         conditions: [resourceAtLeastThree, targetAlive],
       },
       {
@@ -856,7 +899,11 @@ function sealPlacement(
       { ...transition, conditions: [targetAlive] },
     ];
   }
-  if (reaction && settings.pathId === TIANYAN_LUOSHU_PATH_ID && settings.luoshuRetain) {
+  if (
+    reaction &&
+    settings.pathId === TIANYAN_LUOSHU_PATH_ID &&
+    settings.luoshuRetain
+  ) {
     return [
       {
         ...applySealEffect(incoming, Math.max(3, settings.sealDuration)),
@@ -870,7 +917,10 @@ function sealPlacement(
     ];
   }
   return [
-    { ...applySealEffect(incoming, settings.sealDuration), conditions: [targetAlive] },
+    {
+      ...applySealEffect(incoming, settings.sealDuration),
+      conditions: [targetAlive],
+    },
     { ...transition, conditions: [targetAlive] },
   ];
 }
@@ -966,15 +1016,17 @@ function commonReactionPrelude(
     value: 3,
   });
   const thresholdEffects: EffectConfig[] = settings.threeTalents
-    ? [selfBuff(
-        oneUseDamageBuff(
-          'sect.tianyan.three-talents-damage',
-          '三才合契',
-          GameplayTags.STATUS.SECT.state(TIANYAN_SECT_ID, 'ThreeTalents'),
-          0.20,
+    ? [
+        selfBuff(
+          oneUseDamageBuff(
+            'sect.tianyan.three-talents-damage',
+            '三才合契',
+            GameplayTags.STATUS.SECT.state(TIANYAN_SECT_ID, 'ThreeTalents'),
+            0.2,
+          ),
+          [thresholdReached],
         ),
-        [thresholdReached],
-      )]
+      ]
     : [];
   effects.push({
     type: 'runtime_counter_modify',
@@ -986,27 +1038,29 @@ function commonReactionPrelude(
       max: 3,
       target: 'caster',
       effects: [
-        selfBuff(buff(
-          `sect.tianyan.element-history.${reaction.incoming}`,
-          `${TIANYAN_ELEMENT_NAMES[reaction.incoming]}行已用`,
-          BuffType.BUFF,
-          -1,
-          {
-            tags: [
-              GameplayTags.BUFF.TYPE.BUFF,
-              TIANYAN_REACTION_ELEMENT_BUFF_TAG,
-              GameplayTags.BUFF.SECT.namespace(
-                TIANYAN_SECT_ID,
-                `element-history.${reaction.incoming}`,
-              ),
-            ],
-            statusTags: [markerTag],
-            logVisibility: 'debug',
-            statusVisibility: 'hidden',
-            countsAsStatus: false,
-            dispelPolicy: 'protected',
-          },
-        )),
+        selfBuff(
+          buff(
+            `sect.tianyan.element-history.${reaction.incoming}`,
+            `${TIANYAN_ELEMENT_NAMES[reaction.incoming]}行已用`,
+            BuffType.BUFF,
+            -1,
+            {
+              tags: [
+                GameplayTags.BUFF.TYPE.BUFF,
+                TIANYAN_REACTION_ELEMENT_BUFF_TAG,
+                GameplayTags.BUFF.SECT.namespace(
+                  TIANYAN_SECT_ID,
+                  `element-history.${reaction.incoming}`,
+                ),
+              ],
+              statusTags: [markerTag],
+              logVisibility: 'debug',
+              statusVisibility: 'hidden',
+              countsAsStatus: false,
+              dispelPolicy: 'protected',
+            },
+          ),
+        ),
         ...thresholdEffects,
         {
           type: 'buff_layer_modify',
@@ -1103,7 +1157,9 @@ function chainControlEffects(
             mapping: { caster: 'owner', target: 'event.target' },
             conditions: [
               condition('ability_has_tag', { tag: landingTag }),
-              condition('damage_source_is', { damageSource: DamageSource.DIRECT }),
+              condition('damage_source_is', {
+                damageSource: DamageSource.DIRECT,
+              }),
             ],
             effects: [
               {
@@ -1124,11 +1180,14 @@ function chainControlEffects(
   ];
 }
 
-function shatterEffects(settings: TianyanBuildSettings, incoming: TianyanElement): EffectConfig[] {
+function shatterEffects(
+  settings: TianyanBuildSettings,
+  incoming: TianyanElement,
+): EffectConfig[] {
   if (!settings.shatterSeal) return [];
   const conditions = [
     condition('hp_above', { scope: 'target', value: 0 }),
-    condition('hp_below', { scope: 'target', value: 0.40 }),
+    condition('hp_below', { scope: 'target', value: 0.4 }),
     condition('has_not_tag', { scope: 'caster', tag: shatterCooldownState }),
   ];
   return [
@@ -1170,15 +1229,24 @@ function buildLandingBranch(
   settings: TianyanBuildSettings,
   context: SectProjectionContext,
 ): EffectConfig[] {
-  const reaction = oldSeal ? getTianyanReaction(oldSeal, spec.element) : undefined;
-  const isReaction = reaction?.kind === 'generation' || reaction?.kind === 'overcoming';
+  const reaction = oldSeal
+    ? getTianyanReaction(oldSeal, spec.element)
+    : undefined;
+  const isReaction =
+    reaction?.kind === 'generation' || reaction?.kind === 'overcoming';
   const generationBonus = mainDamageBonus(reaction, settings);
-  const forgeBypass = reaction?.id === 'forge-edge' ? settings.forgeEdgeBypass : 0;
-  const dynamicCap = settings.heavenEnds && reaction?.kind === 'overcoming' ? 0.60 : undefined;
+  const forgeBypass =
+    reaction?.id === 'forge-edge' ? settings.forgeEdgeBypass : 0;
+  const dynamicCap =
+    settings.heavenEnds && reaction?.kind === 'overcoming' ? 0.6 : undefined;
   const effects: EffectConfig[] = [
     {
       type: 'damage_memory',
-      params: { key: TIANYAN_MAIN_DAMAGE_MEMORY, mode: 'clear', target: 'caster' },
+      params: {
+        key: TIANYAN_MAIN_DAMAGE_MEMORY,
+        mode: 'clear',
+        target: 'caster',
+      },
     },
   ];
 
@@ -1195,18 +1263,12 @@ function buildLandingBranch(
           params: { maxCount: 1, status: 'positive' },
         },
         selfBuff(
-          buff(
-            TIANYAN_DISPEL_TRUTH_COOLDOWN,
-            '斩护见真·息',
-            BuffType.BUFF,
-            3,
-            {
-              dispelPolicy: 'protected',
-              countsAsStatus: false,
-              logVisibility: 'debug',
-              statusTags: [dispelTruthCooldownState],
-            },
-          ),
+          buff(TIANYAN_DISPEL_TRUTH_COOLDOWN, '斩护见真·息', BuffType.BUFF, 3, {
+            dispelPolicy: 'protected',
+            countsAsStatus: false,
+            logVisibility: 'debug',
+            statusTags: [dispelTruthCooldownState],
+          }),
           [available],
         ),
       );
@@ -1235,14 +1297,15 @@ function buildLandingBranch(
   }
 
   const firstChange = settings.firstChange && !oldSeal;
-  const saveError =
-    settings.saveError && oldSeal && reaction?.kind === 'none';
+  const saveError = settings.saveError && oldSeal && reaction?.kind === 'none';
   if (firstChange) {
     const unused = condition('has_not_tag', {
-      scope: 'caster', tag: firstChangeState,
+      scope: 'caster',
+      tag: firstChangeState,
     });
     const alreadyUsed = condition('has_tag_on', {
-      scope: 'caster', tag: firstChangeState,
+      scope: 'caster',
+      tag: firstChangeState,
     });
     const targetAlive = condition('hp_above', { scope: 'target', value: 0 });
     effects.push(
@@ -1279,16 +1342,24 @@ function buildLandingBranch(
     );
   } else if (saveError) {
     const unused = condition('runtime_counter_compare', {
-      scope: 'caster', key: saveErrorCounter, op: 'lt', value: 1,
+      scope: 'caster',
+      key: saveErrorCounter,
+      op: 'lt',
+      value: 1,
     });
     const alreadyUsed = condition('runtime_counter_compare', {
-      scope: 'caster', key: saveErrorCounter, op: 'gte', value: 1,
+      scope: 'caster',
+      key: saveErrorCounter,
+      op: 'gte',
+      value: 1,
     });
     effects.push(
-      ...sealPlacement(spec.element, oldSeal, reaction, settings).map((effect) => ({
-        ...effect,
-        conditions: [...(effect.conditions ?? []), alreadyUsed],
-      })),
+      ...sealPlacement(spec.element, oldSeal, reaction, settings).map(
+        (effect) => ({
+          ...effect,
+          conditions: [...(effect.conditions ?? []), alreadyUsed],
+        }),
+      ),
       {
         type: 'runtime_counter_modify',
         conditions: [unused],
@@ -1311,7 +1382,11 @@ function buildLandingBranch(
   effects.push(...chainControlEffects(settings, Boolean(isReaction)));
   effects.push({
     type: 'damage_memory',
-    params: { key: TIANYAN_MAIN_DAMAGE_MEMORY, mode: 'clear', target: 'caster' },
+    params: {
+      key: TIANYAN_MAIN_DAMAGE_MEMORY,
+      mode: 'clear',
+      target: 'caster',
+    },
   });
   return effects;
 }
@@ -1331,13 +1406,15 @@ function compileLandingAbility(
       : '目标没有法印时',
     effects: buildLandingBranch(spec, oldSeal, settings, context),
   }));
-  const plans: AbilityEffectPlanConfig[] = branchEntries.map((oldSeal, index) => ({
-    id: oldSeal ? `old-${oldSeal}` : 'no-seal',
-    name: definition(spec.id).baseName,
-    priority: 200 - index,
-    conditions: oldSeal ? [hasSealCondition(oldSeal)] : hasNoSealConditions(),
-    layerIds: [oldSeal ? `old-${oldSeal}` : 'no-seal'],
-  }));
+  const plans: AbilityEffectPlanConfig[] = branchEntries.map(
+    (oldSeal, index) => ({
+      id: oldSeal ? `old-${oldSeal}` : 'no-seal',
+      name: definition(spec.id).baseName,
+      priority: 200 - index,
+      conditions: oldSeal ? [hasSealCondition(oldSeal)] : hasNoSealConditions(),
+      layerIds: [oldSeal ? `old-${oldSeal}` : 'no-seal'],
+    }),
+  );
   const abilityDefinition = definition(spec.id);
   if (abilityDefinition.kind === 'passive') {
     throw new Error(`落印术 ${spec.id} 不能是被动能力`);
@@ -1404,12 +1481,10 @@ function compileUtilityAbilities(
 
   const renewal = definition('myriad-wood-renewal');
   if (renewal.kind === 'passive') throw new Error('万木回春定义错误');
-  const renewalRatio = 0.12
-    * settings.woodHealingMultiplier
-    * settings.loadoutMultiplier;
-  const renewalTick = 0.03
-    * settings.woodHealingMultiplier
-    * settings.loadoutMultiplier;
+  const renewalRatio =
+    0.12 * settings.woodHealingMultiplier * settings.loadoutMultiplier;
+  const renewalTick =
+    0.03 * settings.woodHealingMultiplier * settings.loadoutMultiplier;
   const renewalBuff = buff('sect.tianyan.renewal', '回春', BuffType.BUFF, 2, {
     tags: [
       GameplayTags.BUFF.TYPE.BUFF,
@@ -1485,7 +1560,11 @@ function compileUtilityAbilities(
         selfBuff(
           buff('sect.tianyan.lotus', '种莲', BuffType.BUFF, 2, {
             modifiers: [
-              { attrType: AttributeType.MAGIC_ATK, type: ModifierType.ADD, value: 0.20 },
+              {
+                attrType: AttributeType.MAGIC_ATK,
+                type: ModifierType.ADD,
+                value: 0.2,
+              },
             ],
           }),
         ),
@@ -1510,14 +1589,20 @@ function compileUtilityAbilities(
           type: 'shield',
           params: {
             value: {
-              targetMaxHpRatio: 0.12
-                * settings.earthShieldMultiplier
-                * settings.loadoutMultiplier,
+              targetMaxHpRatio:
+                0.12 *
+                settings.earthShieldMultiplier *
+                settings.loadoutMultiplier,
             },
             target: 'target',
           },
         },
-        targetBuff(incomingDamageGuard('sect.tianyan.earth-bearing', settings.earthReduction)),
+        targetBuff(
+          incomingDamageGuard(
+            'sect.tianyan.earth-bearing',
+            settings.earthReduction,
+          ),
+        ),
         ...innerNourish(settings),
       ],
       extraTags: [innerArtTag, TIANYAN_ELEMENT_ABILITY_TAGS.earth],
@@ -1538,7 +1623,9 @@ function compileUtilityAbilities(
         {
           type: 'dispel',
           params: {
-            recipient: 'caster', status: 'negative', maxCount: settings.riverCleanseCount,
+            recipient: 'caster',
+            status: 'negative',
+            maxCount: settings.riverCleanseCount,
           },
         },
         healMp(settings.riverMpRatio),
@@ -1569,34 +1656,38 @@ function compileSecrets(
 ): void {
   const sealRequired = [
     condition('buff_layer_at_least', {
-      scope: 'target', id: TIANYAN_ELEMENT_SEAL, value: 1,
+      scope: 'target',
+      id: TIANYAN_ELEMENT_SEAL,
+      value: 1,
     }),
   ];
   const shift = definition('shift-palace');
   if (shift.kind === 'passive') throw new Error('移宫换宿定义错误');
-  const shiftLayers: AbilityEffectLayerConfig[] = TIANYAN_ELEMENTS.map((oldSeal) => {
-    const incoming = nextGeneratingElement(oldSeal, settings.shiftSteps);
-    return {
-      id: `shift-${oldSeal}`,
-      displayName: `目标带有${TIANYAN_ELEMENT_NAMES[oldSeal]}印时`,
-      effects: [
-        applySealEffect(incoming, settings.sealDuration),
-        sealTransitionLog(incoming, 'replace', oldSeal),
-        ...(settings.shiftReactionBonus > 0
-          ? [
-              selfBuff(
-                nextReactionDamageBuff(
-                  TIANYAN_REVERSE_SHIFT,
-                  '倒演两宫',
-                  reverseShiftState,
-                  settings.shiftReactionBonus,
+  const shiftLayers: AbilityEffectLayerConfig[] = TIANYAN_ELEMENTS.map(
+    (oldSeal) => {
+      const incoming = nextGeneratingElement(oldSeal, settings.shiftSteps);
+      return {
+        id: `shift-${oldSeal}`,
+        displayName: `目标带有${TIANYAN_ELEMENT_NAMES[oldSeal]}印时`,
+        effects: [
+          applySealEffect(incoming, settings.sealDuration),
+          sealTransitionLog(incoming, 'replace', oldSeal),
+          ...(settings.shiftReactionBonus > 0
+            ? [
+                selfBuff(
+                  nextReactionDamageBuff(
+                    TIANYAN_REVERSE_SHIFT,
+                    '倒演两宫',
+                    reverseShiftState,
+                    settings.shiftReactionBonus,
+                  ),
                 ),
-              ),
-            ]
-          : []),
-      ],
-    };
-  });
+              ]
+            : []),
+        ],
+      };
+    },
+  );
   builder.setAbility(
     'shift-palace',
     factory.active({
@@ -1625,7 +1716,7 @@ function compileSecrets(
   if (repository.kind === 'passive') throw new Error('五气归藏定义错误');
   const multiplier = settings.repositoryMultiplier;
   const repositoryEffects: Record<TianyanElement, EffectConfig[]> = {
-    wood: [healHp(0.10 * multiplier, undefined, settings.loadoutMultiplier)],
+    wood: [healHp(0.1 * multiplier, undefined, settings.loadoutMultiplier)],
     fire: [
       selfBuff(
         oneUseDamageBuff(
@@ -1648,18 +1739,22 @@ function compileSecrets(
         }),
       ),
     ],
-    water: [healMp(0.10 * multiplier)],
+    water: [healMp(0.1 * multiplier)],
   };
-  const repositoryLayers: AbilityEffectLayerConfig[] = TIANYAN_ELEMENTS.map((oldSeal) => ({
-    id: `repository-${oldSeal}`,
-    displayName: `目标带有${TIANYAN_ELEMENT_NAMES[oldSeal]}印时`,
-    effects: [
-      clearSealEffect(),
-      sealConsumeLog(oldSeal),
-      ...repositoryEffects[oldSeal],
-      ...(settings.repositoryGain > 0 ? [gainDerivation(settings.repositoryGain)] : []),
-    ],
-  }));
+  const repositoryLayers: AbilityEffectLayerConfig[] = TIANYAN_ELEMENTS.map(
+    (oldSeal) => ({
+      id: `repository-${oldSeal}`,
+      displayName: `目标带有${TIANYAN_ELEMENT_NAMES[oldSeal]}印时`,
+      effects: [
+        clearSealEffect(),
+        sealConsumeLog(oldSeal),
+        ...repositoryEffects[oldSeal],
+        ...(settings.repositoryGain > 0
+          ? [gainDerivation(settings.repositoryGain)]
+          : []),
+      ],
+    }),
+  );
   builder.setAbility(
     'five-qi-repository',
     factory.active({
@@ -1724,7 +1819,9 @@ function runtimeListeners(settings: TianyanBuildSettings): ListenerConfig[] {
         condition('ability_has_tag', { tag: sectAbilityTag('primordial-ray') }),
         condition('damage_source_is', { damageSource: DamageSource.DIRECT }),
         condition('buff_layer_at_least', {
-          scope: 'target', id: TIANYAN_ELEMENT_SEAL, value: 1,
+          scope: 'target',
+          id: TIANYAN_ELEMENT_SEAL,
+          value: 1,
         }),
       ],
       effects: [healMp(0.03)],
@@ -1733,7 +1830,7 @@ function runtimeListeners(settings: TianyanBuildSettings): ListenerConfig[] {
   if (settings.shiftGain > 0) {
     listeners.push({
       id: 'sect.tianyan.shift-carries',
-      eventType: 'MechanicLogEvent',
+      eventType: 'BuffAppliedEvent',
       scope: GameplayTags.SCOPE.OWNER_AS_CASTER,
       priority: EventPriorityLevel.ACTION_TRIGGER,
       mapping: { caster: 'owner', target: 'event.target' },
@@ -1823,14 +1920,17 @@ function runtimeListeners(settings: TianyanBuildSettings): ListenerConfig[] {
         }),
         condition('damage_source_is', { damageSource: DamageSource.DIRECT }),
         condition('buff_layer_at_least', {
-          scope: 'target', id: TIANYAN_ELEMENT_SEAL, value: 1,
+          scope: 'target',
+          id: TIANYAN_ELEMENT_SEAL,
+          value: 1,
         }),
       ],
       effects: [
         {
           type: 'percent_damage_modifier',
           params: {
-            mode: 'increase', value: settings.observeSealDamageBonus,
+            mode: 'increase',
+            value: settings.observeSealDamageBonus,
             allowedDamageSources: [DamageSource.DIRECT],
           },
         },
@@ -1855,7 +1955,8 @@ function runtimeListeners(settings: TianyanBuildSettings): ListenerConfig[] {
         {
           type: 'percent_damage_modifier',
           params: {
-            mode: 'increase', value: settings.exploitWeaknessBonus,
+            mode: 'increase',
+            value: settings.exploitWeaknessBonus,
             allowedDamageSources: [DamageSource.DIRECT],
           },
         },
@@ -1877,7 +1978,9 @@ function compileRuntimePassives(
     factory.passive({
       definition: runtime,
       listeners: runtimeListeners(settings),
-      extraTags: [GameplayTags.ABILITY.SECT.mechanic(TIANYAN_SECT_ID, 'runtime')],
+      extraTags: [
+        GameplayTags.ABILITY.SECT.mechanic(TIANYAN_SECT_ID, 'runtime'),
+      ],
     }),
   );
   if (settings.pathId === TIANYAN_HETU_PATH_ID) {
@@ -1888,7 +1991,9 @@ function compileRuntimePassives(
       factory.passive({
         definition: hetu,
         pathId: TIANYAN_HETU_PATH_ID,
-        extraTags: [GameplayTags.ABILITY.SECT.mechanic(TIANYAN_SECT_ID, 'hetu-cycle')],
+        extraTags: [
+          GameplayTags.ABILITY.SECT.mechanic(TIANYAN_SECT_ID, 'hetu-cycle'),
+        ],
       }),
     );
   }
@@ -1900,7 +2005,9 @@ function compileRuntimePassives(
       factory.passive({
         definition: luoshu,
         pathId: TIANYAN_LUOSHU_PATH_ID,
-        extraTags: [GameplayTags.ABILITY.SECT.mechanic(TIANYAN_SECT_ID, 'luoshu-break')],
+        extraTags: [
+          GameplayTags.ABILITY.SECT.mechanic(TIANYAN_SECT_ID, 'luoshu-break'),
+        ],
       }),
     );
   }
@@ -1942,18 +2049,23 @@ const LANDING_SPECS: LandingSpec[] = [
     id: 'metal-cloud-cutter',
     element: 'metal',
     coefficient: TIANYAN_LANDING_BASE_DAMAGE['metal-cloud-cutter'],
-    baseEffects: () => [
-      targetBuff(
-        buff('sect.tianyan.metal-cut', '破锋', BuffType.DEBUFF, 2, {
-          modifiers: [
-            { attrType: AttributeType.MAGIC_DEF, type: ModifierType.ADD, value: -0.15 },
-          ],
-        }),
-      ),
-    ].map((effect) => ({
-      ...effect,
-      params: { ...effect.params, chance: 0.40 },
-    })) as EffectConfig[],
+    baseEffects: () =>
+      [
+        targetBuff(
+          buff('sect.tianyan.metal-cut', '破锋', BuffType.DEBUFF, 2, {
+            modifiers: [
+              {
+                attrType: AttributeType.MAGIC_DEF,
+                type: ModifierType.ADD,
+                value: -0.15,
+              },
+            ],
+          }),
+        ),
+      ].map((effect) => ({
+        ...effect,
+        params: { ...effect.params, chance: 0.4 },
+      })) as EffectConfig[],
   },
   {
     id: 'white-star-breaker',
@@ -1969,19 +2081,17 @@ const LANDING_SPECS: LandingSpec[] = [
     coefficient: TIANYAN_LANDING_BASE_DAMAGE['dark-water-return'],
     baseEffects: (reaction, settings) => {
       if (reaction?.id !== 'cold-spring') {
-        return [
-          targetBuff(slowBuff('sect.tianyan.water-slow', 0.15, 2)),
-        ];
+        return [targetBuff(slowBuff('sect.tianyan.water-slow', 0.15, 2))];
       }
-      const base = settings.coldSpringSlow * (1 + settings.hetuReactionValueBonus);
+      const base =
+        settings.coldSpringSlow * (1 + settings.hetuReactionValueBonus);
       if (settings.pathId !== TIANYAN_LUOSHU_PATH_ID) {
         return [targetBuff(slowBuff('sect.tianyan.water-slow', base, 2))];
       }
       return [
-        targetBuff(
-          slowBuff('sect.tianyan.water-slow', base, 2),
-          [resourceBelowThree],
-        ),
+        targetBuff(slowBuff('sect.tianyan.water-slow', base, 2), [
+          resourceBelowThree,
+        ]),
         targetBuff(
           slowBuff(
             'sect.tianyan.water-slow',
@@ -2006,8 +2116,8 @@ export function compileTianyanBuild(
       id !== 'primordial-ray' &&
       !TIANYAN_LANDING_ABILITY_IDS.includes(id as TianyanLandingAbilityId),
   ).length;
-  settings.loadoutMultiplier = 1
-    + Math.min(2, nonLandingCount) * settings.nonLandingSlotBonus;
+  settings.loadoutMultiplier =
+    1 + Math.min(2, nonLandingCount) * settings.nonLandingSlotBonus;
   const factory = new SectAbilityFactory(TIANYAN_SECT_ID);
   for (const spec of LANDING_SPECS) {
     compileLandingAbility(builder, factory, spec, settings, context);

@@ -158,7 +158,7 @@ export async function executeBetBattleChallengeCommand(
         isWin,
         winnerId: challenge.winnerId,
         battleId: challenge.battleId,
-        battleRecordV2Id: challenge.battleRecordV2Id,
+        battleRecordV3Id: challenge.battleRecordV3Id,
         resultMessage: isWin
           ? '你力压对手，赢得赌战押注，奖励已发放邮件。'
           : '你此战失利，押注归对方所有，下次再战。',

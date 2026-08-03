@@ -12,7 +12,7 @@ import {
   releaseChallengeLock,
   updateRanking,
 } from '@server/lib/redis/rankings';
-import { createBattleRecordV2 } from '@server/lib/repositories/battleRecordV2Repository';
+import { createBattleRecordV3 } from '@server/lib/repositories/battleRecordV3Repository';
 import { createMessage } from '@server/lib/repositories/worldChatRepository';
 import { prepareStandardFullBattle } from '@shared/engine/battle-v5/setup/BattleStateStrategy';
 import type { RealmType } from '@shared/types/constants';
@@ -37,10 +37,10 @@ export async function executeRankingBattleCommand<T>(args: {
   userId: string;
   cultivatorId: string;
   opponentCultivatorId: string;
-  battleResult: Parameters<typeof createBattleRecordV2>[0]['battleResult'];
+  battleResult: Parameters<typeof createBattleRecordV3>[0]['battleResult'];
   tx: DbTransaction;
 }) {
-  const battleRecord = await createBattleRecordV2(
+  const battleRecord = await createBattleRecordV3(
     {
       userId: args.userId,
       cultivatorId: args.cultivatorId,
@@ -187,7 +187,7 @@ export async function runRankingBattleCommand(args: {
         opponent: targetRecord.cultivator,
       }),
     );
-    const isWin = battleResult.winner.id === args.cultivatorId;
+    const isWin = battleResult.outcome.winner.id === args.cultivatorId;
     let newChallengerRank: number | null = challengerRank;
     let newTargetRank: number | null = targetRank;
     let rankChangeType: RankingChangeType = null;
@@ -281,7 +281,7 @@ export async function sendWeeklyRankingRewardCommand(args: {
       fingerprint: args.requestFingerprint,
     },
     command: async (tx) => {
-      await MailService.sendMail(
+      const mail = await MailService.sendMail(
         args.cultivatorId,
         args.title,
         args.content,
@@ -289,9 +289,12 @@ export async function sendWeeklyRankingRewardCommand(args: {
         'reward',
         tx,
       );
+      if (!mail) {
+        throw new Error('排行榜奖励邮件创建失败');
+      }
       const mailSummary = await readPlayerMailSummary(args.cultivatorId, tx);
       return {
-        result: null,
+        result: { mailId: mail.id },
         resourceChanges: [
           {
             resourceTopic: 'player.mail-summary',

@@ -757,11 +757,11 @@ export const ARTIFACT_AFFIXES: AffixDefinition[] = [
   {
     id: 'artifact-defense-mana-recovery',
     displayName: '灵泉',
-    displayDescription: '每回合回复灵力',
+    displayDescription: '每回合根据神识回复法力',
     slot: 'modifier',
     rarity: 'uncommon',
     match: {
-      all: [CreationTags.MATERIAL.SEMANTIC_SPIRIT],
+      all: [CreationTags.MATERIAL.SEMANTIC_DIVINE],
       any: [
         CreationTags.MATERIAL.SEMANTIC_QI,
         CreationTags.MATERIAL.TYPE_HERB,
@@ -778,7 +778,7 @@ export const ARTIFACT_AFFIXES: AffixDefinition[] = [
       params: {
         target: 'mp',
         value: {
-          attribute: AttributeType.SPIRIT,
+          attribute: AttributeType.WILLPOWER,
           coefficient: 0.45,
         },
       },
@@ -902,12 +902,12 @@ export const ARTIFACT_AFFIXES: AffixDefinition[] = [
       params: {
         value: {
           attribute: AttributeType.ATK,
-          coefficient: 0.1,
+          coefficient: 0.04,
           targetMaxMpRatio: {
-            base: 0.01,
+            base: 0.004,
             scale: 'quality',
-            coefficient: 0.002,
-            max: 0.025,
+            coefficient: 0.0008,
+            max: 0.01,
           },
         },
       },
@@ -1555,7 +1555,7 @@ export const ARTIFACT_AFFIXES: AffixDefinition[] = [
       all: [CreationTags.MATERIAL.SEMANTIC_WATER],
       any: [
         CreationTags.MATERIAL.SEMANTIC_GUARD,
-        CreationTags.MATERIAL.SEMANTIC_SPIRIT,
+        CreationTags.MATERIAL.SEMANTIC_DIVINE,
         CreationTags.MATERIAL.TYPE_SPECIAL,
       ],
     },
@@ -1576,7 +1576,7 @@ export const ARTIFACT_AFFIXES: AffixDefinition[] = [
       params: {
         target: 'mp',
         value: {
-          attribute: AttributeType.SPIRIT,
+          attribute: AttributeType.WILLPOWER,
           coefficient: 0.14,
           targetMaxMpRatio: {
             base: 0.02,

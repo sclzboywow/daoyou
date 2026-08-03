@@ -1,11 +1,11 @@
 import { BattlePageLayout } from '@app/components/feature/battle/BattlePageLayout';
-import { BattlePlaybackPanel } from '@app/components/feature/battle/BattlePlaybackPanel';
-import { useBattlePlaybackState } from '@app/components/feature/battle/useBattlePlaybackState';
+import { BattlePlaybackPanel } from '@app/components/feature/battle/v3/BattlePlaybackPanel';
+import { useBattlePlaybackState } from '@app/components/feature/battle/v3/useBattlePlaybackState';
 import { CombatResultDialog } from '@app/components/feature/battle/v5/CombatResultDialog';
 import { GameImmersiveLoading } from '@app/components/game-shell';
 import { InkButton } from '@app/components/ui/InkButton';
 import { useResourceMutation } from '@app/lib/resources/mutations';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import type { RealmType } from '@shared/types/constants';
 import { Suspense, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -19,7 +19,7 @@ type ChallengeBattleResponse =
     }
   | {
       type: 'battle_result';
-      battleResult: BattleRecord;
+      battleResult: BattleRecordV3;
       rankingUpdate: {
         isWin: boolean;
         realm: RealmType;
@@ -117,7 +117,7 @@ export function ChallengeDirectEntryCard({
 function ChallengeBattlePageContent() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [battleResult, setBattleResult] = useState<BattleRecord>();
+  const [battleResult, setBattleResult] = useState<BattleRecordV3>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [rankingUpdate, setRankingUpdate] = useState<{
@@ -234,8 +234,8 @@ function ChallengeBattlePageContent() {
       <BattlePlaybackPanel battleResult={battleResult} playback={playback} />
 
       <CombatResultDialog
-        key={`challenge-${battleResult?.turns}-${battleResult?.winner.id ?? 'unknown'}`}
-        dialogKey={`challenge-${battleResult?.turns}-${battleResult?.winner.id ?? 'unknown'}`}
+        key={`challenge-${battleResult?.outcome.turns}-${battleResult?.outcome.winner.id ?? 'unknown'}`}
+        dialogKey={`challenge-${battleResult?.outcome.turns}-${battleResult?.outcome.winner.id ?? 'unknown'}`}
         open={!!battleResult && playback.isPlaybackFinished}
         title={isWin ? '挑战成功' : '挑战失利'}
         confirmLabel="返回排行榜"

@@ -1,8 +1,7 @@
-import { GameplayEffect, EffectContext } from './Effect';
+import { GameplayEffect, EffectExecutionContextV3 } from './Effect';
 import { ValueCalculator } from '../core/ValueCalculator';
 import { EffectRegistry } from '../factories/EffectRegistry';
 import { ShieldParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import { ShieldEvent } from '../core/events';
 
 /**
@@ -13,7 +12,7 @@ export class ShieldEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { caster, ability } = context;
     const target = this.params.target === 'caster' ? caster : context.target;
 
@@ -23,10 +22,19 @@ export class ShieldEffect extends GameplayEffect {
     if (shieldAmount <= 0) return;
 
     // 应用护盾
+    const before = target.getCurrentShield();
     target.addShield(shieldAmount);
+    const applied = target.getCurrentShield() - before;
+    if (applied > 0) {
+      context.commit(target, {
+        type: 'shield',
+        amount: Math.round(applied),
+        after: Math.round(target.getCurrentShield()),
+      });
+    }
 
     // 发布护盾事件
-    EventBus.instance.publish<ShieldEvent>({
+    context.emit<ShieldEvent>({
       type: 'ShieldEvent',
       timestamp: Date.now(),
       caster,

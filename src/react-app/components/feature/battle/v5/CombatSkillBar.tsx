@@ -1,12 +1,12 @@
-import type { UnitStateSnapshot } from '@shared/engine/battle-v5/systems/state/types';
 import { cn } from '@shared/lib/cn';
+import type { PublicBattleUnitSnapshotV1 } from '@shared/types/battle';
 import { format } from 'd3-format';
 
 interface Props {
-  unit: UnitStateSnapshot | null;
+  unit: PublicBattleUnitSnapshotV1 | null;
 }
 
-type SkillState = UnitStateSnapshot['cooldowns'][number];
+type SkillState = PublicBattleUnitSnapshotV1['cooldowns'][number];
 
 const fmtInt = format(',d');
 
@@ -15,7 +15,7 @@ function SkillStateItem({
   unit,
 }: {
   skill: SkillState;
-  unit: UnitStateSnapshot;
+  unit: PublicBattleUnitSnapshotV1;
 }) {
   const isOnCooldown = skill.current > 0;
   const hpCost = skill.costs?.find((cost) => cost.resource === 'hp');

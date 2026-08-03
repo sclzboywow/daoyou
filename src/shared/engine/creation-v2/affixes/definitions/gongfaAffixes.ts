@@ -160,7 +160,7 @@ export const GONGFA_AFFIXES: AffixDefinition[] = [
       type: 'attribute_modifier',
       params: {
         attrType: AttributeType.CRIT_RATE,
-        modType: ModifierType.ADD,
+        modType: ModifierType.FIXED,
         value: { base: 0.04, scale: 'quality', coefficient: 0.012 },
       },
     },
@@ -402,7 +402,7 @@ export const GONGFA_AFFIXES: AffixDefinition[] = [
       type: 'attribute_modifier',
       params: {
         attrType: AttributeType.HEAL_AMPLIFY,
-        modType: ModifierType.ADD,
+        modType: ModifierType.FIXED,
         value: { base: 0.015, scale: 'quality', coefficient: 0.012 },
       },
     },
@@ -431,7 +431,7 @@ export const GONGFA_AFFIXES: AffixDefinition[] = [
       type: 'attribute_modifier',
       params: {
         attrType: AttributeType.CONTROL_HIT,
-        modType: ModifierType.ADD,
+        modType: ModifierType.FIXED,
         value: { base: 0.01, scale: 'quality', coefficient: 0.005 },
       },
     },
@@ -460,7 +460,7 @@ export const GONGFA_AFFIXES: AffixDefinition[] = [
       type: 'attribute_modifier',
       params: {
         attrType: AttributeType.CONTROL_RESISTANCE,
-        modType: ModifierType.ADD,
+        modType: ModifierType.FIXED,
         value: { base: 0.01, scale: 'quality', coefficient: 0.012 },
       },
     },
@@ -1062,13 +1062,13 @@ export const GONGFA_AFFIXES: AffixDefinition[] = [
   {
     id: 'gongfa-school-crit-mana',
     displayName: '涌潮',
-    displayDescription: '灵力如潮，暴击时回复灵力',
+    displayDescription: '神识如潮，暴击时回复法力',
     slot: 'modifier',
     rarity: 'uncommon',
     match: {
       all: [CreationTags.MATERIAL.SEMANTIC_BURST],
       any: [
-        CreationTags.MATERIAL.SEMANTIC_SPIRIT,
+        CreationTags.MATERIAL.SEMANTIC_DIVINE,
         CreationTags.MATERIAL.SEMANTIC_QI,
         CreationTags.MATERIAL.SEMANTIC_THUNDER,
       ],
@@ -1086,7 +1086,7 @@ export const GONGFA_AFFIXES: AffixDefinition[] = [
       params: {
         target: 'mp',
         value: {
-          attribute: AttributeType.SPIRIT,
+          attribute: AttributeType.WILLPOWER,
           coefficient: {
             base: 0.05,
             scale: 'quality',

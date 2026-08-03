@@ -1,11 +1,17 @@
-import { EventBus } from '../../core/EventBus';
-import { BattleEngineV5 } from '../../BattleEngineV5';
 import { GameplayTags } from '@shared/engine/shared/tag-domain';
-import { DamageTakenEvent } from '../../core/types';
+import { BattleEngineV5 } from '../../BattleEngineV5';
+import { EventBus } from '../../core/EventBus';
 import { DamageEvent, RoundPreEvent, SkillCastEvent } from '../../core/events';
-import { AbilityType, AttributeType, BuffType, ModifierType } from '../../core/types';
+import {
+  AbilityType,
+  AttributeType,
+  BuffType,
+  DamageTakenEvent,
+  ModifierType,
+} from '../../core/types';
 import { AbilityFactory } from '../../factories/AbilityFactory';
 import { Unit } from '../../units/Unit';
+import { CombatPresenterV3 } from '../../v3/CombatPresenterV3';
 
 describe('Passive Listener Mapping Integration', () => {
   beforeEach(() => {
@@ -189,8 +195,8 @@ describe('Passive Listener Mapping Integration', () => {
       target: defender,
       damageTaken: 120,
       remainHp: defender.getCurrentHp(),
-      isLethal: false,
-      beforeHp: 0
+      hpReachedZeroBeforeReactions: false,
+      beforeHp: 0,
     });
 
     expect(attacker.buffs.getAllBuffIds()).toContain('counter_mark');
@@ -281,8 +287,9 @@ describe('Passive Listener Mapping Integration', () => {
     const engine = new BattleEngineV5(attacker, defender);
     const result = engine.execute();
 
-    console.log(result.logs);
-    const targetLog = result.logs.find((log) => log.includes('术痕印记'));
+    const targetLog = new CombatPresenterV3('detailed')
+      .formatAll(result.sequences)
+      .find((log) => log.includes('术痕印记'));
     expect(targetLog).toBeDefined();
     expect(targetLog).not.toContain('\n');
   });
@@ -311,12 +318,20 @@ describe('Passive Listener Mapping Integration', () => {
       }),
     );
 
-    expect(owner.attributes.getValue(AttributeType.ARMOR_PENETRATION)).toBeCloseTo(0.2);
-    expect(owner.attributes.getValue(AttributeType.DEF)).toBeGreaterThan(owner.attributes.getBaseValue(AttributeType.DEF));
+    expect(
+      owner.attributes.getValue(AttributeType.ARMOR_PENETRATION),
+    ).toBeCloseTo(0.2);
+    expect(owner.attributes.getValue(AttributeType.DEF)).toBeGreaterThan(
+      owner.attributes.getBaseValue(AttributeType.DEF),
+    );
 
     owner.abilities.removeAbility('passive_equipment_modifier');
 
-    expect(owner.attributes.getValue(AttributeType.ARMOR_PENETRATION)).toBeCloseTo(0);
-    expect(owner.attributes.getValue(AttributeType.DEF)).toBeCloseTo(owner.attributes.getBaseValue(AttributeType.DEF));
+    expect(
+      owner.attributes.getValue(AttributeType.ARMOR_PENETRATION),
+    ).toBeCloseTo(0);
+    expect(owner.attributes.getValue(AttributeType.DEF)).toBeCloseTo(
+      owner.attributes.getBaseValue(AttributeType.DEF),
+    );
   });
 });

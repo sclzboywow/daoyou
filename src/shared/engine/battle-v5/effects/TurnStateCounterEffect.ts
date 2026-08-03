@@ -6,14 +6,14 @@ import {
   getBattleRuntimeState,
 } from '../core/runtimeState';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 export class TurnStateCounterEffect extends GameplayEffect {
   constructor(private params: TurnStateCounterParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const state = getBattleRuntimeState(context.caster);
     if (this.params.event === 'no_damage_dealt') {
       if (consumeDamageDealtFlag(context.caster)) {

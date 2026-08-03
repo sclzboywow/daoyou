@@ -21,7 +21,7 @@ import type {
   SectSweepSessionData,
   SectTaskRewardReceipt,
 } from '@shared/contracts/sect';
-import type { BattleRecord } from '@shared/types/battle';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import { z } from 'zod';
 import type {
   DecodedSectTaskOutcome,
@@ -87,13 +87,25 @@ const battleSnapshotSchema = z
   .passthrough();
 const battleRecordEnvelopeSchema = z
   .object({
-    winner: battleUnitSchema,
-    loser: battleUnitSchema,
-    logs: z.array(z.string()),
-    turns: z.number().int().nonnegative(),
-    player: z.string(),
-    opponent: z.string(),
-    logSpans: z.array(z.unknown()),
+    participants: z.object({
+      player: battleUnitSchema,
+      opponent: battleUnitSchema,
+    }),
+    outcome: z.object({
+      winner: battleUnitSchema,
+      loser: battleUnitSchema,
+      turns: z.number().int().nonnegative(),
+    }),
+    sequences: z.array(
+      z
+        .object({
+          id: z.string(),
+          turn: z.number().int().nonnegative(),
+          phase: z.string(),
+          facts: z.array(z.unknown()),
+        })
+        .passthrough(),
+    ),
     stateTimeline: z
       .object({
         frames: z.array(z.unknown()),
@@ -101,11 +113,13 @@ const battleRecordEnvelopeSchema = z
         unitNames: z.record(z.string(), z.string()),
       })
       .passthrough(),
-    winnerSnapshot: battleSnapshotSchema,
-    loserSnapshot: battleSnapshotSchema.optional(),
+    finalSnapshots: z.object({
+      winner: battleSnapshotSchema,
+      loser: battleSnapshotSchema.optional(),
+    }),
   })
   .passthrough();
-const battleRecordSchema = z.custom<BattleRecord>(
+const battleRecordSchema = z.custom<BattleRecordV3>(
   (value) => battleRecordEnvelopeSchema.safeParse(value).success,
 );
 const battleOutcomeSchema = z.object({

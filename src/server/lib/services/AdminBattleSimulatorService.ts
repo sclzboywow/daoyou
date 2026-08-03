@@ -17,7 +17,8 @@ import type {
 import { EnemyGenerator } from '@shared/engine/enemyGenerator';
 import type { CultivatorCombatInput } from '@shared/engine/battle-v5/adapters/CultivatorCombatAdapter';
 import { prepareStandardFullBattle } from '@shared/engine/battle-v5/setup/BattleStateStrategy';
-import type { BattleRecord } from '@shared/types/battle';
+import { CombatPresenterV3 } from '@shared/engine/battle-v5/v3';
+import type { BattleRecordV3 } from '@shared/types/battle';
 import {
   ENEMY_RACE_VALUES,
   REALM_STAGE_VALUES,
@@ -26,6 +27,7 @@ import {
 import type { Cultivator } from '@shared/types/cultivator';
 
 const SAMPLE_LOG_LINE_LIMIT = 80;
+const presenter = new CombatPresenterV3('detailed');
 
 export class AdminBattleSimulatorError extends Error {
   constructor(
@@ -60,7 +62,7 @@ interface SimulationRun {
   index: number;
   a: Combatant;
   b: Combatant;
-  record: BattleRecord;
+  record: BattleRecordV3;
   winnerSide: 'A' | 'B';
 }
 
@@ -122,10 +124,13 @@ function buildParticipantSummary(args: {
 }
 
 function resolveSnapshot(
-  record: BattleRecord,
+  record: BattleRecordV3,
   side: 'A' | 'B',
 ) {
-  const id = side === 'A' ? record.player : record.opponent;
+  const id =
+    side === 'A'
+      ? record.participants.player.id
+      : record.participants.opponent.id;
   const finalFrame =
     record.stateTimeline.frames[record.stateTimeline.frames.length - 1];
   const snapshot = finalFrame?.units[id];
@@ -144,7 +149,7 @@ function toDuelResult(run: SimulationRun): AdminBattleDuelResult {
     },
     winnerSide: run.winnerSide,
     loserSide,
-    turns: run.record.turns,
+    turns: run.record.outcome.turns,
     finalState: {
       a: {
         participant: run.a.summary,
@@ -155,8 +160,8 @@ function toDuelResult(run: SimulationRun): AdminBattleDuelResult {
         snapshot: resolveSnapshot(run.record, 'B'),
       },
     },
-    logs: run.record.logs,
-    logSpans: run.record.logSpans,
+    logs: presenter.formatAll(run.record.sequences),
+    sequences: run.record.sequences,
     stateTimeline: run.record.stateTimeline,
   };
 }
@@ -171,7 +176,7 @@ function toMonteCarloSample(run: SimulationRun): AdminBattleMonteCarloSample {
       b: run.b.summary,
     },
     winnerSide: run.winnerSide,
-    turns: run.record.turns,
+    turns: run.record.outcome.turns,
     finalHp: {
       a: {
         current: aSnapshot.hp.current,
@@ -182,7 +187,9 @@ function toMonteCarloSample(run: SimulationRun): AdminBattleMonteCarloSample {
         max: bSnapshot.hp.max,
       },
     },
-    logs: run.record.logs.slice(0, SAMPLE_LOG_LINE_LIMIT),
+    logs: presenter
+      .formatAll(run.record.sequences)
+      .slice(0, SAMPLE_LOG_LINE_LIMIT),
   };
 }
 
@@ -235,7 +242,7 @@ function buildBreakdowns(runs: SimulationRun[]): AdminBattleMonteCarloBreakdown[
         aWins,
         bWins,
         aWinRate: roundRate(aWins / group.length),
-        averageTurns: average(group.map((run) => run.record.turns)),
+        averageTurns: average(group.map((run) => run.record.outcome.turns)),
       };
     })
     .sort((left, right) => right.sampleCount - left.sampleCount)
@@ -290,7 +297,7 @@ export class AdminBattleSimulatorService {
 
     const aWins = runs.filter((run) => run.winnerSide === 'A').length;
     const bWins = runs.length - aWins;
-    const turns = runs.map((run) => run.record.turns);
+    const turns = runs.map((run) => run.record.outcome.turns);
 
     return {
       scenario: request.scenario,
@@ -411,7 +418,8 @@ export class AdminBattleSimulatorService {
         opponent: combatants.b.cultivator,
       }),
     );
-    const winnerSide = record.winner.id === combatants.a.cultivator.id ? 'A' : 'B';
+    const winnerSide =
+      record.outcome.winner.id === combatants.a.cultivator.id ? 'A' : 'B';
     return {
       index,
       a: combatants.a,

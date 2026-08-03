@@ -1,8 +1,7 @@
 import { ResourceDrainParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import { DamageTakenEvent, ResourceDrainEvent } from '../core/events';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /**
  * 资源夺取原子效果 (吸血/吸蓝)
@@ -13,7 +12,7 @@ export class ResourceDrainEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { caster, target, ability, triggerEvent } = context;
 
     // 只有在受击事件触发时才生效，因为需要知道造成的实际伤害
@@ -31,8 +30,19 @@ export class ResourceDrainEffect extends GameplayEffect {
       : caster.restoreMp(amount);
     if (appliedAmount <= 0) return;
 
+    context.commit(caster, {
+      type: 'recovery',
+      resource: this.params.targetType,
+      amount: Math.round(appliedAmount),
+      after: Math.round(
+        this.params.targetType === 'hp'
+          ? caster.getCurrentHp()
+          : caster.getCurrentMp(),
+      ),
+    });
+
     // 发布资源夺取事件
-    EventBus.instance.publish<ResourceDrainEvent>({
+    context.emit<ResourceDrainEvent>({
       type: 'ResourceDrainEvent',
       timestamp: Date.now(),
       caster,

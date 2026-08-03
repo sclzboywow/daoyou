@@ -1,3 +1,4 @@
+import { BattleShareDialog } from '@app/components/feature/battle/share/BattleShareDialog';
 import Zhanji from '@app/components/func/Zhanji';
 import {
   GameLoadingState,
@@ -42,6 +43,7 @@ export default function BattleHistoryPage() {
   const [pagination, setPagination] = useState<
     BattleListResponse['pagination'] | null
   >(null);
+  const [shareRecord, setShareRecord] = useState<BattleSummary | null>(null);
   const cultivator = usePlayerSession().data?.activeCultivator;
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function BattleHistoryPage() {
       try {
         const typeParam = activeTab === 'all' ? '' : `&type=${activeTab}`;
         const res = await fetch(
-          `/api/battle-records/v2?page=${page}&pageSize=${PAGE_SIZE}${typeParam}`,
+          `/api/battle-records/v3?page=${page}&pageSize=${PAGE_SIZE}${typeParam}`,
           { cache: 'no-store' },
         );
         if (!res.ok || cancelled) return;
@@ -144,6 +146,7 @@ export default function BattleHistoryPage() {
               key={r.id}
               record={r}
               currentCultivatorId={cultivator?.id}
+              onShare={() => setShareRecord(r)}
             />
           ))}
         </InkList>
@@ -163,6 +166,14 @@ export default function BattleHistoryPage() {
           下一页
         </InkButton>
       </div>
+      {shareRecord ? (
+        <BattleShareDialog
+          isOpen
+          battleRecordId={shareRecord.id}
+          summary={shareRecord}
+          onClose={() => setShareRecord(null)}
+        />
+      ) : null}
     </GameSceneFrame>
   );
 }

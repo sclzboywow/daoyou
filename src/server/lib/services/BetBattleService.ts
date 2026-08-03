@@ -1,4 +1,5 @@
 import * as betBattleRepository from '@server/lib/repositories/betBattleRepository';
+import { createBattleRecordV3 } from '@server/lib/repositories/battleRecordV3Repository';
 import * as creationProductRepository from '@server/lib/repositories/creationProductRepository';
 import {
   TEMP_DISABLED_MESSAGES,
@@ -15,7 +16,7 @@ import {
   type DbTransaction,
 } from '../drizzle/db';
 import * as schema from '../drizzle/schema';
-import type { BattleRecord } from './battleResult';
+import type { BattleRecordV3 } from './battleResult';
 import { mapConsumableRow } from './consumablePersistence';
 import { toArtifactFromProduct } from './creationProductArtifactSupport';
 import {
@@ -95,8 +96,8 @@ export interface ChallengeBetBattleInput {
 export interface ChallengeBetBattleResult {
   battleId: string;
   winnerId: string;
-  battleRecordV2Id: string;
-  battleResult: BattleRecord;
+  battleRecordV3Id: string;
+  battleResult: BattleRecordV3;
   rumor: string;
   challenger: {
     id: string;
@@ -745,26 +746,22 @@ export async function challengeBetBattle(
     }),
   );
   const winnerId =
-    battleResult.winner.id === input.challengerId
+    battleResult.outcome.winner.id === input.challengerId
       ? input.challengerId
       : betBattle.creatorId;
 
-  let battleRecordV2Id = '';
+  let battleRecordV3Id = '';
   const persistChallenge = async (tx: DbTransaction) => {
-    const current = await tx
-      .select()
-      .from(schema.betBattles)
-      .where(eq(schema.betBattles.id, input.battleId))
-      .limit(1);
+    const current = await betBattleRepository.findById(input.battleId, tx);
 
-    if (!current[0]) {
+    if (!current) {
       throw new BetBattleServiceError(
         BetBattleError.BATTLE_NOT_FOUND,
         '赌战不存在',
       );
     }
 
-    if (current[0].status !== 'pending') {
+    if (current.status !== 'pending') {
       throw new BetBattleServiceError(
         BetBattleError.BATTLE_NOT_PENDING,
         '该赌战已被其他道友抢先应战',
@@ -782,18 +779,17 @@ export async function challengeBetBattle(
     const challengerStake = deducted.snapshot;
     assertStakeMatch(creatorStake, challengerStake);
 
-    const [battleRecord] = await tx
-      .insert(schema.battleRecordsV2)
-      .values({
+    const battleRecord = await createBattleRecordV3(
+      {
         userId: input.challengerUserId,
         cultivatorId: input.challengerId,
         battleType: 'challenge',
         opponentCultivatorId: betBattle.creatorId,
         battleResult,
-        battleReport: null,
-      })
-      .returning({ id: schema.battleRecordsV2.id });
-    battleRecordV2Id = battleRecord.id;
+      },
+      tx,
+    );
+    battleRecordV3Id = battleRecord.id;
 
     const attachments: MailAttachment[] = [
       ...buildRewardAttachments(creatorStake),
@@ -818,7 +814,7 @@ export async function challengeBetBattle(
         challengerName: input.challengerName,
         challengerStakeSnapshot: challengerStake,
         winnerCultivatorId: winnerId,
-        battleRecordV2Id: battleRecord.id,
+        battleRecordV3Id: battleRecord.id,
         matchedAt: new Date(),
         settledAt: new Date(),
       },
@@ -848,7 +844,7 @@ export async function challengeBetBattle(
   return {
     battleId: input.battleId,
     winnerId,
-    battleRecordV2Id,
+    battleRecordV3Id,
     battleResult,
     rumor: `赌战台风云再起，${winnerName}力克${loserName}，夺得${buildRumorStakeSummary(
       creatorStake,

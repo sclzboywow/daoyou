@@ -6,8 +6,10 @@ import {
   AttributeType,
   ModifierType,
 } from '@shared/engine/battle-v5/core/types';
-import type { EntryDataMap, LogSpan } from '@shared/engine/battle-v5/systems/log/types';
-import type { BattleStateTimeline } from '@shared/engine/battle-v5/systems/state/types';
+import type {
+  BattleStateTimelineV3,
+  CombatSequenceV3,
+} from '@shared/engine/battle-v5/v3';
 import { AbilityFactory } from '@shared/engine/battle-v5/factories/AbilityFactory';
 import { Unit } from '@shared/engine/battle-v5/units/Unit';
 import type {
@@ -445,27 +447,26 @@ function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function collectLogMetrics(logSpans: LogSpan[] | undefined) {
+function collectLogMetrics(sequences: CombatSequenceV3[] | undefined) {
   let totalDamage = 0;
   let damageEvents = 0;
   let totalHeal = 0;
   let controlSkipCount = 0;
 
-  for (const span of logSpans ?? []) {
-    for (const entry of span.entries) {
-      switch (entry.type) {
+  for (const sequence of sequences ?? []) {
+    for (const fact of sequence.facts) {
+      switch (fact.type) {
         case 'damage': {
-          const damageData = entry.data as EntryDataMap['damage'];
-          totalDamage += damageData.value;
+          totalDamage += fact.amount;
           damageEvents += 1;
           break;
         }
-        case 'heal': {
-          const healData = entry.data as EntryDataMap['heal'];
-          totalHeal += healData.value;
+        case 'recovery': {
+          if (fact.resource === 'hp') totalHeal += fact.amount;
           break;
         }
-        case 'control_skip':
+        case 'mechanic':
+          if (fact.payload.kind !== 'control_skip') break;
           controlSkipCount += 1;
           break;
         default:
@@ -482,7 +483,7 @@ function collectLogMetrics(logSpans: LogSpan[] | undefined) {
   };
 }
 
-function collectStateMetrics(stateTimeline: BattleStateTimeline | undefined) {
+function collectStateMetrics(stateTimeline: BattleStateTimelineV3 | undefined) {
   let totalShieldGain = 0;
   let actionOpportunityCount = 0;
 
@@ -507,7 +508,7 @@ function collectStateMetrics(stateTimeline: BattleStateTimeline | undefined) {
 function extractDuelObservationMetrics(
   duel: CreationBattleDuelResult,
 ): DuelObservationMetrics {
-  const logMetrics = collectLogMetrics(duel.battleResult.logSpans);
+  const logMetrics = collectLogMetrics(duel.battleResult.sequences);
   const stateMetrics = collectStateMetrics(duel.battleResult.stateTimeline);
 
   return {

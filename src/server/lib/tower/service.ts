@@ -654,10 +654,10 @@ export class TowerService {
       }),
     );
 
-    const isWin = battleResult.winner.id === cultivatorId;
+    const isWin = battleResult.outcome.winner.id === cultivatorId;
     const playerSnapshot = isWin
-      ? battleResult.winnerSnapshot
-      : battleResult.loserSnapshot;
+      ? battleResult.finalSnapshots.winner
+      : battleResult.finalSnapshots.loser;
 
     if (!playerSnapshot) {
       throw new Error('战斗终局缺少玩家状态快照');

@@ -1,11 +1,15 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { AbilityFactory } from '../../factories/AbilityFactory';
+import { GameplayTags } from '@shared/engine/shared/tag-domain';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EventBus } from '../../core/EventBus';
-import type { CombatResourceChangeEvent, DamageTakenEvent } from '../../core/events';
+import type {
+  CombatResourceChangeEvent,
+  DamageTakenEvent,
+} from '../../core/events';
 import { beginRuntimeAction, setRuntimeRound } from '../../core/runtimeState';
 import { AbilityType, AttributeType, DamageSource } from '../../core/types';
-import { GameplayTags } from '@shared/engine/shared/tag-domain';
+import { AbilityFactory } from '../../factories/AbilityFactory';
 import { Unit } from '../../units/Unit';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 function unit(id: string): Unit {
   return new Unit(id, id, {
@@ -23,14 +27,25 @@ describe('battle runtime primitives', () => {
 
   it('publishes requested, applied and overflow for combat resource changes', () => {
     const owner = unit('owner');
-    owner.combatResources.define({ id: 'focus', name: '专注', initial: 5, max: 6 });
+    owner.combatResources.define({
+      id: 'focus',
+      name: '专注',
+      initial: 5,
+      max: 6,
+    });
     const events: CombatResourceChangeEvent[] = [];
     EventBus.instance.subscribe<CombatResourceChangeEvent>(
       'CombatResourceChangeEvent',
       (event) => events.push(event),
     );
 
-    owner.combatResources.modify('focus', 3);
+    executeTestEffect(
+      AbilityFactory.createEffect({
+        type: 'combat_resource_modify',
+        params: { resourceId: 'focus', operation: 'add', amount: 3 },
+      }),
+      { caster: owner, target: owner },
+    );
 
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -47,36 +62,48 @@ describe('battle runtime primitives', () => {
   it('limits listeners by round and resets the budget on the next round', () => {
     const owner = unit('owner');
     const attacker = unit('attacker');
-    owner.combatResources.define({ id: 'guard', name: '守势', initial: 0, max: 6 });
-    owner.abilities.addAbility(AbilityFactory.create({
-      slug: 'round-budget-passive',
-      name: '回合预算',
-      type: AbilityType.PASSIVE_SKILL,
-      tags: [GameplayTags.ABILITY.KIND.PASSIVE],
-      listeners: [{
-        id: 'round-budget-listener',
-        eventType: 'DamageTakenEvent',
-        scope: 'owner_as_target',
-        priority: 0,
-        mapping: { caster: 'owner', target: 'owner' },
-        budget: { maxTriggers: 1, reset: 'round' },
-        effects: [{
-          type: 'combat_resource_modify',
-          params: { resourceId: 'guard', operation: 'add', amount: 1 },
-        }],
-      }],
-    }));
-    const publishDamage = () => EventBus.instance.publish<DamageTakenEvent>({
-      type: 'DamageTakenEvent',
-      timestamp: Date.now(),
-      caster: attacker,
-      target: owner,
-      damageSource: DamageSource.DIRECT,
-      damageTaken: 1,
-      beforeHp: owner.getCurrentHp(),
-      remainHp: owner.getCurrentHp(),
-      isLethal: false,
+    owner.combatResources.define({
+      id: 'guard',
+      name: '守势',
+      initial: 0,
+      max: 6,
     });
+    owner.abilities.addAbility(
+      AbilityFactory.create({
+        slug: 'round-budget-passive',
+        name: '回合预算',
+        type: AbilityType.PASSIVE_SKILL,
+        tags: [GameplayTags.ABILITY.KIND.PASSIVE],
+        listeners: [
+          {
+            id: 'round-budget-listener',
+            eventType: 'DamageTakenEvent',
+            scope: 'owner_as_target',
+            priority: 0,
+            mapping: { caster: 'owner', target: 'owner' },
+            budget: { maxTriggers: 1, reset: 'round' },
+            effects: [
+              {
+                type: 'combat_resource_modify',
+                params: { resourceId: 'guard', operation: 'add', amount: 1 },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const publishDamage = () =>
+      EventBus.instance.publish<DamageTakenEvent>({
+        type: 'DamageTakenEvent',
+        timestamp: Date.now(),
+        caster: attacker,
+        target: owner,
+        damageSource: DamageSource.DIRECT,
+        damageTaken: 1,
+        beforeHp: owner.getCurrentHp(),
+        remainHp: owner.getCurrentHp(),
+        hpReachedZeroBeforeReactions: false,
+      });
 
     setRuntimeRound(owner, 1);
     publishDamage();
@@ -91,30 +118,43 @@ describe('battle runtime primitives', () => {
   it('shares a budget group without reusing listener IDs', () => {
     const owner = unit('owner');
     const attacker = unit('attacker');
-    owner.combatResources.define({ id: 'guard', name: '守势', initial: 0, max: 6 });
+    owner.combatResources.define({
+      id: 'guard',
+      name: '守势',
+      initial: 0,
+      max: 6,
+    });
     const sharedBudget = {
       maxTriggers: 1,
       reset: 'round' as const,
       group: 'shared-control-response',
     };
-    owner.abilities.addAbility(AbilityFactory.create({
-      slug: 'group-budget-passive',
-      name: '共享预算',
-      type: AbilityType.PASSIVE_SKILL,
-      tags: [GameplayTags.ABILITY.KIND.PASSIVE],
-      listeners: ['first', 'second'].map((suffix) => ({
-        id: `group-budget-listener-${suffix}`,
-        eventType: 'DamageTakenEvent',
-        scope: 'owner_as_target' as const,
-        priority: 0,
-        mapping: { caster: 'owner' as const, target: 'owner' as const },
-        budget: sharedBudget,
-        effects: [{
-          type: 'combat_resource_modify' as const,
-          params: { resourceId: 'guard', operation: 'add' as const, amount: 1 },
-        }],
-      })),
-    }));
+    owner.abilities.addAbility(
+      AbilityFactory.create({
+        slug: 'group-budget-passive',
+        name: '共享预算',
+        type: AbilityType.PASSIVE_SKILL,
+        tags: [GameplayTags.ABILITY.KIND.PASSIVE],
+        listeners: ['first', 'second'].map((suffix) => ({
+          id: `group-budget-listener-${suffix}`,
+          eventType: 'DamageTakenEvent',
+          scope: 'owner_as_target' as const,
+          priority: 0,
+          mapping: { caster: 'owner' as const, target: 'owner' as const },
+          budget: sharedBudget,
+          effects: [
+            {
+              type: 'combat_resource_modify' as const,
+              params: {
+                resourceId: 'guard',
+                operation: 'add' as const,
+                amount: 1,
+              },
+            },
+          ],
+        })),
+      }),
+    );
 
     setRuntimeRound(owner, 1);
     EventBus.instance.publish<DamageTakenEvent>({
@@ -126,7 +166,7 @@ describe('battle runtime primitives', () => {
       damageTaken: 1,
       beforeHp: owner.getCurrentHp(),
       remainHp: owner.getCurrentHp(),
-      isLethal: false,
+      hpReachedZeroBeforeReactions: false,
     });
 
     expect(owner.combatResources.getCurrent('guard')).toBe(1);
@@ -135,27 +175,48 @@ describe('battle runtime primitives', () => {
   it('resets action-scoped listener budgets when the owner starts a new action', () => {
     const owner = unit('owner');
     const attacker = unit('attacker');
-    owner.combatResources.define({ id: 'tempo', name: '节奏', initial: 0, max: 6 });
-    owner.abilities.addAbility(AbilityFactory.create({
-      slug: 'action-budget-passive',
-      name: '行动预算',
-      type: AbilityType.PASSIVE_SKILL,
-      tags: [GameplayTags.ABILITY.KIND.PASSIVE],
-      listeners: [{
-        id: 'action-budget-listener',
-        eventType: 'DamageTakenEvent',
-        scope: 'owner_as_target',
-        priority: 0,
-        mapping: { caster: 'owner', target: 'owner' },
-        budget: { maxTriggers: 1, reset: 'action' },
-        effects: [{ type: 'combat_resource_modify', params: { resourceId: 'tempo', operation: 'add', amount: 1 } }],
-      }],
-    }));
-    const publishDamage = () => EventBus.instance.publish<DamageTakenEvent>({
-      type: 'DamageTakenEvent', timestamp: Date.now(), caster: attacker, target: owner,
-      damageSource: DamageSource.DIRECT, damageTaken: 1,
-      beforeHp: owner.getCurrentHp(), remainHp: owner.getCurrentHp(), isLethal: false,
+    owner.combatResources.define({
+      id: 'tempo',
+      name: '节奏',
+      initial: 0,
+      max: 6,
     });
+    owner.abilities.addAbility(
+      AbilityFactory.create({
+        slug: 'action-budget-passive',
+        name: '行动预算',
+        type: AbilityType.PASSIVE_SKILL,
+        tags: [GameplayTags.ABILITY.KIND.PASSIVE],
+        listeners: [
+          {
+            id: 'action-budget-listener',
+            eventType: 'DamageTakenEvent',
+            scope: 'owner_as_target',
+            priority: 0,
+            mapping: { caster: 'owner', target: 'owner' },
+            budget: { maxTriggers: 1, reset: 'action' },
+            effects: [
+              {
+                type: 'combat_resource_modify',
+                params: { resourceId: 'tempo', operation: 'add', amount: 1 },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const publishDamage = () =>
+      EventBus.instance.publish<DamageTakenEvent>({
+        type: 'DamageTakenEvent',
+        timestamp: Date.now(),
+        caster: attacker,
+        target: owner,
+        damageSource: DamageSource.DIRECT,
+        damageTaken: 1,
+        beforeHp: owner.getCurrentHp(),
+        remainHp: owner.getCurrentHp(),
+        hpReachedZeroBeforeReactions: false,
+      });
 
     beginRuntimeAction(owner);
     publishDamage();
@@ -169,24 +230,48 @@ describe('battle runtime primitives', () => {
   it('can scope a listener budget to the enemy source action', () => {
     const owner = unit('owner');
     const attacker = unit('attacker');
-    owner.combatResources.define({ id: 'karma', name: '业痕', initial: 0, max: 6 });
-    owner.abilities.addAbility(AbilityFactory.create({
-      slug: 'source-action-passive', name: '敌方行动预算',
-      type: AbilityType.PASSIVE_SKILL,
-      tags: [GameplayTags.ABILITY.KIND.PASSIVE],
-      listeners: [{
-        id: 'source-action-listener', eventType: 'DamageTakenEvent',
-        scope: 'owner_as_target', priority: 0,
-        mapping: { caster: 'owner', target: 'owner' },
-        budget: { maxTriggers: 1, reset: 'source_action' },
-        effects: [{ type: 'combat_resource_modify', params: { resourceId: 'karma', operation: 'add', amount: 1 } }],
-      }],
-    }));
-    const hit = () => EventBus.instance.publish<DamageTakenEvent>({
-      type: 'DamageTakenEvent', timestamp: Date.now(), caster: attacker, target: owner,
-      damageSource: DamageSource.DIRECT, damageTaken: 1,
-      beforeHp: owner.getCurrentHp(), remainHp: owner.getCurrentHp(), isLethal: false,
+    owner.combatResources.define({
+      id: 'karma',
+      name: '业痕',
+      initial: 0,
+      max: 6,
     });
+    owner.abilities.addAbility(
+      AbilityFactory.create({
+        slug: 'source-action-passive',
+        name: '敌方行动预算',
+        type: AbilityType.PASSIVE_SKILL,
+        tags: [GameplayTags.ABILITY.KIND.PASSIVE],
+        listeners: [
+          {
+            id: 'source-action-listener',
+            eventType: 'DamageTakenEvent',
+            scope: 'owner_as_target',
+            priority: 0,
+            mapping: { caster: 'owner', target: 'owner' },
+            budget: { maxTriggers: 1, reset: 'source_action' },
+            effects: [
+              {
+                type: 'combat_resource_modify',
+                params: { resourceId: 'karma', operation: 'add', amount: 1 },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const hit = () =>
+      EventBus.instance.publish<DamageTakenEvent>({
+        type: 'DamageTakenEvent',
+        timestamp: Date.now(),
+        caster: attacker,
+        target: owner,
+        damageSource: DamageSource.DIRECT,
+        damageTaken: 1,
+        beforeHp: owner.getCurrentHp(),
+        remainHp: owner.getCurrentHp(),
+        hpReachedZeroBeforeReactions: false,
+      });
 
     beginRuntimeAction(attacker);
     hit();
@@ -198,7 +283,12 @@ describe('battle runtime primitives', () => {
 
   it('modifies, caps and releases generic runtime counters', () => {
     const owner = unit('owner');
-    owner.combatResources.define({ id: 'focus', name: '专注', initial: 5, max: 6 });
+    owner.combatResources.define({
+      id: 'focus',
+      name: '专注',
+      initial: 5,
+      max: 6,
+    });
     const context = { caster: owner, target: owner };
     const recordOverflow = AbilityFactory.createEffect({
       type: 'runtime_counter_modify',
@@ -215,22 +305,35 @@ describe('battle runtime primitives', () => {
         key: 'stored-overflow',
         operation: 'reset',
         scaleEffectsByAmount: true,
-        effects: [{
-          type: 'combat_resource_modify',
-          params: { resourceId: 'focus', operation: 'add', amount: 1 },
-        }],
+        effects: [
+          {
+            type: 'combat_resource_modify',
+            params: { resourceId: 'focus', operation: 'add', amount: 1 },
+          },
+        ],
       },
     });
     let changeEvent: CombatResourceChangeEvent | undefined;
     EventBus.instance.subscribe<CombatResourceChangeEvent>(
       'CombatResourceChangeEvent',
-      (event) => { changeEvent = event; },
+      (event) => {
+        changeEvent = event;
+      },
     );
 
-    owner.combatResources.modify('focus', 3);
-    recordOverflow?.execute({ ...context, triggerEvent: changeEvent });
-    owner.combatResources.consume('focus', 'all');
-    release?.execute(context);
+    executeTestEffect(
+      AbilityFactory.createEffect({
+        type: 'combat_resource_modify',
+        params: { resourceId: 'focus', operation: 'add', amount: 3 },
+      }),
+      context,
+    );
+    executeTestEffect(recordOverflow, {
+      ...context,
+      triggerEvent: changeEvent,
+    });
+    owner.combatResources.set('focus', 0);
+    executeTestEffect(release, context);
 
     expect(owner.combatResources.getCurrent('focus')).toBe(2);
   });

@@ -11,6 +11,7 @@ import { AbilityType, BuffType } from '../../core/types';
 import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { Unit } from '../../units/Unit';
 import { describe, expect, it } from 'vitest';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 function unit(id: string): Unit {
   return new Unit(id, id, {});
@@ -63,7 +64,7 @@ describe('V4行动原语', () => {
         hitPolicy: 'guaranteed',
       },
     });
-    effect?.execute({ caster, target });
+    executeTestEffect(effect, { caster, target });
     const queued = consumeQueuedAction(caster);
     expect(queued?.ability).toMatchObject({ name: '后发', mpCost: 0, cooldown: 0 });
     expect(queued).toMatchObject({

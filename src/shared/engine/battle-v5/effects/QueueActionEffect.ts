@@ -2,8 +2,7 @@ import { AbilityType } from '../core/types';
 import type { QueueActionParams } from '../core/configs';
 import { setQueuedAction } from '../core/runtimeState';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
-import { EventBus } from '../core/EventBus';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 import type { ActionStateEvent } from '../core/events';
 
 export class QueueActionEffect extends GameplayEffect {
@@ -11,7 +10,7 @@ export class QueueActionEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const abilityConfig = {
       slug: this.params.id,
       name: this.params.name,
@@ -31,7 +30,15 @@ export class QueueActionEffect extends GameplayEffect {
       interruptPolicy: this.params.interruptPolicy,
       hitPolicy: this.params.hitPolicy,
     });
-    EventBus.instance.publish<ActionStateEvent>({
+    context.commit(context.caster, {
+      type: 'action_state',
+      stateType: 'queued_action',
+      phase: 'entered',
+      name: '蓄势',
+      remainingActions: 1,
+      ability: { id: abilityConfig.slug, name: abilityConfig.name },
+    });
+    context.emit<ActionStateEvent>({
       type: 'ActionStateEvent',
       timestamp: Date.now(),
       unit: context.caster,

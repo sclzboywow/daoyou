@@ -1,10 +1,9 @@
 import { DispelParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
+import { executeEffectConfigs } from '../core/effectExecutor';
 import { DispelEvent } from '../core/events';
 import { BuffType } from '../core/types';
-import { executeEffectConfigs } from '../core/effectExecutor';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 /**
  * 驱散原子效果
@@ -15,7 +14,7 @@ export class DispelEffect extends GameplayEffect {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const { caster, ability } = context;
     const target = this.params.recipient === 'caster' ? caster : context.target;
     const buffs = target.buffs.getAllBuffs();
@@ -25,11 +24,15 @@ export class DispelEffect extends GameplayEffect {
       ? buffs.filter((b) => b.tags.hasTag(this.params.targetTag!))
       : buffs;
     const statusBuffs = this.params.status
-      ? matchBuffs.filter((buff) => this.params.status === 'positive'
-        ? buff.type === BuffType.BUFF
-        : buff.type === BuffType.DEBUFF || buff.type === BuffType.CONTROL)
+      ? matchBuffs.filter((buff) =>
+          this.params.status === 'positive'
+            ? buff.type === BuffType.BUFF
+            : buff.type === BuffType.DEBUFF || buff.type === BuffType.CONTROL,
+        )
       : matchBuffs;
-    const removableBuffs = statusBuffs.filter((buff) => buff.dispelPolicy === 'normal');
+    const removableBuffs = statusBuffs.filter(
+      (buff) => buff.dispelPolicy === 'normal',
+    );
 
     if (removableBuffs.length === 0) {
       executeEffectConfigs(this.params.fallbackEffects ?? [], context);
@@ -45,13 +48,20 @@ export class DispelEffect extends GameplayEffect {
 
     // 执行移除
     for (let i = 0; i < countToRemove; i++) {
-      if (target.buffs.removeBuffDispel(removableBuffs[i].id, {
-        source: caster,
-        ability,
-      })) {
+      if (!context.canExecuteEffect()) break;
+      if (
+        target.buffs.removeBuffDispel(removableBuffs[i].id, {
+          source: caster,
+          ability,
+          attribution: context.attribution,
+          trace: context.trace,
+        })
+      ) {
         removedBuffNames.push(removableBuffs[i].name);
       }
     }
+
+    if (!context.canExecuteEffect()) return;
 
     if (removedBuffNames.length === 0) {
       executeEffectConfigs(this.params.fallbackEffects ?? [], context);
@@ -59,7 +69,7 @@ export class DispelEffect extends GameplayEffect {
     }
 
     // 发布驱散事件
-    EventBus.instance.publish<DispelEvent>({
+    context.emit<DispelEvent>({
       type: 'DispelEvent',
       timestamp: Date.now(),
       caster,

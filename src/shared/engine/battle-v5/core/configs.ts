@@ -6,7 +6,6 @@ import {
   DamageSource,
   DamageType,
   type LogCauseRef,
-  type MechanicTriggerBasisRef,
   ModifierType,
 } from './types';
 
@@ -152,7 +151,14 @@ export interface ConditionConfig {
       | 'previousLayer'
       | 'currentLayer'
       | 'delta';
-    reason?: 'apply' | 'stack' | 'effect' | 'dispel' | 'manual' | 'expired' | 'replace';
+    reason?:
+      | 'apply'
+      | 'stack'
+      | 'effect'
+      | 'dispel'
+      | 'manual'
+      | 'expired'
+      | 'replace';
   };
 }
 
@@ -384,7 +390,13 @@ export interface DamageMemoryParams {
     | 'shield_absorbed';
   ratio?: number;
   releaseAs?:
-    'damage' | 'heal' | 'shield' | 'reflect' | 'counter' | 'follow_up' | 'resolved_follow_up';
+    | 'damage'
+    | 'heal'
+    | 'shield'
+    | 'reflect'
+    | 'counter'
+    | 'follow_up'
+    | 'resolved_follow_up';
   damageType?: DamageType;
   damageTags?: string[];
   cause?: LogCauseRef;
@@ -435,7 +447,6 @@ export interface MechanicLogParams {
   visibility?: 'player' | 'debug';
   operation?: 'apply' | 'refresh' | 'replace' | 'consume';
   previousDisplayName?: string;
-  triggerBasis?: MechanicTriggerBasisRef;
 }
 
 export interface AbilityTransformParams {
@@ -756,6 +767,8 @@ export interface BuffConfig {
   dispelPolicy?: 'normal' | 'protected';
   /** 是否计入普通增益、减益或控制数量，默认 true。 */
   countsAsStatus?: boolean;
+  /** 单位最终死亡时静默卸载，不开放新的战斗反应窗口。 */
+  removeOnDeath?: boolean;
   tags?: string[]; // Buff 自身的标签
   statusTags?: string[]; // 附加给宿主的标签
   /**

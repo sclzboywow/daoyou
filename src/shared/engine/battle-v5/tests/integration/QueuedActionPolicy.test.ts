@@ -1,4 +1,7 @@
+import { GameplayTags } from '@shared/engine/shared/tag-domain';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BattleEngineV5 } from '../../BattleEngineV5';
+import { StackRule } from '../../buffs/Buff';
 import { EventBus } from '../../core/EventBus';
 import type {
   ActionStateEvent,
@@ -20,9 +23,8 @@ import {
 } from '../../core/types';
 import { AbilityFactory } from '../../factories/AbilityFactory';
 import { Unit } from '../../units/Unit';
-import { StackRule } from '../../buffs/Buff';
-import { GameplayTags } from '@shared/engine/shared/tag-domain';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CombatPresenterV3 } from '../../v3/CombatPresenterV3';
+import { executeTestEffect } from '../setup/executeTestEffect';
 
 const BLOCKING_TAGS = [
   GameplayTags.STATUS.CONTROL.STUNNED,
@@ -54,25 +56,29 @@ function chargedStrike(coefficient = 1_000) {
     ],
     targetPolicy: { team: 'enemy', scope: 'single' },
     effects: [],
-    castEffects: [{
-      type: 'queue_action',
-      params: {
-        id: 'test.after-strike',
-        name: '听雷沉山',
-        tags: [
-          GameplayTags.ABILITY.FUNCTION.DAMAGE,
-          GameplayTags.ABILITY.CHANNEL.PHYSICAL,
-        ],
-        effects: [{
-          type: 'damage',
-          params: {
-            value: { attribute: AttributeType.ATK, coefficient },
-          },
-        }],
-        interruptPolicy: 'uninterruptible',
-        hitPolicy: 'guaranteed',
+    castEffects: [
+      {
+        type: 'queue_action',
+        params: {
+          id: 'test.after-strike',
+          name: '听雷沉山',
+          tags: [
+            GameplayTags.ABILITY.FUNCTION.DAMAGE,
+            GameplayTags.ABILITY.CHANNEL.PHYSICAL,
+          ],
+          effects: [
+            {
+              type: 'damage',
+              params: {
+                value: { attribute: AttributeType.ATK, coefficient },
+              },
+            },
+          ],
+          interruptPolicy: 'uninterruptible',
+          hitPolicy: 'guaranteed',
+        },
       },
-    }],
+    ],
   });
 }
 
@@ -100,17 +106,20 @@ describe('不可打断后发策略', () => {
     const hitChecks: HitCheckEvent[] = [];
     const controlledSkips: ControlledSkipEvent[] = [];
     const dodges: DodgeEvent[] = [];
-    EventBus.instance.subscribe<ActionStateEvent>('ActionStateEvent', (event) => {
-      actionStates.push(event);
-      if (
-        event.unit === actor &&
-        event.stateType === 'queued_action' &&
-        event.phase === 'entered'
-      ) {
-        actor.tags.addTags([tag]);
-        queueSkippedActions(actor, 1, '测试调息', '调息');
-      }
-    });
+    EventBus.instance.subscribe<ActionStateEvent>(
+      'ActionStateEvent',
+      (event) => {
+        actionStates.push(event);
+        if (
+          event.unit === actor &&
+          event.stateType === 'queued_action' &&
+          event.phase === 'entered'
+        ) {
+          actor.tags.addTags([tag]);
+          queueSkippedActions(actor, 1, '测试调息', '调息');
+        }
+      },
+    );
     EventBus.instance.subscribe<HitCheckEvent>('HitCheckEvent', (event) => {
       if (event.ability.id === 'test.after-strike') hitChecks.push(event);
     });
@@ -160,15 +169,21 @@ describe('不可打断后发策略', () => {
         expect.objectContaining({ type: 'rest', remainingActions: 1 }),
       ]),
     );
-    expect(
-      result.logs.some((line) => line.includes('开始蓄势，下一行动将发动《听雷沉山》')),
-      result.logs.join('\n'),
-    ).toBe(true);
-    expect(
-      result.logs.some((line) => line.includes('蓄势完成，发动《听雷沉山》')),
-      result.logs.join('\n'),
-    ).toBe(true);
-    expect(result.logs.join('\n')).not.toMatch(/强行|顶住|无视|蓄势被打断/);
+    const actionFacts = result.sequences
+      .flatMap((sequence) => sequence.facts)
+      .filter((fact) => fact.type === 'action_state');
+    expect(actionFacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stateType: 'queued_action',
+          phase: 'entered',
+        }),
+        expect.objectContaining({
+          stateType: 'queued_action',
+          phase: 'triggered',
+        }),
+      ]),
+    );
   });
 
   it('施法打断监听器不能取消已登记的不可打断后发', () => {
@@ -180,7 +195,8 @@ describe('不可打断后发策略', () => {
     EventBus.instance.subscribe<SkillPreCastEvent>(
       'SkillPreCastEvent',
       (event) => {
-        if (event.ability.id === 'test.after-strike') event.isInterrupted = true;
+        if (event.ability.id === 'test.after-strike')
+          event.isInterrupted = true;
       },
       10_000,
     );
@@ -189,10 +205,13 @@ describe('不可打断后发策略', () => {
       (event) => {
         states.push(event);
         if (event.stateType === 'queued_action' && event.phase === 'entered') {
-          AbilityFactory.createEffect({
-            type: 'ability_lock',
-            params: { rounds: 3, maxCount: 1 },
-          })?.execute({ caster: target, target: actor });
+          executeTestEffect(
+            AbilityFactory.createEffect({
+              type: 'ability_lock',
+              params: { rounds: 3, maxCount: 1 },
+            }),
+            { caster: target, target: actor },
+          );
         }
       },
     );
@@ -202,12 +221,22 @@ describe('不可打断后发策略', () => {
     engine.destroy();
 
     expect(result.winner).toBe(actor.id);
-    expect(states).toEqual(expect.arrayContaining([
-      expect.objectContaining({ stateType: 'queued_action', phase: 'triggered' }),
-    ]));
-    expect(states).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ stateType: 'queued_action', phase: 'cancelled' }),
-    ]));
+    expect(states).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stateType: 'queued_action',
+          phase: 'triggered',
+        }),
+      ]),
+    );
+    expect(states).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stateType: 'queued_action',
+          phase: 'cancelled',
+        }),
+      ]),
+    );
   });
 
   it('施法者在后发行动前死亡时不发动且不产生取消日志', () => {
@@ -215,26 +244,29 @@ describe('不可打断后发策略', () => {
     const actor = combatant('actor', 500);
     const target = combatant('target', 1);
     actor.abilities.addAbility(chargedStrike());
-    target.abilities.addAbility(AbilityFactory.create({
-      slug: 'test.execution',
-      name: '处决',
-      type: AbilityType.ACTIVE_SKILL,
-      priority: 100,
-      tags: [
-        GameplayTags.ABILITY.FUNCTION.DAMAGE,
-        GameplayTags.ABILITY.CHANNEL.PHYSICAL,
-      ],
-      effects: [{
-        type: 'damage',
-        params: {
-          value: { attribute: AttributeType.ATK, coefficient: 1_000 },
-        },
-      }],
-    }));
+    target.abilities.addAbility(
+      AbilityFactory.create({
+        slug: 'test.execution',
+        name: '处决',
+        type: AbilityType.ACTIVE_SKILL,
+        priority: 100,
+        tags: [
+          GameplayTags.ABILITY.FUNCTION.DAMAGE,
+          GameplayTags.ABILITY.CHANNEL.PHYSICAL,
+        ],
+        effects: [
+          {
+            type: 'damage',
+            params: {
+              value: { attribute: AttributeType.ATK, coefficient: 1_000 },
+            },
+          },
+        ],
+      }),
+    );
     const states: ActionStateEvent[] = [];
-    EventBus.instance.subscribe<ActionStateEvent>(
-      'ActionStateEvent',
-      (event) => states.push(event),
+    EventBus.instance.subscribe<ActionStateEvent>('ActionStateEvent', (event) =>
+      states.push(event),
     );
 
     const engine = new BattleEngineV5(actor, target);
@@ -242,16 +274,25 @@ describe('不可打断后发策略', () => {
     engine.destroy();
 
     expect(result.winner).toBe(target.id);
-    expect(states).toEqual(expect.arrayContaining([
-      expect.objectContaining({ stateType: 'queued_action', phase: 'entered' }),
-    ]));
-    expect(states).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        stateType: 'queued_action',
-        phase: expect.stringMatching(/triggered|cancelled/),
-      }),
-    ]));
-    expect(result.logs.join('\n')).not.toMatch(/蓄势取消|蓄势被打断/);
+    expect(states).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stateType: 'queued_action',
+          phase: 'entered',
+        }),
+      ]),
+    );
+    expect(states).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stateType: 'queued_action',
+          phase: expect.stringMatching(/triggered|cancelled/),
+        }),
+      ]),
+    );
+    expect(
+      new CombatPresenterV3('detailed').formatAll(result.sequences).join('\n'),
+    ).not.toMatch(/蓄势取消|蓄势被打断/);
     expect(peekQueuedAction(actor)).toBeUndefined();
   });
 
@@ -267,23 +308,24 @@ describe('不可打断后发策略', () => {
         if (event.unit !== actor || event.stateType !== 'queued_action') return;
         sequence.push(event.phase);
         if (event.phase === 'entered') {
-          AbilityFactory.createEffect({
-            type: 'apply_buff',
-            params: {
-              target: 'caster',
-              buffConfig: {
-                id: 'test.two-action-stun',
-                name: '两次行动眩晕',
-                type: BuffType.CONTROL,
-                duration: 2,
-                stackRule: StackRule.REFRESH_DURATION,
-                tags: [
-                  GameplayTags.BUFF.TYPE.CONTROL,
-                ],
-                statusTags: [GameplayTags.STATUS.CONTROL.STUNNED],
+          executeTestEffect(
+            AbilityFactory.createEffect({
+              type: 'apply_buff',
+              params: {
+                target: 'caster',
+                buffConfig: {
+                  id: 'test.two-action-stun',
+                  name: '两次行动眩晕',
+                  type: BuffType.CONTROL,
+                  duration: 2,
+                  stackRule: StackRule.REFRESH_DURATION,
+                  tags: [GameplayTags.BUFF.TYPE.CONTROL],
+                  statusTags: [GameplayTags.STATUS.CONTROL.STUNNED],
+                },
               },
-            },
-          })?.execute({ caster: actor, target: actor });
+            }),
+            { caster: actor, target: actor },
+          );
         }
       },
     );
@@ -301,9 +343,9 @@ describe('不可打断后发策略', () => {
     expect(sequence).toEqual(expect.arrayContaining(['entered', 'triggered']));
     expect(
       sequence.indexOf('controlled_skip'),
-      `${sequence.join(',')}\n${result.logs.join('\n')}`,
-    ).toBeGreaterThan(
-      sequence.indexOf('triggered'),
-    );
+      `${sequence.join(',')}\n${new CombatPresenterV3('detailed')
+        .formatAll(result.sequences)
+        .join('\n')}`,
+    ).toBeGreaterThan(sequence.indexOf('triggered'));
   });
 });

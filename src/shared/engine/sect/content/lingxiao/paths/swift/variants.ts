@@ -355,6 +355,7 @@ export function buildSwiftAbilities(
     effects: [
       damage(0.95),
       sectEffects.dispelPositiveBuffsByMethod(
+        'edge-cleansing',
         1,
         edgeCleansingLevel,
         methodGrowth!,

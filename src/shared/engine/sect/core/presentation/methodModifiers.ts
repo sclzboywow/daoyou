@@ -3,6 +3,7 @@ import type {
   SectDefinition,
   SectMethodModifierProjection,
 } from '../domain';
+import { projectSectMethodGrowthSnapshot } from './methodGrowthPresentation';
 
 export function projectSectMethodModifiers(
   sect: CultivatorSectState | undefined,
@@ -12,7 +13,11 @@ export function projectSectMethodModifiers(
     return [];
   return definition.methods.flatMap((method) => {
     const level = sect.methods[method.id] ?? 0;
-    if (!method.modifierPerLevel || level <= 0) return [];
+    const panelModifier = method.growthProfile.panelModifier;
+    if (!panelModifier || level <= 0) return [];
+    const growth = projectSectMethodGrowthSnapshot(method, level);
+    const panelValue = growth.panelValue;
+    if (panelValue === undefined) return [];
     return [
       {
         methodId: method.id,
@@ -20,8 +25,9 @@ export function projectSectMethodModifiers(
         level,
         modifiers: [
           {
-            ...method.modifierPerLevel,
-            value: method.modifierPerLevel.value * level,
+            attrType: panelModifier.attrType,
+            type: panelModifier.type,
+            value: panelValue,
           },
         ],
       },

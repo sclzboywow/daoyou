@@ -1,16 +1,16 @@
 import { ActiveSkill } from '../abilities/ActiveSkill';
 import { AbilityLockParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import { CooldownModifyEvent } from '../core/events';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
+import { CombatMechanicCodeV3 } from '../v3/mechanics';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
 
 export class AbilityLockEffect extends GameplayEffect {
   constructor(private params: AbilityLockParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const rounds = Math.max(1, Math.round(this.params.rounds));
     const matchedSkills = context.target.abilities
       .getAllAbilities()
@@ -34,9 +34,19 @@ export class AbilityLockEffect extends GameplayEffect {
           );
 
     for (let i = 0; i < countToLock; i++) {
+      if (!context.canExecuteEffect()) break;
       const skill = matchedSkills[i];
       skill.modifyCooldown(rounds);
-      EventBus.instance.publish<CooldownModifyEvent>({
+      context.commit(context.target, {
+        type: 'mechanic',
+        code: CombatMechanicCodeV3.ABILITY_LOCK,
+        payload: {
+          kind: 'ability_lock',
+          abilityName: skill.name,
+          rounds,
+        },
+      });
+      context.emit<CooldownModifyEvent>({
         type: 'CooldownModifyEvent',
         timestamp: Date.now(),
         caster: context.caster,

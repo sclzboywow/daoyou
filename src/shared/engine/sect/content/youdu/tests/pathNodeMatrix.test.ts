@@ -82,9 +82,9 @@ describe('幽都36参悟节点编译矩阵', () => {
     const finishFive = finish.effectLayers?.find((layer) => layer.id === 'finish-five')
       ?.effects?.find((effect) => effect.type === 'damage');
     expect(finishFour?.type === 'damage' && finishFour.params.value.coefficient)
-      .toBe(1.66);
+      .toBe(1.6665);
     expect(finishFive?.type === 'damage' && finishFive.params.value.coefficient)
-      .toBe(1.9);
+      .toBe(1.9074);
   });
 
   it('镇魄司命代表完整方案落实混合增伤、法力、抗性、控制与终结强化', () => {
@@ -103,7 +103,7 @@ describe('幽都36参悟节点编译矩阵', () => {
     const coefficients = seize.effects
       ?.filter((effect) => effect.type === 'damage')
       .map((effect) => effect.type === 'damage' ? effect.params.value.coefficient : undefined);
-    expect(coefficients).toEqual([0.22, 0.22]);
+    expect(coefficients).toEqual([0.2209, 0.2209]);
 
     const pin = resolveSectAbility({
       sect: state, realm: '化神', abilityId: 'pin-soul',
@@ -118,19 +118,19 @@ describe('幽都36参悟节点编译矩阵', () => {
     }).config;
     const damage = finish.effectLayers?.find((layer) => layer.id === 'finish-four')
       ?.effects?.find((effect) => effect.type === 'damage');
-    expect(damage?.type === 'damage' && damage.params.value.coefficient).toBe(1.65);
+    expect(damage?.type === 'damage' && damage.params.value.coefficient).toBe(1.6564);
   });
 
   it('基础与终极节点终结倍率保持在明确理论边界内', () => {
-    expect(finisherCoefficients()).toEqual({ four: 1.5, five: 1.7 });
+    expect(finisherCoefficients()).toEqual({ four: 1.5059, five: 1.7066 });
     expect(finisherCoefficients(YOUDU_TIDE_PATH_ID, ['tide-lament-deepens']))
-      .toEqual({ four: 1.66, five: 1.9 });
+      .toEqual({ four: 1.6665, five: 1.9074 });
     expect(finisherCoefficients(YOUDU_DECREE_PATH_ID, ['decree-verdict']))
-      .toEqual({ four: 1.65, five: 1.85 });
+      .toEqual({ four: 1.6564, five: 1.8572 });
     expect(finisherCoefficients(
       YOUDU_DECREE_PATH_ID,
       ['decree-bright-prison-fire', 'decree-seven-inch-severance'],
-    )).toEqual({ four: 1.7, five: 1.95 });
+    )).toEqual({ four: 1.7066, five: 1.9576 });
 
     const theoreticalMaximum = 1.95 * 1.35;
     expect(theoreticalMaximum).toBeCloseTo(2.6325);
@@ -149,8 +149,8 @@ describe('幽都36参悟节点编译矩阵', () => {
 
     expect(tideSeize?.map((effect) => effect.type === 'damage'
       ? effect.params.value.coefficient
-      : undefined)).toEqual([0.2, 0.2]);
+      : undefined)).toEqual([0.2008, 0.2008]);
     expect(decreeForget?.type === 'damage' && decreeForget.params.value.coefficient)
-      .toBe(0.16);
+      .toBe(0.1606);
   });
 });

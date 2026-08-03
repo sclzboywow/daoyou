@@ -1,19 +1,20 @@
+import {
+  resolveAbilityEffectPlan,
+  type ResolvedAbilityEffectPlan,
+} from '../core/abilityEffectPlan';
 import type {
   AbilityConfig,
   AbilityCostConfig,
   AbilityEffectLayerConfig,
   AbilityEffectPlanConfig,
 } from '../core/configs';
-import {
-  resolveAbilityEffectPlan,
-  type ResolvedAbilityEffectPlan,
-} from '../core/abilityEffectPlan';
 import { executeEffectConfigs } from '../core/effectExecutor';
 import { advanceAbilityMode } from '../core/runtimeState';
 import type { AbilityId } from '../core/types';
+import { EffectExecutionContextV3 } from '../effects/Effect';
 import type { Unit } from '../units/Unit';
-import { ActiveSkill, type ActiveSkillConfig } from './ActiveSkill';
 import type { AbilityContext } from './Ability';
+import { ActiveSkill, type ActiveSkillConfig } from './ActiveSkill';
 
 /** 固定目标、费用和 AI 意图，只允许按计划追加效果层的主动技能。 */
 export class LayeredDataDrivenActiveSkill extends ActiveSkill {
@@ -22,7 +23,9 @@ export class LayeredDataDrivenActiveSkill extends ActiveSkill {
   private readonly baseName: string;
   private readonly baseDescription?: string;
   private readonly baseEffects: NonNullable<AbilityConfig['effects']>;
-  private readonly baseCompletionEffects: NonNullable<AbilityConfig['completionEffects']>;
+  private readonly baseCompletionEffects: NonNullable<
+    AbilityConfig['completionEffects']
+  >;
   private readonly baseCastEffects: NonNullable<AbilityConfig['castEffects']>;
   private readonly effectLayers: AbilityEffectLayerConfig[];
   private readonly effectPlans: AbilityEffectPlanConfig[];
@@ -73,19 +76,34 @@ export class LayeredDataDrivenActiveSkill extends ActiveSkill {
 
   protected override executeSkill(caster: Unit, target: Unit): void {
     const plan = this.preparedPlan ?? this.resolvePlan(caster, target);
-    const context = { caster, target, ability: this, castSnapshot: this.castSnapshot };
-    executeEffectConfigs(plan.effects, context);
-    executeEffectConfigs(plan.completionEffects, context);
-    if (plan.consumeModeKey) advanceAbilityMode(caster, plan.consumeModeKey);
-  }
-
-  protected override executeCastEffects(caster: Unit, target: Unit): void {
-    executeEffectConfigs(this.baseCastEffects, {
+    const context = EffectExecutionContextV3.activeAbility({
+      owner: caster,
       caster,
       target,
       ability: this,
       castSnapshot: this.castSnapshot,
     });
+    executeEffectConfigs(plan.effects, context);
+    executeEffectConfigs(plan.completionEffects, context);
+    if (plan.consumeModeKey && context.canExecuteEffect()) {
+      advanceAbilityMode(caster, plan.consumeModeKey, {
+        attribution: context.attribution,
+        trace: context.trace,
+      });
+    }
+  }
+
+  protected override executeCastEffects(caster: Unit, target: Unit): void {
+    executeEffectConfigs(
+      this.baseCastEffects,
+      EffectExecutionContextV3.activeAbility({
+        owner: caster,
+        caster,
+        target,
+        ability: this,
+        castSnapshot: this.castSnapshot,
+      }),
+    );
   }
 
   protected override onCastFinished(): void {
@@ -120,13 +138,16 @@ export class LayeredDataDrivenActiveSkill extends ActiveSkill {
   }
 
   private resolvePlan(caster: Unit, target: Unit): ResolvedAbilityEffectPlan {
-    return resolveAbilityEffectPlan({
-      name: this.baseName,
-      description: this.baseDescription,
-      effects: this.baseEffects,
-      completionEffects: this.baseCompletionEffects,
-      effectLayers: this.effectLayers,
-      effectPlans: this.effectPlans,
-    }, { caster, target, ability: this });
+    return resolveAbilityEffectPlan(
+      {
+        name: this.baseName,
+        description: this.baseDescription,
+        effects: this.baseEffects,
+        completionEffects: this.baseCompletionEffects,
+        effectLayers: this.effectLayers,
+        effectPlans: this.effectPlans,
+      },
+      { caster, target, ability: this },
+    );
   }
 }

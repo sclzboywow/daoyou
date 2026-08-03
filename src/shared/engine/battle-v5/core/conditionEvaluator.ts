@@ -1,14 +1,25 @@
 import { Buff } from '../buffs/Buff';
-import { EffectContext } from '../effects';
+import type { Ability } from '../abilities/Ability';
+import type { AbilityCastSnapshot } from '../abilities/Ability';
 import { Unit } from '../units/Unit';
 import { ConditionConfig } from './configs';
 import { DamageEvent, DamageRequestEvent, DamageTakenEvent } from './events';
-import { BuffType, DamageSource, DamageType } from './types';
+import { BuffType, DamageSource, DamageType, type CombatEvent, type LogCauseRef } from './types';
 import { readRuntimeCounter } from './runtimeState';
 import { readAbilityMode } from './runtimeState';
 
 
-function getScopedUnit(context: EffectContext, scope?: 'caster' | 'target') {
+export interface ConditionExecutionContext {
+  caster: Unit;
+  target: Unit;
+  ability?: Ability;
+  buff?: Buff;
+  castSnapshot?: AbilityCastSnapshot;
+  damageCause?: LogCauseRef;
+  triggerEvent?: CombatEvent;
+}
+
+function getScopedUnit(context: ConditionExecutionContext, scope?: 'caster' | 'target') {
   if (scope === 'caster') return context.caster;
   return context.target;
 }
@@ -30,11 +41,11 @@ function getAbilityTagsFromTriggerEvent(triggerEvent: unknown) {
   return eventLike.ability?.tags;
 }
 
-function getAbilityTags(context: EffectContext) {
+function getAbilityTags(context: ConditionExecutionContext) {
   return getAbilityTagsFromTriggerEvent(context.triggerEvent) ?? context.ability?.tags;
 }
 
-function sourceHasTag(context: EffectContext, tag: string): boolean {
+function sourceHasTag(context: ConditionExecutionContext, tag: string): boolean {
   if (getAbilityTags(context)?.hasTag(tag)) return true;
   const triggerBuff = context.triggerEvent && typeof context.triggerEvent === 'object'
     ? (context.triggerEvent as { buff?: Buff }).buff
@@ -42,7 +53,7 @@ function sourceHasTag(context: EffectContext, tag: string): boolean {
   return triggerBuff?.tags.hasTag(tag) ?? context.buff?.tags.hasTag(tag) ?? false;
 }
 
-function getAbilityMpCost(context: EffectContext): number {
+function getAbilityMpCost(context: ConditionExecutionContext): number {
   const ability = (() => {
     if (
       context.triggerEvent &&
@@ -111,9 +122,9 @@ function getIsLethalFromTriggerEvent(triggerEvent: unknown): boolean {
   if (!triggerEvent || typeof triggerEvent !== 'object') return false;
 
   const eventLike = triggerEvent as {
-    isLethal?: boolean;
+    hpReachedZeroBeforeReactions?: boolean;
   };
-  return eventLike.isLethal === true;
+  return eventLike.hpReachedZeroBeforeReactions === true;
 }
 
 function countBuffs(
@@ -132,7 +143,7 @@ function countBuffs(
 }
 
 export function evaluateCondition(
-  context: EffectContext,
+  context: ConditionExecutionContext,
   cond: ConditionConfig,
 ): boolean {
   const scopedUnit = getScopedUnit(context, cond.params.scope);
@@ -400,7 +411,7 @@ export function evaluateCondition(
 }
 
 export function checkConditions(
-  context: EffectContext,
+  context: ConditionExecutionContext,
   conditions: ConditionConfig[],
 ): boolean {
   for (const cond of conditions) {

@@ -100,7 +100,7 @@ type BetBattleListing = {
   challengerName: string | null;
   challengerStakeSnapshot: BetStakeSnapshot | null;
   winnerCultivatorId: string | null;
-  battleRecordV2Id?: string | null;
+  battleRecordV3Id?: string | null;
   expiresAt: string;
   createdAt: string;
 };
@@ -589,6 +589,14 @@ export default function BetBattlePage() {
             </span>
           </div>
           <div className="flex w-full justify-end gap-2 pt-1">
+            {item.battleRecordV3Id && (
+              <InkButton
+                variant="secondary"
+                href={`/game/battle/${item.battleRecordV3Id}`}
+              >
+                查看战报
+              </InkButton>
+            )}
             {!isCreator && (
               <InkButton
                 variant="secondary"

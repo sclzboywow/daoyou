@@ -53,6 +53,35 @@ function replacePath(pathId: string, replacement: SectPathModule): SectModule {
 }
 
 describe('宗门模块扩展契约', () => {
+  it('拒绝缺失或越界的心法成长档案', () => {
+    const missing = structuredClone(FIXTURE_SECT_MODULE.definition);
+    delete (missing.methods[0] as Partial<(typeof missing.methods)[number]>).growthProfile;
+    expect(
+      () => new SectRegistry([{ ...FIXTURE_SECT_MODULE, definition: missing }]),
+    ).toThrow('必须声明有效成长档案');
+
+    const excessiveEffect = structuredClone(FIXTURE_SECT_MODULE.definition);
+    excessiveEffect.methods[0].growthProfile.effects.damage = 0.31;
+    expect(
+      () =>
+        new SectRegistry([
+          { ...FIXTURE_SECT_MODULE, definition: excessiveEffect },
+        ]),
+    ).toThrow('成长上限必须在0至30%之间');
+
+    const invalidDuration = structuredClone(FIXTURE_SECT_MODULE.definition);
+    invalidDuration.methods[0].growthProfile.durationMilestones = [
+      { level: 120, bonus: 2 },
+      { level: 60, bonus: 3 },
+    ];
+    expect(
+      () =>
+        new SectRegistry([
+          { ...FIXTURE_SECT_MODULE, definition: invalidDuration },
+        ]),
+    ).toThrow('持续时间里程碑等级必须在1至180内递增');
+  });
+
   it('强制每个宗门指定一个入宗即解锁的被动作为宗门根基', () => {
     const missing = structuredClone(FIXTURE_SECT_MODULE.definition);
     delete (missing as Partial<typeof missing>).foundationPassiveId;

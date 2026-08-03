@@ -1,4 +1,6 @@
 import { getRealmStageRank } from '@shared/config/realmProgression';
+import { isPercentageAttributeType } from '@shared/engine/battle-v5/core/attributeMeta';
+import { AttributeType, ModifierType } from '@shared/engine/battle-v5/core/types';
 import {
   StandardSectRules,
   sectAbilityMethodId,
@@ -7,6 +9,15 @@ import {
 } from '../domain';
 import type { SectModule } from '../plugin';
 import type { ValidationRule } from './ValidationPipeline';
+
+const PRIMARY_ATTRIBUTE_TYPES = new Set([
+  AttributeType.VITALITY,
+  AttributeType.STRENGTH,
+  AttributeType.SPIRIT,
+  AttributeType.ENDURANCE,
+  AttributeType.SPEED,
+  AttributeType.WILLPOWER,
+]);
 
 function duplicateIds(values: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -32,6 +43,81 @@ function assertRequirements(
       throw new Error(`${label}心法前置无效: ${methodId}`);
     }
   }
+}
+
+function validateMilestones(
+  methodId: string,
+  label: string,
+  milestones: readonly { level: number; bonus: number }[] | undefined,
+  maxBonus: number,
+): void {
+  let previousLevel = 0;
+  let previousBonus = 0;
+  for (const milestone of milestones ?? []) {
+    if (
+      !Number.isInteger(milestone.level) ||
+      milestone.level < 1 ||
+      milestone.level > 180 ||
+      milestone.level <= previousLevel
+    ) {
+      throw new Error(`心法 ${methodId} 的${label}里程碑等级必须在1至180内递增`);
+    }
+    if (
+      !Number.isInteger(milestone.bonus) ||
+      milestone.bonus < previousBonus ||
+      milestone.bonus > maxBonus
+    ) {
+      throw new Error(`心法 ${methodId} 的${label}里程碑增益无效`);
+    }
+    previousLevel = milestone.level;
+    previousBonus = milestone.bonus;
+  }
+}
+
+function validateGrowthProfile(
+  method: SectDefinition['methods'][number],
+): void {
+  const profile = method.growthProfile;
+  if (!profile || !['early', 'balanced', 'late'].includes(profile.curve)) {
+    throw new Error(`心法 ${method.id} 必须声明有效成长档案`);
+  }
+  for (const [category, cap] of Object.entries(profile.effects ?? {})) {
+    if (!Number.isFinite(cap) || cap < 0 || cap > 0.3) {
+      throw new Error(`心法 ${method.id} 的${category}成长上限必须在0至30%之间`);
+    }
+  }
+  if (
+    !profile.effects ||
+    ['damage', 'heal', 'shield', 'status'].some(
+      (category) =>
+        !(category in profile.effects),
+    )
+  ) {
+    throw new Error(`心法 ${method.id} 必须声明完整效果分类成长`);
+  }
+  const panel = profile.panelModifier;
+  if (panel) {
+    if (PRIMARY_ATTRIBUTE_TYPES.has(panel.attrType)) {
+      throw new Error(`心法 ${method.id} 的面板成长不得写入六维基础属性`);
+    }
+    const percentage = isPercentageAttributeType(panel.attrType);
+    const expectedType = percentage ? ModifierType.FIXED : ModifierType.ADD;
+    const maxValue = percentage ? 0.15 : 0.3;
+    if (panel.type !== expectedType) {
+      throw new Error(
+        `心法 ${method.id} 的${percentage ? '概率' : '派生'}属性修改器类型无效`,
+      );
+    }
+    if (
+      !Number.isFinite(panel.maxValue) ||
+      panel.maxValue < 0 ||
+      panel.maxValue > maxValue
+    ) {
+      throw new Error(`心法 ${method.id} 的面板成长上限无效`);
+    }
+  }
+  validateMilestones(method.id, '持续时间', profile.durationMilestones, 2);
+  validateMilestones(method.id, '计数', profile.countMilestones, 3);
 }
 
 function validatePath(path: SectPathDefinition, definition: SectDefinition) {
@@ -141,6 +227,7 @@ export class SectDefinitionRule implements ValidationRule<SectModule> {
         `宗门 ${definition.id} 必须定义${StandardSectRules.methodCount}本基础心法`,
       );
     }
+    for (const method of definition.methods) validateGrowthProfile(method);
     const slots = definition.methods
       .map((method) => method.slot)
       .sort((a, b) => a - b);

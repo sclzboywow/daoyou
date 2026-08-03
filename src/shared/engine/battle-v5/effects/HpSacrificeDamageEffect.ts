@@ -1,17 +1,17 @@
 import { HpSacrificeDamageParams } from '../core/configs';
-import { EventBus } from '../core/EventBus';
 import { DamageRequestEvent } from '../core/events';
 import { DamageSource, DamageType } from '../core/types';
 import { EffectRegistry } from '../factories/EffectRegistry';
-import { EffectContext, GameplayEffect } from './Effect';
-import { publishMechanicLog } from './advancedEffectUtils';
+import { CombatMechanicCodeV3 } from '../v3/mechanics';
+import { EffectExecutionContextV3, GameplayEffect } from './Effect';
+import { commitMechanicResultV3 } from './advancedEffectUtils';
 
 export class HpSacrificeDamageEffect extends GameplayEffect {
   constructor(private params: HpSacrificeDamageParams) {
     super();
   }
 
-  execute(context: EffectContext): void {
+  execute(context: EffectExecutionContextV3): void {
     const floor = this.params.minHpFloor ?? 1;
     const spend = Math.max(
       0,
@@ -23,20 +23,15 @@ export class HpSacrificeDamageEffect extends GameplayEffect {
     if (spend <= 0) return;
 
     context.caster.takeDamage(spend);
-    publishMechanicLog({
-      mechanic: 'hp_sacrifice',
-      source: context.caster,
-      ability: context.ability,
-      sourceBuff: context.buff,
+    commitMechanicResultV3(context, {
+      code: CombatMechanicCodeV3.HP_SACRIFICE,
       target: context.caster,
-      name: '气血献祭',
-      displayName: '气血献祭',
       visibility: 'player',
-      value: spend,
+      payload: { kind: 'hp_sacrifice', amount: spend },
     });
     const damage = Math.round(spend * this.params.damagePerHp);
     if (damage <= 0) return;
-    EventBus.instance.publish<DamageRequestEvent>({
+    context.emit<DamageRequestEvent>({
       type: 'DamageRequestEvent',
       timestamp: Date.now(),
       caster: context.caster,

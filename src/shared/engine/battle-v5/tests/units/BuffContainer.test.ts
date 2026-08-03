@@ -1,9 +1,10 @@
-import { BuffContainer } from '../../units/BuffContainer';
-import { Unit } from '../../units/Unit';
 import { Buff, StackRule } from '../../buffs/Buff';
-import { BuffType } from '../../core/types';
 import { EventBus } from '../../core/EventBus';
 import { DamageTakenEvent } from '../../core/events';
+import { BuffType } from '../../core/types';
+import { BuffContainer } from '../../units/BuffContainer';
+import { Unit } from '../../units/Unit';
+import { CombatAttributionV3 } from '../../v3/origin';
 
 // 创建一个测试用的 Buff 子类
 class TestBuff extends Buff {
@@ -84,9 +85,17 @@ describe('BuffContainer', () => {
   });
 
   test('堆叠规则：REFRESH_DURATION', () => {
-    const buff1 = new TestBuff('test_1', '测试 Buff 1', StackRule.REFRESH_DURATION);
-    const buff2 = new TestBuff('test_1', '测试 Buff 1', StackRule.REFRESH_DURATION);
-    
+    const buff1 = new TestBuff(
+      'test_1',
+      '测试 Buff 1',
+      StackRule.REFRESH_DURATION,
+    );
+    const buff2 = new TestBuff(
+      'test_1',
+      '测试 Buff 1',
+      StackRule.REFRESH_DURATION,
+    );
+
     container.addBuff(buff1);
     // 模拟时间流逝
     buff1.tickDuration(); // 5 -> 4
@@ -131,7 +140,7 @@ describe('BuffContainer', () => {
   test('堆叠规则：STACK_LAYER', () => {
     const buff1 = new TestBuff('test_1', '测试 Buff 1', StackRule.STACK_LAYER);
     const buff2 = new TestBuff('test_1', '测试 Buff 1', StackRule.STACK_LAYER);
-    
+
     container.addBuff(buff1);
     expect(buff1.getLayer()).toBe(1);
 
@@ -143,7 +152,7 @@ describe('BuffContainer', () => {
   test('堆叠规则：OVERRIDE', () => {
     const buff1 = new TestBuff('test_1', '测试 Buff 1', StackRule.OVERRIDE);
     const buff2 = new TestBuff('test_1', '测试 Buff 1', StackRule.OVERRIDE);
-    
+
     container.addBuff(buff1);
     container.addBuff(buff2);
 
@@ -151,6 +160,90 @@ describe('BuffContainer', () => {
     expect(buff1.deactivatedCount).toBe(1);
     expect(buff2.activatedCount).toBe(1);
     expect(buff2.getOwner()).toBe(owner);
+  });
+
+  test.each([
+    StackRule.STACK_LAYER,
+    StackRule.REFRESH_DURATION,
+    StackRule.OVERRIDE,
+  ])('%s 成功施加后原子替换完整归属', (stackRule) => {
+    const firstSource = new Unit('first-source', '初次来源', {});
+    const nextSource = new Unit('next-source', '本次来源', {});
+    const firstAttribution = CombatAttributionV3.owned(firstSource, {
+      kind: 'equipment',
+      id: 'first-equipment',
+      name: '旧法器',
+    });
+    const nextAttribution = CombatAttributionV3.owned(nextSource, {
+      kind: 'gongfa',
+      id: 'next-gongfa',
+      name: '新功法',
+    });
+
+    container.addBuff(
+      new TestBuff('attribution', '归属测试', stackRule),
+      firstSource,
+      { attribution: firstAttribution },
+    );
+    container.addBuff(
+      new TestBuff('attribution', '归属测试', stackRule),
+      nextSource,
+      { attribution: nextAttribution },
+    );
+
+    const applied = container.getAllBuffs()[0];
+    expect(applied.getSource()).toBe(nextSource);
+    expect(applied.getCombatAttributionV3()).toBe(nextAttribution);
+  });
+
+  test('IGNORE 不改变已存在 Buff 的来源和归属', () => {
+    const firstSource = new Unit('first-source', '初次来源', {});
+    const ignoredSource = new Unit('ignored-source', '忽略来源', {});
+    const firstAttribution = CombatAttributionV3.owned(firstSource, {
+      kind: 'equipment',
+      id: 'first-equipment',
+      name: '旧法器',
+    });
+    const ignoredAttribution = CombatAttributionV3.owned(ignoredSource, {
+      kind: 'gongfa',
+      id: 'ignored-gongfa',
+      name: '新功法',
+    });
+
+    container.addBuff(
+      new TestBuff('ignored-attribution', '归属测试', StackRule.IGNORE),
+      firstSource,
+      { attribution: firstAttribution },
+    );
+    container.addBuff(
+      new TestBuff('ignored-attribution', '归属测试', StackRule.IGNORE),
+      ignoredSource,
+      { attribution: ignoredAttribution },
+    );
+
+    const applied = container.getAllBuffs()[0];
+    expect(applied.getSource()).toBe(firstSource);
+    expect(applied.getCombatAttributionV3()).toBe(firstAttribution);
+  });
+
+  test('Buff.clone 只复制机制配置，不携带运行时归属', () => {
+    const source = new Unit('source', '来源', {});
+    const buff = new Buff('clone-attribution', '归属测试', BuffType.BUFF, 3);
+    buff.setOwner(owner);
+    buff.setSource(source);
+    buff.setCombatAttributionV3(
+      CombatAttributionV3.owned(source, {
+        kind: 'buff',
+        id: buff.id,
+        name: buff.name,
+      }),
+    );
+
+    const cloned = buff.clone();
+
+    expect(cloned.getOwner()).toBeNull();
+    expect(cloned.getSource()).toBeNull();
+    expect(cloned.getCombatAttributionV3()).toBeUndefined();
   });
 
   test('事件订阅与触发：受击触发反伤', () => {
@@ -182,7 +275,7 @@ describe('BuffContainer', () => {
       damageTaken: 100,
       beforeHp: 1000,
       remainHp: 900,
-      isLethal: false,
+      hpReachedZeroBeforeReactions: false,
     });
 
     expect(reflectDamage).toBe(20);
@@ -196,7 +289,7 @@ describe('BuffContainer', () => {
       damageTaken: 100,
       beforeHp: 900,
       remainHp: 800,
-      isLethal: false,
+      hpReachedZeroBeforeReactions: false,
     });
 
     expect(reflectDamage).toBe(20); // 依然是 20

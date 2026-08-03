@@ -7,7 +7,7 @@ import {
 } from '../../../../../core';
 import { createLingxiaoNode } from '../../../shared/createLingxiaoNode';
 import {
-  growthMagnitude,
+  growthShieldMagnitude,
   nodePercent,
 } from '../../../shared/LingxiaoNodeDescription';
 import { addLingxiaoPassive } from '../../../shared/SwordNodePassives';
@@ -23,7 +23,7 @@ export const HEAVY_LAYER_3_NODES = [
     },
     (_context, builder) => heavySwordBuild(builder).enable('mountainGate'),
     (context) =>
-      `《踏雪无痕》提供的护盾提高50%，当前获得相当于${nodePercent(growthMagnitude(context, 'void-step', 0.52 * 1.5))}物攻的护盾。`,
+      `《踏雪无痕》提供的护盾提高50%，当前获得相当于${nodePercent(growthShieldMagnitude(context, 'void-step', 0.52 * 1.5))}物攻的护盾。`,
   ),
   createLingxiaoNode(
     {

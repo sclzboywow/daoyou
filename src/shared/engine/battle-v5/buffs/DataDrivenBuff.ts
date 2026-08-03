@@ -9,7 +9,11 @@ import {
   releaseGlobalUniqueEffects,
 } from '../core/runtimeState';
 import { BuffId, CombatEvent } from '../core/types';
-import { EffectContext, GameplayEffect } from '../effects/Effect';
+import {
+  GameplayEffect,
+  EffectExecutionContextV3,
+  executeGameplayEffectV3,
+} from '../effects/Effect';
 import { Buff } from './Buff';
 
 /**
@@ -42,6 +46,7 @@ export class DataDrivenBuff extends Buff {
       config.statusVisibility,
       config.stackPriority,
       config.dispelMode,
+      config.removeOnDeath,
     );
     this._config = config;
   }
@@ -156,21 +161,24 @@ export class DataDrivenBuff extends Buff {
       runtime.mapping,
     );
 
-    const context: EffectContext = {
+    const attribution = this.getCombatAttributionV3();
+    if (!attribution) {
+      throw new Error(`Buff ${this.id} has no CombatAttributionV3`);
+    }
+    const context = EffectExecutionContextV3.buff({
+      owner: attribution.owner,
       caster: resolved.caster,
       target: resolved.target,
       triggerEvent: event, // 关键：注入触发事件
       buff: this,
-    };
+    });
 
     for (const { effect } of effects) {
-      effect.execute(context);
+      executeGameplayEffectV3(effect, context);
     }
   }
 
-  override onDeactivate(
-    reason?: 'manual' | 'expired' | 'dispel' | 'replace',
-  ): void {
+  override onDeactivate(reason?: import('./Buff').BuffDeactivateReason): void {
     if (this._owner) {
       // 1. 移除宿主标签
       if (this._config.statusTags) {
@@ -188,10 +196,8 @@ export class DataDrivenBuff extends Buff {
   override clone(): DataDrivenBuff {
     const cloned = new DataDrivenBuff(this._config);
     cloned.tags = this.tags.clone();
-    cloned.setSource(this._source);
     cloned.setDuration(this.getDuration());
     cloned.setLayer(this.getLayer());
-
     // 复制已实例化的效果
     for (const listener of this._instantiatedListeners) {
       cloned.addInstantiatedListener(
