@@ -112,7 +112,7 @@ export default function AdminOperationsPage() {
           <h3 className="text-ink text-lg font-semibold">人机验证尚未启用</h3>
           <p className="text-ink-secondary mt-2 text-sm leading-7">
             服务器未检测到有效的 Turnstile 私钥。配置前后端密钥并重新构建客户端后，
-            注册、登录和找回密码才会执行人机验证。
+            登录和找回密码才会执行人机验证。
           </p>
         </section>
       ) : null}

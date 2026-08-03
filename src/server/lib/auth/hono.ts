@@ -11,7 +11,6 @@ import type { Context } from 'hono';
 
 const CAPTCHA_PROTECTED_PATHS = new Set([
   '/api/auth/sign-in/email',
-  '/api/auth/sign-up/email',
   '/api/auth/request-password-reset',
   '/api/auth/email-otp/send-verification-otp',
 ]);

@@ -1,10 +1,8 @@
 import {
   AuthPageShell,
-  AuthTurnstileField,
   buildEmailOtpTarget,
   toErrorMessage,
   useAuthFeedback,
-  useTurnstileField,
   validateEmailField,
   validatePasswordConfirmation,
   validateRequiredField,
@@ -20,14 +18,6 @@ export default function SignupPasswordRoute() {
   const navigate = useNavigate();
   const { signUpWithPassword } = useAuth();
   const { showErrorDialog } = useAuthFeedback();
-  const {
-    turnstileEnabled,
-    turnstileRef,
-    captchaError,
-    ensureCaptcha,
-    resetCaptcha,
-    setCaptchaToken,
-  } = useTurnstileField();
 
   const [displayName, setDisplayName] = useState(
     searchParams.get('name') ?? '',
@@ -61,11 +51,6 @@ export default function SignupPasswordRoute() {
       return;
     }
 
-    const verifiedCaptchaToken = ensureCaptcha();
-    if (verifiedCaptchaToken === null) {
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -73,7 +58,6 @@ export default function SignupPasswordRoute() {
         displayName,
         email,
         password,
-        verifiedCaptchaToken || undefined,
       );
 
       if (error) {
@@ -91,7 +75,6 @@ export default function SignupPasswordRoute() {
         '注册失败',
       );
     } finally {
-      resetCaptcha();
       setLoading(false);
     }
   };
@@ -175,12 +158,6 @@ export default function SignupPasswordRoute() {
           placeholder="请再次输入密码"
           error={errors.confirmPassword}
           disabled={loading}
-        />
-        <AuthTurnstileField
-          enabled={turnstileEnabled}
-          error={captchaError}
-          turnstileRef={turnstileRef}
-          onTokenChange={setCaptchaToken}
         />
         <InkButton
           type="submit"
