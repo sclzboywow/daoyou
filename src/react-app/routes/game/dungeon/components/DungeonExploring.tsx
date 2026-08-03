@@ -23,11 +23,26 @@ import { DungeonRunPanel } from './DungeonRunPanel';
 interface DungeonExploringProps {
   state: DungeonState;
   lastRound: DungeonRound | null;
-  cultivator: Pick<Cultivator, 'realm' | 'condition'> | null;
+  cultivator: Pick<
+    Cultivator,
+    'realm' | 'condition' | 'cultivation_progress'
+  > | null;
   displayResources?: CultivatorDisplaySnapshot['resources'];
   onAction: (option: DungeonOption) => Promise<unknown>;
   onQuit: () => Promise<boolean>;
   processing: boolean;
+}
+
+function getCultivationShortfall(
+  costs: DungeonOptionCost[],
+  currentCultivation: number | undefined,
+) {
+  if (currentCultivation === undefined) return null;
+  const required = costs
+    .filter((cost) => cost.type === 'cultivation_exp')
+    .reduce((total, cost) => total + cost.value, 0);
+  if (required <= currentCultivation) return null;
+  return `修为不足：需要 ${required}，当前 ${currentCultivation}`;
 }
 
 function OptionCostPreview({ costs }: { costs: DungeonOptionCost[] }) {
@@ -81,6 +96,18 @@ export function DungeonExploring({
     return null;
   }
 
+  const currentCultivation =
+    cultivator?.cultivation_progress?.cultivation_exp;
+  const selectedOption = lastRound.interaction.options.find(
+    (option) => option.id === selectedOptionId,
+  );
+  const selectedOptionCosts =
+    selectedOption?.costPreview ?? selectedOption?.costs ?? [];
+  const selectedOptionUnavailableReason = getCultivationShortfall(
+    selectedOptionCosts,
+    currentCultivation,
+  );
+
   return (
     <div className="space-y-6 pb-28">
       <DungeonRunPanel
@@ -101,12 +128,16 @@ export function DungeonExploring({
           {lastRound.interaction.options.map((option) => {
             const isSelected = selectedOptionId === option.id;
             const costs = option.costPreview ?? option.costs ?? [];
+            const unavailableReason = getCultivationShortfall(
+              costs,
+              currentCultivation,
+            );
             return (
               <InkChoiceButton
                 key={option.id}
                 layout="card"
                 selected={isSelected}
-                disabled={processing}
+                disabled={processing || Boolean(unavailableReason)}
                 onClick={() => setSelectedOptionId(option.id)}
               >
                 <div className="mb-2 flex items-start justify-between gap-3">
@@ -144,6 +175,11 @@ export function DungeonExploring({
                   </div>
                 ) : null}
                 <OptionCostPreview costs={costs} />
+                {unavailableReason ? (
+                  <div className="text-crimson mt-2 text-sm font-semibold">
+                    {unavailableReason}
+                  </div>
+                ) : null}
               </InkChoiceButton>
             );
           })}
@@ -152,7 +188,11 @@ export function DungeonExploring({
         <InkButton
           variant="primary"
           className="mx-auto mt-4 block!"
-          disabled={!selectedOptionId}
+          disabled={
+            selectedOptionId === null ||
+            processing ||
+            Boolean(selectedOptionUnavailableReason)
+          }
           pending={processing}
           pendingLabel="推演中……"
           onClick={async () => {

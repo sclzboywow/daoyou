@@ -5,7 +5,7 @@ import type {
   DungeonRecoverAction,
   DungeonState,
 } from '@shared/lib/dungeon/types';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 function createActionId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -16,7 +16,7 @@ async function readDungeonMutation<T>(
 ): Promise<T | { conflict: true; message?: string }> {
   const data = await response.json();
   if (!response.ok || data.error) {
-    if (response.status === 409) {
+    if (response.status === 409 && data.code) {
       return { conflict: true, message: data.message || data.error };
     }
     throw new Error(data.message || data.error || `HTTP ${response.status}`);
@@ -35,6 +35,7 @@ async function readDungeonMutation<T>(
 export function useDungeonActions() {
   const { pushToast, openDialog } = useInkUI();
   const [processing, setProcessing] = useState(false);
+  const actionInFlightRef = useRef(false);
 
   /**
    * 启动副本
@@ -72,6 +73,8 @@ export function useDungeonActions() {
    * 执行选项
    */
   const performAction = async (option: DungeonOption) => {
+    if (actionInFlightRef.current) return null;
+    actionInFlightRef.current = true;
     try {
       setProcessing(true);
       const res = await fetch('/api/dungeon/action', {
@@ -91,6 +94,7 @@ export function useDungeonActions() {
       });
       return null;
     } finally {
+      actionInFlightRef.current = false;
       setProcessing(false);
     }
   };
