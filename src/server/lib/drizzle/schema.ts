@@ -67,7 +67,6 @@ export const cultivators = pgTable(
     strength: integer('strength').notNull().default(10),
     spirit: integer('spirit').notNull(),
     endurance: integer('endurance').notNull().default(10),
-    legacyWisdom: integer('wisdom').notNull(),
     speed: integer('speed').notNull(),
     willpower: integer('willpower').notNull(),
     unallocatedAttributePoints: integer('unallocated_attribute_points')
@@ -163,47 +162,6 @@ export const qiLogs = pgTable(
     ),
     index('qi_logs_status_created_idx').on(table.status, table.createdAt),
   ],
-);
-
-/** @deprecated Replaced by resourceScopes and resourceVersions. */
-export const cultivatorStateVersions = pgTable(
-  'wanjiedaoyou_cultivator_state_versions',
-  {
-    cultivatorId: uuid('cultivator_id')
-      .primaryKey()
-      .references(() => cultivators.id, { onDelete: 'cascade' }),
-    globalVersion: bigint('global_version', { mode: 'number' })
-      .notNull()
-      .default(0),
-    profileVersion: bigint('profile_version', { mode: 'number' })
-      .notNull()
-      .default(0),
-    conditionVersion: bigint('condition_version', { mode: 'number' })
-      .notNull()
-      .default(0),
-    progressVersion: bigint('progress_version', { mode: 'number' })
-      .notNull()
-      .default(0),
-    currencyVersion: bigint('currency_version', { mode: 'number' })
-      .notNull()
-      .default(0),
-    loadoutVersion: bigint('loadout_version', { mode: 'number' })
-      .notNull()
-      .default(0),
-    mailVersion: bigint('mail_version', { mode: 'number' })
-      .notNull()
-      .default(0),
-    tasksVersion: bigint('tasks_version', { mode: 'number' })
-      .notNull()
-      .default(0),
-    sectVersion: bigint('sect_version', { mode: 'number' })
-      .notNull()
-      .default(0),
-    updatedAt: timestamp('updated_at')
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
 );
 
 export const resourceScopes = pgTable(
@@ -530,38 +488,6 @@ export const sectDailyCommissions = pgTable(
   ],
 );
 
-/** @deprecated Replaced by resourceEvents. */
-export const playerStateEvents = pgTable(
-  'wanjiedaoyou_player_state_events',
-  {
-    id: bigint('id', { mode: 'number' })
-      .primaryKey()
-      .generatedAlwaysAsIdentity(),
-    cultivatorId: uuid('cultivator_id')
-      .references(() => cultivators.id, { onDelete: 'cascade' })
-      .notNull(),
-    userId: uuid('user_id').notNull(),
-    globalVersion: bigint('global_version', { mode: 'number' }).notNull(),
-    domainVersion: bigint('domain_version', { mode: 'number' }).notNull(),
-    domain: varchar('domain', { length: 32 }).notNull(),
-    eventType: varchar('event_type', { length: 96 }).notNull(),
-    patch: jsonb('patch').notNull().default({}),
-    invalidates: jsonb('invalidates').notNull().default([]),
-    source: varchar('source', { length: 96 }).notNull(),
-    requestId: varchar('request_id', { length: 128 }),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-  },
-  (table) => [
-    index('player_state_events_cultivator_version_idx').on(
-      table.cultivatorId,
-      table.globalVersion,
-      table.id,
-    ),
-    index('player_state_events_user_idx').on(table.userId),
-    index('player_state_events_created_idx').on(table.createdAt),
-  ],
-);
-
 export const resourceEvents = pgTable(
   'wanjiedaoyou_resource_events',
   {
@@ -836,87 +762,6 @@ export const cultivatorTasks = pgTable(
     uniqueIndex('cultivator_tasks_cultivator_definition_unique').on(
       table.cultivatorId,
       table.definitionId,
-    ),
-  ],
-);
-
-// 战斗记录表 - 存放每场战斗的完整结果快照与战报
-export const battleRecords = pgTable(
-  'wanjiedaoyou_battle_records',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-
-    // 关联用户和正式角色
-    userId: uuid('user_id').notNull(),
-    cultivatorId: uuid('cultivator_id')
-      .references(() => cultivators.id, { onDelete: 'cascade' })
-      .notNull(),
-
-    // 挑战相关字段
-    challengeType: varchar('challenge_type', { length: 20 }), // 'challenge' | 'challenged' | 'normal'
-    opponentCultivatorId: uuid('opponent_cultivator_id').references(
-      () => cultivators.id,
-      { onDelete: 'set null' },
-    ), // 对手角色ID（用于被挑战记录）
-
-    // 战斗结果快照（完整 BattleEngineResult 或其扩展）
-    battleResult: jsonb('battle_result').notNull(),
-
-    // AIGC 生成的战斗播报完整文本
-    battleReport: text('battle_report'),
-
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-  },
-  (table) => [
-    index('battle_records_cultivator_created_idx').on(
-      table.cultivatorId,
-      table.createdAt,
-    ),
-    index('battle_records_opponent_created_idx').on(
-      table.opponentCultivatorId,
-      table.createdAt,
-    ),
-  ],
-);
-
-/**
- * @deprecated 仅为首次 V3 发布保留表结构，禁止任何运行时读写，下一版本删除。
- */
-export const battleRecordsV2 = pgTable(
-  'wanjiedaoyou_battle_records_v2',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id').notNull(),
-    cultivatorId: uuid('cultivator_id')
-      .references(() => cultivators.id, { onDelete: 'cascade' })
-      .notNull(),
-    battleType: varchar('battle_type', { length: 20 })
-      .notNull()
-      .default('normal'), // challenge | challenged | normal
-    opponentCultivatorId: uuid('opponent_cultivator_id').references(
-      () => cultivators.id,
-      { onDelete: 'set null' },
-    ),
-    engineVersion: varchar('engine_version', { length: 40 })
-      .notNull()
-      .default('battle-v5'),
-    resultVersion: integer('result_version').notNull().default(2),
-    battleResult: jsonb('battle_result').notNull(),
-    battleReport: text('battle_report'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-  },
-  (table) => [
-    index('battle_records_v2_cultivator_created_idx').on(
-      table.cultivatorId,
-      table.createdAt,
-    ),
-    index('battle_records_v2_opponent_created_idx').on(
-      table.opponentCultivatorId,
-      table.createdAt,
-    ),
-    index('battle_records_v2_user_created_idx').on(
-      table.userId,
-      table.createdAt,
     ),
   ],
 );
@@ -1698,19 +1543,6 @@ export const betBattles = pgTable(
     // 结算结果
     winnerCultivatorId: uuid('winner_cultivator_id').references(
       () => cultivators.id,
-      {
-        onDelete: 'set null',
-      },
-    ),
-    battleRecordId: uuid('battle_record_id').references(
-      () => battleRecords.id,
-      {
-        onDelete: 'set null',
-      },
-    ),
-    /** @deprecated 仅为首次 V3 发布保留，禁止运行时读写。 */
-    battleRecordV2Id: uuid('battle_record_v2_id').references(
-      () => battleRecordsV2.id,
       {
         onDelete: 'set null',
       },

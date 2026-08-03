@@ -20,6 +20,7 @@ import {
   type ResourceTopic,
 } from '@shared/contracts/resources';
 import { and, asc, eq, inArray, lt, min, sql } from 'drizzle-orm';
+import { ZodError } from 'zod';
 
 type ResourceEventRow = typeof resourceEvents.$inferSelect;
 
@@ -318,6 +319,7 @@ export async function readResourceEventWindow(
   changes: ResourceChange[];
   currentScopeVersion: number;
   earliestAvailableVersion: number;
+  hasIncompatibleEvents: boolean;
 }> {
   const [scopeRow] = await q
     .select({
@@ -337,6 +339,7 @@ export async function readResourceEventWindow(
       changes: [],
       currentScopeVersion: 0,
       earliestAvailableVersion: 0,
+      hasIncompatibleEvents: false,
     };
   }
   const [[watermark], rows] = await runDbTasks(q, [
@@ -361,11 +364,27 @@ export async function readResourceEventWindow(
         )
         .limit(RESOURCE_EVENT_PAGE_LIMIT + 1),
   ]);
+
+  const changes: ResourceChange[] = [];
+  let hasIncompatibleEvents = false;
+  for (const row of rows) {
+    try {
+      changes.push(mapResourceEventRow(row, scope));
+    } catch (error) {
+      if (!(error instanceof ZodError)) throw error;
+      hasIncompatibleEvents = true;
+    }
+  }
+
   return {
-    changes: rows.map((row) => mapResourceEventRow(row, scope)),
+    // A persisted event may outlive the contract version that produced it.
+    // Do not apply later events across that compatibility boundary; callers
+    // must advance to the current version by reloading authoritative snapshots.
+    changes: hasIncompatibleEvents ? [] : changes,
     currentScopeVersion: scopeRow.scopeVersion,
     earliestAvailableVersion:
       watermark?.version ?? scopeRow.scopeVersion + 1,
+    hasIncompatibleEvents,
   };
 }
 

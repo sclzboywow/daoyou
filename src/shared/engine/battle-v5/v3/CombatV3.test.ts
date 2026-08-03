@@ -340,6 +340,35 @@ describe('combat facts V3', () => {
     ).toThrow(/requires an explicit trace/);
   });
 
+  it('blocks persisted buff effects after their attribution owner dies', () => {
+    const owner = unit('owner', '施加者');
+    const target = unit('target', '承受者');
+    const buff = new Buff('persisted-effect', '遗留效果', BuffType.DEBUFF, 2);
+    buff.setCombatAttributionV3(
+      CombatAttributionV3.owned(owner, {
+        kind: 'ability',
+        id: 'persisted-source',
+        name: '遗留术法',
+      }),
+    );
+    owner.setHp(0);
+    const triggerEvent = EventBus.instance.publish<ActionPostEvent>({
+      type: 'ActionPostEvent',
+      timestamp: Date.now(),
+      caster: target,
+    });
+
+    const context = EffectExecutionContextV3.buff({
+      owner,
+      caster: owner,
+      target,
+      buff,
+      triggerEvent,
+    });
+
+    expect(context.canExecuteEffect()).toBe(false);
+  });
+
   it('keeps defensive equipment facts owned by the defender in presentation', () => {
     const builder = new CombatRecordBuilderV3(EventBus.instance);
     const attacker = unit('attacker', '进攻者');
@@ -696,6 +725,199 @@ describe('combat facts V3', () => {
 
     damageSystem.destroy();
     builder.destroy();
+  });
+
+  it('does not settle owned post-action facts after reflect kills the actor', () => {
+    const attacker = new Unit('attacker', '进攻者', {
+      [AttributeType.VITALITY]: 100,
+      [AttributeType.STRENGTH]: 100,
+      [AttributeType.SPIRIT]: 100,
+      [AttributeType.ENDURANCE]: 100,
+      [AttributeType.SPEED]: 1_000,
+      [AttributeType.WILLPOWER]: 100,
+    });
+    const defender = unit('defender', '反击者');
+    attacker.setHp(10);
+    attacker.abilities.setDefaultAttack(
+      AbilityFactory.create({
+        slug: 'fixed-strike',
+        name: '定量一击',
+        type: AbilityType.ACTIVE_SKILL,
+        tags: [
+          GameplayTags.ABILITY.KIND.SKILL,
+          GameplayTags.ABILITY.FUNCTION.DAMAGE,
+          GameplayTags.ABILITY.CHANNEL.TRUE,
+        ],
+        hitPolicy: 'guaranteed',
+        effects: [
+          {
+            type: 'damage',
+            params: {
+              value: {
+                base: 10,
+                attribute: AttributeType.ATK,
+                coefficient: 0,
+              },
+              damageType: DamageType.TRUE,
+            },
+          },
+        ],
+      }),
+    );
+    defender.abilities.addAbility(
+      AbilityFactory.create({
+        slug: 'lethal-reflect',
+        name: '致命反震',
+        type: AbilityType.PASSIVE_SKILL,
+        tags: [
+          GameplayTags.ABILITY.KIND.ARTIFACT,
+          GameplayTags.ABILITY.FUNCTION.BUFF,
+        ],
+        listeners: [
+          {
+            eventType: GameplayTags.EVENT.DAMAGE_TAKEN,
+            scope: GameplayTags.SCOPE.OWNER_AS_TARGET,
+            priority: 50,
+            effects: [{ type: 'reflect', params: { ratio: 1 } }],
+          },
+        ],
+      }),
+    );
+    attacker.buffs.initializeBuff(
+      new Buff('expiring-stance', '将散之势', BuffType.BUFF, 1),
+      attacker,
+    );
+
+    const engine = new BattleEngineV5(attacker, defender);
+    const result = withBattleRandomSource(
+      new SeededBattleRandomSource('post-action-death'),
+      () => engine.execute(),
+    );
+    const record: BattleRecordV3 = {
+      participants: {
+        player: { id: attacker.id, name: attacker.name },
+        opponent: { id: defender.id, name: defender.name },
+      },
+      outcome: {
+        winner: { id: defender.id, name: defender.name },
+        loser: { id: attacker.id, name: attacker.name },
+        turns: result.turns,
+      },
+      sequences: result.sequences,
+      stateTimeline: result.stateTimeline,
+      finalSnapshots: {
+        winner: result.winnerSnapshot,
+        loser: result.loserSnapshot,
+      },
+    };
+
+    expect(result.winner).toBe(defender.id);
+    expect(() => validateBattleRecordV3(record)).not.toThrow();
+    engine.destroy();
+  });
+
+  it('settles an expired status through the system after its source dies', () => {
+    const source = new Unit('source', '施加者', {
+      [AttributeType.VITALITY]: 100,
+      [AttributeType.STRENGTH]: 100,
+      [AttributeType.SPIRIT]: 100,
+      [AttributeType.ENDURANCE]: 100,
+      [AttributeType.SPEED]: 1_000,
+      [AttributeType.WILLPOWER]: 100,
+    });
+    const survivor = unit('survivor', '存活者');
+    source.setHp(10);
+    source.abilities.setDefaultAttack(
+      AbilityFactory.create({
+        slug: 'lingering-status',
+        name: '遗留术法',
+        type: AbilityType.ACTIVE_SKILL,
+        tags: [
+          GameplayTags.ABILITY.KIND.SKILL,
+          GameplayTags.ABILITY.FUNCTION.BUFF,
+        ],
+        hitPolicy: 'guaranteed',
+        effects: [
+          {
+            type: 'apply_buff',
+            params: {
+              target: 'target',
+              buffConfig: {
+                id: 'lingering-debuff',
+                name: '遗留减益',
+                type: BuffType.DEBUFF,
+                duration: 1,
+                stackRule: StackRule.REFRESH_DURATION,
+                tags: [GameplayTags.BUFF.TYPE.DEBUFF],
+                statusTags: [GameplayTags.STATUS.CATEGORY.DEBUFF],
+              },
+            },
+          },
+        ],
+      }),
+    );
+    survivor.abilities.setDefaultAttack(
+      AbilityFactory.create({
+        slug: 'finishing-strike',
+        name: '终结一击',
+        type: AbilityType.ACTIVE_SKILL,
+        tags: [
+          GameplayTags.ABILITY.KIND.SKILL,
+          GameplayTags.ABILITY.FUNCTION.DAMAGE,
+          GameplayTags.ABILITY.CHANNEL.TRUE,
+        ],
+        hitPolicy: 'guaranteed',
+        effects: [
+          {
+            type: 'damage',
+            params: {
+              value: {
+                base: 10,
+                attribute: AttributeType.ATK,
+                coefficient: 0,
+              },
+              damageType: DamageType.TRUE,
+            },
+          },
+        ],
+      }),
+    );
+
+    const engine = new BattleEngineV5(source, survivor);
+    const result = withBattleRandomSource(
+      new SeededBattleRandomSource('dead-status-source'),
+      () => engine.execute(),
+    );
+    const record: BattleRecordV3 = {
+      participants: {
+        player: { id: source.id, name: source.name },
+        opponent: { id: survivor.id, name: survivor.name },
+      },
+      outcome: {
+        winner: { id: survivor.id, name: survivor.name },
+        loser: { id: source.id, name: source.name },
+        turns: result.turns,
+      },
+      sequences: result.sequences,
+      stateTimeline: result.stateTimeline,
+      finalSnapshots: {
+        winner: result.winnerSnapshot,
+        loser: result.loserSnapshot,
+      },
+    };
+    const removal = result.sequences
+      .flatMap((sequence) => sequence.facts)
+      .find(
+        (fact) =>
+          fact.type === 'status' &&
+          fact.operation === 'remove' &&
+          fact.statusId === 'lingering-debuff',
+      );
+
+    expect(result.winner).toBe(survivor.id);
+    expect(removal?.origin.kind).toBe('system');
+    expect(() => validateBattleRecordV3(record)).not.toThrow();
+    engine.destroy();
   });
 
   it('does not record death when a hit reaction restores hp from zero', () => {

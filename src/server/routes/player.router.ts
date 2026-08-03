@@ -95,11 +95,9 @@ router.get(
       return c.json({ success: false, error: '无权读取该资源作用域' }, 403);
     }
     const window = await readResourceEventWindow(scope, after);
-    const requiresReload = requiresResourceEventReload(
-      window,
-      after,
-      RESOURCE_EVENT_PAGE_LIMIT,
-    );
+    const requiresReload =
+      window.hasIncompatibleEvents ||
+      requiresResourceEventReload(window, after, RESOURCE_EVENT_PAGE_LIMIT);
     const payload: PlayerResourceEventsResponse = {
       success: true,
       data: {

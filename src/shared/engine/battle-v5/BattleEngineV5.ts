@@ -456,17 +456,21 @@ export class BattleEngineV5 {
         actor: { id: actor.id, name: actor.name },
       },
       (sequence) => {
-        this._eventBus.publish<ActionPostEvent>({
-          type: 'ActionPostEvent',
-          timestamp: Date.now(),
-          caster: actor,
-        });
-        actor.combatResources.finishAction(
-          controlledSkip,
-          actor.getCurrentShield() > 0,
-        );
-        this.processBuffs(actor);
-        actor.abilities.tickAbilitiesCooldown();
+        if (actor.isAlive()) {
+          this._eventBus.publish<ActionPostEvent>({
+            type: 'ActionPostEvent',
+            timestamp: Date.now(),
+            caster: actor,
+          });
+        }
+        if (actor.isAlive()) {
+          actor.combatResources.finishAction(
+            controlledSkip,
+            actor.getCurrentShield() > 0,
+          );
+        }
+        if (actor.isAlive()) this.processBuffs(actor);
+        if (actor.isAlive()) actor.abilities.tickAbilitiesCooldown();
         this._stateRecorder.record(
           'action_post',
           this.getContext().turn,
@@ -484,6 +488,7 @@ export class BattleEngineV5 {
   private processBuffs(unit: Unit): void {
     const buffs = unit.buffs.getAllBuffs();
     for (const buff of buffs) {
+      if (!unit.isAlive()) break;
       if (!shouldTickBuffDuration(unit, buff)) continue;
       buff.tickDuration();
       if (buff.isExpired()) {

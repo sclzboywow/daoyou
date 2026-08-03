@@ -14,7 +14,11 @@ import {
 } from '../core/runtimeState';
 import { BuffId } from '../core/types';
 import { CombatResultEmitterV3 } from '../v3/CombatResultEmitterV3';
-import { CombatAttributionV3, combatCarrierFromAbilityV3 } from '../v3/origin';
+import {
+  CombatAttributionV3,
+  CombatSystemSourceV3,
+  combatCarrierFromAbilityV3,
+} from '../v3/origin';
 import type {
   CombatStatusApplicationTransitionV3,
   CombatStatusLayerChangeReasonV3,
@@ -368,7 +372,9 @@ export class BuffContainer {
     if (!attribution) {
       throw new Error(`Buff ${buff.id} has no attribution when removed`);
     }
-    const resultOrigin = operation?.attribution?.origin ?? attribution.origin;
+    const resultOrigin = this._resolveFactAttribution(
+      operation?.attribution ?? attribution,
+    ).origin;
     const causalTrace = operation?.trace ?? EventBus.instance.reserveTrace();
     const previousLayers = buff.getLayer();
     let removedEventParentTrace = causalTrace;
@@ -554,7 +560,10 @@ export class BuffContainer {
           afterLayers: buff.getLayer(),
           duration: buff.getMaxDuration(),
         },
-        { origin: attribution.origin, parentTrace },
+        {
+          origin: this._resolveFactAttribution(attribution).origin,
+          parentTrace,
+        },
       );
     }
   }
@@ -602,9 +611,29 @@ export class BuffContainer {
         afterLayers,
       },
       {
-        origin: operation?.attribution?.origin ?? attribution.origin,
+        origin: this._resolveFactAttribution(
+          operation?.attribution ?? attribution,
+        ).origin,
         parentTrace,
       },
+    );
+  }
+
+  private _resolveFactAttribution(
+    attribution: CombatAttributionV3,
+  ): CombatAttributionV3 {
+    // Self-owned facts can still be legal inside the lethal reaction window,
+    // before DamageSystem commits the unit_died fact.
+    if (
+      attribution.origin.kind === 'system' ||
+      attribution.owner === this._owner ||
+      attribution.owner.isAlive()
+    ) {
+      return attribution;
+    }
+    return CombatAttributionV3.system(
+      this._owner,
+      CombatSystemSourceV3.ACTION_FLOW,
     );
   }
 

@@ -168,7 +168,6 @@ export async function createCultivator(
         strength: cultivator.attributes.strength,
         spirit: cultivator.attributes.spirit,
         endurance: cultivator.attributes.endurance,
-        legacyWisdom: cultivator.attributes.endurance,
         speed: cultivator.attributes.speed,
         willpower: cultivator.attributes.willpower,
         unallocatedAttributePoints:

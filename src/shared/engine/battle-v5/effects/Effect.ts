@@ -1,6 +1,7 @@
 import { Ability, type AbilityCastSnapshot } from '../abilities/Ability';
 import { Buff } from '../buffs/Buff';
 import { EventBus } from '../core/EventBus';
+import type { DamageTakenEvent } from '../core/events';
 import { CombatEvent, type LogCauseRef } from '../core/types';
 import { Unit } from '../units/Unit';
 import { CombatResultEmitterV3 } from '../v3/CombatResultEmitterV3';
@@ -83,7 +84,7 @@ export class EffectExecutionContextV3 {
     return new EffectExecutionContextV3(
       input,
       CombatAttributionV3.fromAbility(input.owner, input.ability),
-      EffectOwnerLivenessPolicyV3.ALLOW_LETHAL_REACTION,
+      resolveOwnedEffectLivenessPolicy(input),
     );
   }
 
@@ -97,7 +98,7 @@ export class EffectExecutionContextV3 {
     return new EffectExecutionContextV3(
       input,
       attribution,
-      EffectOwnerLivenessPolicyV3.ALLOW_LETHAL_REACTION,
+      resolveOwnedEffectLivenessPolicy(input),
     );
   }
 
@@ -206,6 +207,23 @@ export function executeGameplayEffectV3(
 enum EffectOwnerLivenessPolicyV3 {
   REQUIRE_ALIVE = 'require_alive',
   ALLOW_LETHAL_REACTION = 'allow_lethal_reaction',
+}
+
+function resolveOwnedEffectLivenessPolicy(
+  input: EffectExecutionContextInputV3,
+): EffectOwnerLivenessPolicyV3 {
+  const trigger = input.triggerEvent;
+  if (trigger?.type !== 'DamageTakenEvent') {
+    return EffectOwnerLivenessPolicyV3.REQUIRE_ALIVE;
+  }
+  const damageTaken = trigger as DamageTakenEvent;
+  if (
+    damageTaken.target === input.owner &&
+    damageTaken.hpReachedZeroBeforeReactions
+  ) {
+    return EffectOwnerLivenessPolicyV3.ALLOW_LETHAL_REACTION;
+  }
+  return EffectOwnerLivenessPolicyV3.REQUIRE_ALIVE;
 }
 
 /**
