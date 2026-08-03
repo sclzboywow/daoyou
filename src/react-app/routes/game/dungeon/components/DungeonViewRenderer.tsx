@@ -38,7 +38,11 @@ interface DungeonViewRendererProps {
   cultivator:
     | (Pick<
         Cultivator,
-        'id' | 'realm' | 'attributes' | 'condition' | 'equipped'
+        | 'id'
+        | 'realm'
+        | 'attributes'
+        | 'condition'
+        | 'equipped'
         | 'cultivation_progress'
       > & {
         inventory: Pick<Cultivator['inventory'], 'artifacts'>;

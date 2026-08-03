@@ -114,8 +114,9 @@ export function useDungeonActions() {
           try {
             setProcessing(true);
             const res = await fetch('/api/dungeon/quit', { method: 'POST' });
-            const data =
-              await readDungeonMutation<{ state?: DungeonState }>(res);
+            const data = await readDungeonMutation<{ state?: DungeonState }>(
+              res,
+            );
             if ('conflict' in data) {
               throw new Error(data.message ?? '放弃失败');
             }
@@ -143,10 +144,15 @@ export function useDungeonActions() {
   const continueLooting = async () => {
     try {
       setProcessing(true);
-      const res = await fetch('/api/dungeon/looting/continue', { method: 'POST' });
+      const res = await fetch('/api/dungeon/looting/continue', {
+        method: 'POST',
+      });
       return await readDungeonMutation(res);
     } catch (e) {
-      pushToast({ message: e instanceof Error ? e.message : '操作失败', tone: 'danger' });
+      pushToast({
+        message: e instanceof Error ? e.message : '操作失败',
+        tone: 'danger',
+      });
       return null;
     } finally {
       setProcessing(false);
@@ -159,10 +165,15 @@ export function useDungeonActions() {
   const escapeLooting = async () => {
     try {
       setProcessing(true);
-      const res = await fetch('/api/dungeon/looting/escape', { method: 'POST' });
+      const res = await fetch('/api/dungeon/looting/escape', {
+        method: 'POST',
+      });
       return await readDungeonMutation(res);
     } catch (e) {
-      pushToast({ message: e instanceof Error ? e.message : '操作失败', tone: 'danger' });
+      pushToast({
+        message: e instanceof Error ? e.message : '操作失败',
+        tone: 'danger',
+      });
       return null;
     } finally {
       setProcessing(false);

@@ -96,8 +96,7 @@ export function DungeonExploring({
     return null;
   }
 
-  const currentCultivation =
-    cultivator?.cultivation_progress?.cultivation_exp;
+  const currentCultivation = cultivator?.cultivation_progress?.cultivation_exp;
   const selectedOption = lastRound.interaction.options.find(
     (option) => option.id === selectedOptionId,
   );
