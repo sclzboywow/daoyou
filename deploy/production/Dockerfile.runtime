@@ -1,0 +1,11 @@
+FROM docker.m.daocloud.io/oven/bun:1.3.13
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+COPY . ./dist
+
+EXPOSE 3000
+
+CMD ["bun", "run", "dist/index.js"]

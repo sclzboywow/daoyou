@@ -10,6 +10,7 @@
     "auth:migrate": "bunx drizzle-kit migrate --config drizzle.auth.config.ts",
     "build": "bun run build:client && bun run build:server",
     "build:client": "tsc -b tsconfig.app.json && vite build --mode client",
+    "build:production": "bash scripts/build-production-release.sh",
     "build:server": "tsc -b tsconfig.node.json && vite build --mode server",
     "dev": "bun run --parallel dev:api dev:web",
     "dev:api": "bun run --watch src/index.ts",

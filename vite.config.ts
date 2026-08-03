@@ -58,7 +58,7 @@ export default defineConfig(({ command, mode }) => {
       plugins: [
         build({
           entry: './src/index.ts',
-          emptyOutDir: true,
+          emptyOutDir: false,
         }),
       ],
     };
