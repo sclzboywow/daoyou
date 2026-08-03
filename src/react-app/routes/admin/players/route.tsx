@@ -20,6 +20,7 @@ export default function AdminPlayersPage() {
   const [content, setContent] = useState('道友您好，请查收本次补发奖励。');
   const [reason, setReason] = useState('');
   const [rewards, setRewards] = useState<RewardSelectionDraft[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const search = async () => {
     const response = await fetch(`/api/admin/players?keyword=${encodeURIComponent(keyword)}`);
     const payload = await response.json();
@@ -31,19 +32,35 @@ export default function AdminPlayersPage() {
     if (response.ok) setDetail(payload.detail);
   };
   const compensate = async () => {
-    if (!detail) return;
+    if (!detail || submitting) return;
     try {
+      const normalizedTitle = title.trim();
+      const normalizedContent = content.trim();
+      const normalizedReason = reason.trim();
+      if (!normalizedTitle) throw new Error('请填写邮件标题');
+      if (!normalizedContent) throw new Error('请填写邮件正文');
+      if (!normalizedReason) throw new Error('请填写补发原因');
+
       const rewardSelections = parseRewardSelectionDrafts(rewards, { allowEmpty: true });
+      setSubmitting(true);
       const response = await fetch(`/api/admin/players/${detail.player.cultivatorId}/compensate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content, reason, rewardSelections, idempotencyKey: crypto.randomUUID() }),
+        body: JSON.stringify({
+          title: normalizedTitle,
+          content: normalizedContent,
+          reason: normalizedReason,
+          rewardSelections,
+          idempotencyKey: crypto.randomUUID(),
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? '补发失败');
       pushToast({ message: '补发已进入任务队列', tone: 'success' });
     } catch (error) {
       pushToast({ message: error instanceof Error ? error.message : '补发失败', tone: 'danger' });
+    } finally {
+      setSubmitting(false);
     }
   };
   return (
@@ -64,7 +81,9 @@ export default function AdminPlayersPage() {
         <InkInput label="邮件正文" value={content} onChange={setContent} multiline rows={4} />
         <RewardSelectionEditor value={rewards} onChange={setRewards} allowEmpty />
         <InkInput label="补发原因（必填）" value={reason} onChange={setReason} />
-        <InkButton onClick={() => void compensate()}>确认加入补发队列</InkButton>
+        <InkButton disabled={submitting} onClick={() => void compensate()}>
+          {submitting ? '正在加入队列…' : '确认加入补发队列'}
+        </InkButton>
       </section> : null}
     </div>
   );

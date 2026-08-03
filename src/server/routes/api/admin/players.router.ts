@@ -39,10 +39,10 @@ import { z } from 'zod';
 const router = new Hono<AppEnv>();
 const IdSchema = z.string().uuid();
 const CompensationSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-  content: z.string().trim().min(1).max(10_000),
+  title: z.string().trim().min(1, '请填写邮件标题').max(200),
+  content: z.string().trim().min(1, '请填写邮件正文').max(10_000),
   rewardSelections: ItemLibraryRewardSelectionsSchema.default([]),
-  reason: z.string().trim().min(3).max(2_000),
+  reason: z.string().trim().min(1, '请填写补发原因').max(2_000),
   idempotencyKey: z.string().trim().min(8).max(180),
 });
 
@@ -252,9 +252,10 @@ router.post('/:id/compensate', requireAdmin(), async (c) => {
     await c.req.json().catch(() => null),
   );
   if (!id.success || !body.success) {
+    const firstIssue = body.success ? undefined : body.error.issues[0];
     return c.json(
       {
-        error: '参数错误',
+        error: firstIssue?.message ?? '参数错误',
         details: body.success ? undefined : body.error.flatten(),
       },
       400,
