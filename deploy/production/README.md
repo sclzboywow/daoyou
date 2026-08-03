@@ -39,3 +39,5 @@ bash scripts/deploy-production-release.sh <release-id>
 `/home/ubuntu/daoyou/dist-site` 是官网静态站的保留资产。其源码目前不在本仓库内；发布脚本只验证并只读挂载该目录，不会覆盖或删除它。
 
 任何发布后检查失败都会恢复上一版游戏前端、Compose、Nginx 和镜像配置。数据库备份保留在 `/home/ubuntu/daoyou-runtime/backups/`。
+
+宿主机的每日数据库备份、证书续期和健康监控脚本也保存在仓库的 `scripts/` 中。生产 crontab 必须从稳定源码目录 `/home/ubuntu/daoyou-integrated` 调用这些脚本，不得指向会随静态资源切换而替换的 `/home/ubuntu/daoyou`。

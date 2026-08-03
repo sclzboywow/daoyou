@@ -4,8 +4,6 @@ set -euo pipefail
 BACKUP_DIR="${DAOYOU_BACKUP_DIR:-/home/ubuntu/backups/daoyou/postgres}"
 RETENTION_DAYS="${DAOYOU_BACKUP_RETENTION_DAYS:-14}"
 POSTGRES_CONTAINER="${DAOYOU_POSTGRES_CONTAINER:-daoyou-postgres}"
-POSTGRES_DB="${DAOYOU_POSTGRES_DB:-daoyou}"
-POSTGRES_USER="${DAOYOU_POSTGRES_USER:-daoyou}"
 RCLONE_REMOTE="${DAOYOU_BACKUP_RCLONE_REMOTE:-}"
 
 case "${BACKUP_DIR}" in
@@ -39,21 +37,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker exec "${POSTGRES_CONTAINER}" \
-  pg_dump \
-  --username="${POSTGRES_USER}" \
-  --dbname="${POSTGRES_DB}" \
-  --format=custom \
-  --compress=9 \
-  --no-owner \
-  --no-privileges > "${temporary}"
+docker exec "${POSTGRES_CONTAINER}" sh -lc \
+  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --compress=9 --no-owner --no-privileges' \
+  > "${temporary}"
 
 if [ ! -s "${temporary}" ]; then
   echo "Backup is empty" >&2
   exit 1
 fi
 
-docker exec -i "${POSTGRES_CONTAINER}" pg_restore --list < "${temporary}" >/dev/null
+docker exec -i "${POSTGRES_CONTAINER}" pg_restore --list \
+  < "${temporary}" >/dev/null
 chmod 600 "${temporary}"
 mv -- "${temporary}" "${backup}"
 (

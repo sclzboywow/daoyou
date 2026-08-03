@@ -31,9 +31,7 @@ async function inspectContainer(name: string): Promise<string | null> {
     new Response(process.stderr).text(),
     process.exited,
   ]);
-  if (exitCode !== 0) {
-    return error.trim() || null;
-  }
+  if (exitCode !== 0) return error.trim() || null;
   return output.trim() || null;
 }
 
@@ -81,9 +79,7 @@ async function sendAlert(subject: string, content: string): Promise<void> {
     .split(',')
     .map((email) => email.trim())
     .filter(Boolean);
-  if (recipients.length === 0) {
-    throw new Error('ADMIN_EMAILS is empty');
-  }
+  if (recipients.length === 0) throw new Error('ADMIN_EMAILS is empty');
   await Promise.all(
     recipients.map((email) => sendViaSmtp(email, subject, content)),
   );
