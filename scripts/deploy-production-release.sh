@@ -101,6 +101,14 @@ trap - EXIT
 
 cp -a "$RELEASE_DIR/web" "$WEB_STAGE"
 
+# Keep hashed chunks from the currently deployed client. Browsers with an open
+# session may request a lazy chunk from the previous release after the switch.
+# Hashed filenames are content-addressed, so copying without overwriting is safe.
+if [ -d "$WEB_ROOT/assets" ]; then
+  mkdir -p "$WEB_STAGE/assets"
+  cp -an "$WEB_ROOT/assets/." "$WEB_STAGE/assets/"
+fi
+
 if [ ! -f "$RELEASE_ENV" ]; then
   CURRENT_IMAGE="$(docker inspect --format '{{.Config.Image}}' daoyou-hono)"
   printf 'DAOYOU_APP_IMAGE=%s\n' "$CURRENT_IMAGE" > "$RELEASE_ENV"

@@ -34,6 +34,8 @@ bash scripts/deploy-production-release.sh <release-id>
 
 发布脚本会在切换前备份数据库、执行迁移并启动独立预检容器。随后原子切换游戏前端，使用本目录内受版本控制的 Compose 和 Nginx 配置重建服务，并检查首页、游戏、登录、图标和健康接口。
 
+切换时会保留当前版本的哈希静态资源，避免已经打开游戏的用户在更新后加载旧懒加载模块时遇到 404 或白屏；同名新文件不会被旧文件覆盖。
+
 `/home/ubuntu/daoyou/dist-site` 是官网静态站的保留资产。其源码目前不在本仓库内；发布脚本只验证并只读挂载该目录，不会覆盖或删除它。
 
 任何发布后检查失败都会恢复上一版游戏前端、Compose、Nginx 和镜像配置。数据库备份保留在 `/home/ubuntu/daoyou-runtime/backups/`。
