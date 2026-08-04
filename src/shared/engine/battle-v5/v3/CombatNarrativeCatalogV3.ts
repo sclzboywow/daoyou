@@ -86,7 +86,7 @@ function abilityModifierText(modifier: AbilityTransformModifierV3): string {
 
 const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
   ability_transform: {
-    concise: 'show',
+    concise: 'detailed_only',
     attributionLink: 'caused',
     format: (payload) => [
       part('接下来 '),

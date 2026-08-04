@@ -1,5 +1,7 @@
 import { getExecutor, type DbTransaction } from '@server/lib/drizzle/db';
 import { cultivators, materials } from '@server/lib/drizzle/schema';
+import { createDomainEvent } from '@server/lib/mq/domainEventWriter';
+import { publishTransactionalMessageBestEffort } from '@server/lib/mq/transactionalMessagePublisher';
 import { redis } from '@server/lib/redis';
 import { parseRedisJson } from '@server/lib/redis/json';
 import {
@@ -7,7 +9,6 @@ import {
   redisLockKeys,
   withRedisLock,
 } from '@server/lib/redis/lock';
-import { createMessage } from '@server/lib/repositories/worldChatRepository';
 import {
   BASE_PRICES,
   QUALITY_CHANCE_MAP,
@@ -1472,49 +1473,45 @@ export async function prepareMysteryMaterialIdentification(
             : delta <= -2
               ? 'big_loss'
               : 'normal';
-      const isHeavenOrAbove = realOrder >= QUALITY_ORDER['天品'];
+      const [sender] = await tx
+        .select({ userId: cultivators.userId, name: cultivators.name })
+        .from(cultivators)
+        .where(eq(cultivators.id, cultivatorId))
+        .limit(1);
+      if (!sender) throw new Error('鉴定完成后角色不存在');
+      const rumorEvent = await createDomainEvent(
+        {
+          type: 'market.material.revealed',
+          aggregate: { type: 'material', id: revealedMaterialId },
+          data: {
+            userId: sender.userId,
+            cultivatorId,
+            cultivatorName: sender.name,
+            materialId: revealedMaterialId,
+            materialName: revealedMaterial.name,
+            quality: revealedMaterial.rank,
+            snapshot: {
+              id: revealedMaterialId,
+              name: revealedMaterial.name,
+              type: revealedMaterial.type,
+              rank: revealedMaterial.rank,
+              element: revealedMaterial.element,
+              description: revealedMaterial.description,
+              quantity: 1,
+            },
+          },
+          deduplicationKey: `${cultivatorId}:market-reveal:${mystery.mysteryId}`,
+        },
+        tx,
+      );
 
       const afterCommit = async () => {
         await redis.del(mysteryKey);
-        if (!isHeavenOrAbove) {
-          return;
-        }
-        const [sender] = await getExecutor()
-          .select({ userId: cultivators.userId, name: cultivators.name })
-          .from(cultivators)
-          .where(eq(cultivators.id, cultivatorId))
-          .limit(1);
-        if (sender) {
-          const rumorText = `鉴宝司金光冲霄，${sender.name}鉴出${revealedMaterial.rank}「${revealedMaterial.name}」，天降异象，诸界皆闻。`;
-          try {
-            await createMessage({
-              senderUserId: sender.userId,
-              senderCultivatorId: null,
-              senderName: '修仙界传闻',
-              senderRealm: '炼气',
-              senderRealmStage: '系统',
-              channel: 'system',
-              messageType: 'item_showcase',
-              textContent: rumorText,
-              payload: {
-                itemType: 'material',
-                itemId: revealedMaterialId,
-                snapshot: {
-                  id: revealedMaterialId,
-                  name: revealedMaterial.name,
-                  type: revealedMaterial.type,
-                  rank: revealedMaterial.rank,
-                  element: revealedMaterial.element,
-                  description: revealedMaterial.description,
-                  quantity: 1,
-                },
-                text: rumorText,
-              },
-            });
-          } catch (chatError) {
-            console.error('鉴定传闻发送失败:', chatError);
-          }
-        }
+        publishTransactionalMessageBestEffort(rumorEvent.id, {
+          source: 'market_material_reveal',
+          cultivatorId,
+          materialId: revealedMaterialId,
+        });
       };
 
       return {

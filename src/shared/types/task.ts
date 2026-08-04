@@ -14,7 +14,6 @@ export type TaskDailyKind = 'alchemy' | 'dungeon' | 'ranking';
 export const TASK_EVENT_VALUES = [
   'alchemy_crafted',
   'dungeon_completed',
-  'ranking_challenge_battled',
 ] as const;
 
 export type TaskEvent = (typeof TASK_EVENT_VALUES)[number];

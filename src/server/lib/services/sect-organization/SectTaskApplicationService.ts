@@ -1,8 +1,10 @@
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
 import type { SectTaskActionData } from '@shared/contracts/sect';
 import {
+  SECT_TASK_ABANDON_COOLDOWN_MS,
   SectTask,
   SectTaskRecordPayloadSchema,
+  resolveSectTaskAbandonAvailability,
   type SectTaskDefinition,
 } from '@shared/engine/sect';
 import { z } from 'zod';
@@ -20,7 +22,10 @@ import type {
   SectTaskOfferPolicyRegistry,
   SectTaskRewardPolicyRegistry,
 } from './SectTaskSettlement';
-import { toSectTaskView } from './SectTaskViewAssembler';
+import {
+  toSectTaskView,
+  toUnpersistedSectTaskView,
+} from './SectTaskViewAssembler';
 import type {
   SectCommandContext,
   SectMembershipRecord,
@@ -144,6 +149,7 @@ export class ExecuteSectTaskActionHandler {
           definition,
           record,
           executor,
+          now: context.clock.now(),
           state: record.claimedAt
             ? 'claimed'
             : record.status === 'completed'
@@ -193,6 +199,7 @@ export class ExecuteSectTaskActionHandler {
         definition,
         record,
         executor,
+        now: context.clock.now(),
         state: 'active',
         enabled: true,
       });
@@ -268,6 +275,49 @@ export class ExecuteSectTaskActionHandler {
         });
       return this.complete(claimed.result, claimed.effects);
     }
+    if (command.actionKey === 'abandon') {
+      if (definition.enrollment !== 'manual')
+        invalidSectTask('该任务不支持放弃', 400);
+      if (record.status !== 'active')
+        invalidSectTask(
+          record.claimedAt ? '该宗门任务已经结清' : '已完成任务无法放弃',
+        );
+      if (!acceptInput.safeParse(command.input).success)
+        invalidSectTask('放弃参数无效', 400);
+      const now = context.clock.now();
+      const availability = resolveSectTaskAbandonAvailability(
+        record.createdAt,
+        now,
+      );
+      if (!availability.allowed) {
+        const remainingMinutes = Math.max(
+          1,
+          Math.ceil(availability.remainingMs / 60_000),
+        );
+        invalidSectTask(
+          `领取满 15 分钟后方可放弃，还需等待约 ${remainingMinutes} 分钟`,
+        );
+      }
+      const acceptedBefore = new Date(
+        now.getTime() - SECT_TASK_ABANDON_COOLDOWN_MS,
+      );
+      if (!(await context.tasks.abandon(record.id, acceptedBefore)))
+        invalidSectTask('任务状态已经变化，请重试');
+      const primaryTask = toUnpersistedSectTaskView({
+        definition,
+        periodKey,
+        state: 'offered',
+        enabled: true,
+      });
+      return this.complete({
+        primaryTask,
+        changedTasks: [primaryTask],
+        outcome: {
+          renderer: 'sect.outcome.abandoned',
+          data: { abandoned: true },
+        },
+      });
+    }
     if (record.status === 'completed')
       invalidSectTask(
         record.claimedAt ? '该宗门任务已经结清' : '该宗门任务奖励待领取',
@@ -320,6 +370,7 @@ export class ExecuteSectTaskActionHandler {
       const linkedTasks = this.toChangedTaskViews(
         linkedTaskRecords,
         organization,
+        context.clock.now(),
       );
       if (decision.completionSettlement === 'claim-reward') {
         const claimed = await this.claims.execute({
@@ -341,6 +392,7 @@ export class ExecuteSectTaskActionHandler {
       definition,
       record,
       executor,
+      now: context.clock.now(),
       state: record.status === 'completed' ? 'claimable' : 'active',
       enabled: true,
     });
@@ -349,7 +401,11 @@ export class ExecuteSectTaskActionHandler {
         primaryTask,
         changedTasks: mergeChangedTasks(
           primaryTask,
-          this.toChangedTaskViews(linkedTaskRecords, organization),
+          this.toChangedTaskViews(
+            linkedTaskRecords,
+            organization,
+            context.clock.now(),
+          ),
         ),
         outcome: decision.outcome,
       },
@@ -388,6 +444,7 @@ export class ExecuteSectTaskActionHandler {
   private toChangedTaskViews(
     records: readonly SectTaskRecord[],
     organization: ReturnType<SectCommandContext['modules']['require']>,
+    now: Date,
   ) {
     return records.map((record) => {
       const definition = organization.tasks.get(record.taskId);
@@ -397,6 +454,7 @@ export class ExecuteSectTaskActionHandler {
         definition,
         record,
         executor: this.executors.require(record.payload.offer.executorKey),
+        now,
         state: record.claimedAt
           ? 'claimed'
           : record.status === 'completed'

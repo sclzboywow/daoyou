@@ -1,16 +1,17 @@
 import { type DbTransaction } from '@server/lib/drizzle/db';
-import type { SectFacilityConstructionMessagePayload } from '@server/lib/mq/sect-construction/message';
 import * as organizationRepository from '@server/lib/repositories/sectOrganizationRepository';
+import type { DomainEventEnvelope } from '@shared/contracts/domainEvents';
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
 import type { SectInfrastructureData } from '@shared/contracts/sect';
 import { applySectFacilityConstruction } from '@shared/engine/sect';
 import { productionSectRuntime } from '@shared/engine/sect/content';
 import { mapFacilities } from './applicationSupport';
 
-export async function settleSectConstructionMessage(
-  payload: SectFacilityConstructionMessagePayload,
+export async function projectSectConstructionDonation(
+  event: DomainEventEnvelope<'sect.construction.donated'>,
   tx: DbTransaction,
 ) {
+  const payload = event.data;
   const organization = productionSectRuntime.registry.require(
     payload.sectId,
   ).organization;

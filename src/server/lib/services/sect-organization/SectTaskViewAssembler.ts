@@ -1,6 +1,7 @@
 import type { SectTaskViewData } from '@shared/contracts/sect';
 import {
   resolveSectTaskClaimReward,
+  resolveSectTaskAbandonAvailability,
   resolveSectTaskDialogue,
   resolveSectTaskExecutionLocationParameters,
   readSectBattleTargetSnapshot,
@@ -73,6 +74,7 @@ export function toSectTaskView(args: {
   record: SectTaskRecord;
   state: SectTaskViewData['state'];
   executor: SectTaskExecutor;
+  now: Date;
   enabled: boolean;
   disabledReason?: string;
 }): SectTaskViewData {
@@ -83,6 +85,10 @@ export function toSectTaskView(args: {
   );
   const executionLocation = resolveSectTaskExecutionLocationParameters(
     args.definition,
+  );
+  const abandonAvailability = resolveSectTaskAbandonAvailability(
+    args.record.createdAt,
+    args.now,
   );
   const actions =
     args.state === 'claimed'
@@ -113,13 +119,35 @@ export function toSectTaskView(args: {
                   : {}),
               },
             ]
-          : args.executor.actions(args.definition).map((action) => ({
-              ...action,
-              enabled: args.enabled,
-              ...(args.disabledReason
-                ? { disabledReason: args.disabledReason }
-                : {}),
-            }));
+          : [
+              ...args.executor.actions(args.definition).map((action) => ({
+                ...action,
+                enabled: args.enabled,
+                ...(args.disabledReason
+                  ? { disabledReason: args.disabledReason }
+                  : {}),
+              })),
+              ...(args.definition.enrollment === 'manual'
+                ? [
+                    {
+                      key: 'abandon',
+                      renderer: 'sect.action.abandon',
+                      label: '放弃此事',
+                      enabled: args.enabled && abandonAvailability.allowed,
+                      parameters: {
+                        availableAt:
+                          abandonAvailability.availableAt.toISOString(),
+                        cooldownBlocked: !abandonAvailability.allowed,
+                      },
+                      ...(!args.enabled && args.disabledReason
+                        ? { disabledReason: args.disabledReason }
+                        : !abandonAvailability.allowed
+                          ? { disabledReason: '领取满 15 分钟后方可放弃' }
+                          : {}),
+                    },
+                  ]
+                : []),
+            ];
   return {
     id: args.record.id,
     definitionId: args.definition.id,

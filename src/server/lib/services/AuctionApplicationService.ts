@@ -1,8 +1,9 @@
 import type { DbTransaction } from '@server/lib/drizzle/db';
-import { cultivators, mails } from '@server/lib/drizzle/schema';
+import { cultivators } from '@server/lib/drizzle/schema';
 import { redisLockKeys, withRedisLock } from '@server/lib/redis/lock';
+import { getPlayerLoadoutByCultivatorId } from '@server/lib/services/cultivator/CultivatorLoadoutReader';
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import {
   buyItem,
   cancelListing,
@@ -10,9 +11,6 @@ import {
   listItem,
 } from './AuctionService';
 import { playerCommandExecutor } from './CommandExecutors';
-import {
-  getPlayerLoadoutByCultivatorId,
-} from '@server/lib/services/cultivator/CultivatorLoadoutReader';
 import { readCultivatorName } from './cultivator/CultivatorFactsReader';
 
 export async function executeAuctionBuyCommand(args: {
@@ -34,15 +32,6 @@ export async function executeAuctionBuyCommand(args: {
     .from(cultivators)
     .where(eq(cultivators.id, args.buyerCultivatorId))
     .limit(1);
-  const [mailSummary] = await args.tx
-    .select({ unreadCount: sql<number>`count(*)::int` })
-    .from(mails)
-    .where(
-      and(
-        eq(mails.cultivatorId, args.buyerCultivatorId),
-        eq(mails.isRead, false),
-      ),
-    );
   if (!currency) throw new Error('拍卖结算后角色不存在');
   return {
     result: { message: '成功购入物品，请查收邮件' },
@@ -52,12 +41,6 @@ export async function executeAuctionBuyCommand(args: {
         eventType: 'currency.auction.spent',
         operation: 'merge',
         payload: { spiritStones: currency.spiritStones },
-      },
-      {
-        resourceTopic: 'player.mail-summary',
-        eventType: 'mail.auction.purchase.created',
-        operation: 'merge',
-        payload: { unreadCount: Number(mailSummary?.unreadCount ?? 0) },
       },
     ] satisfies ResourceChangeDescriptor[],
   };
@@ -108,25 +91,9 @@ export async function executeAuctionCancelCommand(args: {
     tx: args.tx,
     deferCacheClear: true,
   });
-  const [mailSummary] = await args.tx
-    .select({ unreadCount: sql<number>`count(*)::int` })
-    .from(mails)
-    .where(
-      and(
-        eq(mails.cultivatorId, args.cultivatorId),
-        eq(mails.isRead, false),
-      ),
-    );
   return {
     result: { message: '物品已下架，将通过邮件返还' },
-    resourceChanges: [
-      {
-        resourceTopic: 'player.mail-summary',
-        eventType: 'mail.auction.cancel.created',
-        operation: 'merge',
-        payload: { unreadCount: Number(mailSummary?.unreadCount ?? 0) },
-      },
-    ] satisfies ResourceChangeDescriptor[],
+    resourceChanges: [],
   };
 }
 
@@ -195,10 +162,7 @@ export async function listAuctionItem(args: {
       timeoutMs: 10_000,
     },
     command: async (tx) => {
-      const { name } = await readCultivatorName(
-        args.actor.cultivatorId,
-        tx,
-      );
+      const { name } = await readCultivatorName(args.actor.cultivatorId, tx);
       return executeAuctionListCommand({
         userId: args.actor.userId,
         cultivatorId: args.actor.cultivatorId,
@@ -237,6 +201,7 @@ export async function cancelAuctionListing(args: {
         userId: args.actor.userId,
         cultivatorId: args.actor.cultivatorId,
         source: 'auction_cancel',
+        allowEmpty: true,
         idempotency: {
           key: `auction-cancel:${args.listingId}`,
           fingerprint: `${args.actor.cultivatorId}:${args.listingId}`,

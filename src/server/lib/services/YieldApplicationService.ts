@@ -1,21 +1,20 @@
 import { cultivators } from '@server/lib/drizzle/schema';
-import { runDetached } from '@server/lib/http/response';
+import { createDomainEvent } from '@server/lib/mq/domainEventWriter';
+import { publishTransactionalMessageBestEffort } from '@server/lib/mq/transactionalMessagePublisher';
 import { redisLockKeys, withRedisLock } from '@server/lib/redis/lock';
 import {
   updateCultivationExp,
   updateSpiritStones,
 } from '@server/lib/services/cultivator/CultivatorStateRepository';
 import { getOrInitCultivationProgress } from '@server/utils/cultivationUtils';
-import { MaterialGenerator } from '@shared/engine/material/creation/MaterialGenerator';
 import type { GeneratedMaterial } from '@shared/engine/material/creation/types';
 import { YieldCalculator } from '@shared/engine/yield/YieldCalculator';
 import type { RealmStage, RealmType } from '@shared/types/constants';
 import type { CultivationProgress } from '@shared/types/cultivator';
 import { and, eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { getExecutor } from '../drizzle/db';
 import { playerCommandExecutor } from './CommandExecutors';
-import { MailService, type MailAttachment } from './MailService';
-import { readPlayerMailSummary } from './PlayerResourceReaderService';
 
 export class YieldCommandError extends Error {
   constructor(
@@ -78,6 +77,8 @@ export async function executeYieldCommand(args: {
   userId: string;
   cultivatorId: string;
 }) {
+  const actionInstanceId = randomUUID();
+  let domainEventId: string | undefined;
   const prepared = await withRedisLock(
     {
       key: redisLockKeys.cultivatorMutation(args.cultivatorId),
@@ -172,6 +173,24 @@ export async function executeYieldCommand(args: {
             .update(cultivators)
             .set({ last_yield_at: claimedAt })
             .where(eq(cultivators.id, args.cultivatorId));
+          if (materialCount > 0) {
+            domainEventId = (
+              await createDomainEvent(
+                {
+                  type: 'yield.claimed',
+                  aggregate: { type: 'cultivator', id: args.cultivatorId },
+                  data: {
+                    cultivatorId: args.cultivatorId,
+                    actionInstanceId,
+                    realm: facts.realm,
+                    materialCount,
+                  },
+                  deduplicationKey: `${args.cultivatorId}:yield:${actionInstanceId}`,
+                },
+                tx,
+              )
+            ).id;
+          }
           return {
             result,
             resourceChanges: [
@@ -204,78 +223,9 @@ export async function executeYieldCommand(args: {
       return { committed, result, realm: facts.realm, materialCount };
     },
   );
-
-  if (prepared.materialCount > 0) {
-    runDetached(() =>
-      generateAndSendYieldMaterials({
-        userId: args.userId,
-        cultivatorId: args.cultivatorId,
-        realm: prepared.realm,
-        materialCount: prepared.materialCount,
-      }),
-    );
-  }
+  publishTransactionalMessageBestEffort(domainEventId, {
+    source: 'yield_claim',
+    cultivatorId: args.cultivatorId,
+  });
   return prepared;
-}
-
-async function generateAndSendYieldMaterials(args: {
-  userId: string;
-  cultivatorId: string;
-  realm: RealmType;
-  materialCount: number;
-}): Promise<void> {
-  let materials: GeneratedMaterial[];
-  try {
-    materials = await MaterialGenerator.generateRandom(args.materialCount, {
-      qualityChanceMap: YieldCalculator.getMaterialQualityChanceMap(args.realm),
-    });
-  } catch (error) {
-    console.error('[Yield] 材料生成异常:', error);
-    materials = [];
-  }
-  if (materials.length === 0) return;
-  const attachments: MailAttachment[] = materials.map((material) => ({
-    type: 'material',
-    name: material.name,
-    quantity: material.quantity,
-    data: material,
-  }));
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await playerCommandExecutor.executeWithLock({
-        userId: args.userId,
-        cultivatorId: args.cultivatorId,
-        source: 'yield_material_mail',
-        command: async (tx) => {
-          await MailService.sendMail(
-            args.cultivatorId,
-            '历练机缘',
-            '道友历练途中，偶得天材地宝，特以此传音玉简送达。',
-            attachments,
-            'reward',
-            tx,
-          );
-          const summary = await readPlayerMailSummary(args.cultivatorId, tx);
-          return {
-            result: null,
-            resourceChanges: [
-              {
-                resourceTopic: 'player.mail-summary',
-                eventType: 'mail.yield_material.created',
-                operation: 'replace',
-                payload: summary,
-              },
-            ],
-          };
-        },
-      });
-      return;
-    } catch (error) {
-      if (attempt === 3) {
-        console.error('[Yield] 材料奖励邮件发送失败:', error);
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
-    }
-  }
 }

@@ -37,6 +37,7 @@ test ! -f "$RELEASE_DIR/web/index.js"
 test -f "$RELEASE_DIR/server/index.js"
 test -f "$SITE_ROOT/index.html"
 test -f "$APP_ENV"
+test -f "$RUNTIME_DIR/nats/nats.conf"
 test -d "$WEB_ROOT"
 test ! -e "$WEB_STAGE"
 test ! -e "$WEB_BACKUP"
@@ -58,6 +59,18 @@ RELEASE_COMMIT="$(
 
 test "$RELEASE_COMMIT" = "$(git rev-parse HEAD)"
 docker image inspect "$IMAGE_TAG" >/dev/null
+
+CURRENT_IMAGE="$(docker inspect --format '{{.Config.Image}}' daoyou-hono)"
+DAOYOU_APP_IMAGE="$CURRENT_IMAGE" docker compose \
+  -f deploy/production/docker-compose.yml up -d nats
+
+for _ in $(seq 1 30); do
+  if [ "$(docker inspect --format '{{.State.Health.Status}}' daoyou-nats 2>/dev/null || true)" = healthy ]; then
+    break
+  fi
+  sleep 1
+done
+test "$(docker inspect --format '{{.State.Health.Status}}' daoyou-nats)" = healthy
 
 install -d -m 700 "$RUNTIME_DIR/backups"
 docker exec daoyou-postgres sh -lc \
@@ -129,7 +142,7 @@ rollback() {
   cp -a "$NGINX.pre-$RELEASE_ID" "$NGINX"
   cp -a "$RELEASE_ENV.pre-$RELEASE_ID" "$RELEASE_ENV"
   docker compose --env-file "$RELEASE_ENV" -f "$COMPOSE" \
-    up -d --force-recreate app web || true
+    up -d --force-recreate nats app web || true
 }
 trap rollback ERR
 
@@ -142,7 +155,7 @@ mv "$WEB_STAGE" "$WEB_ROOT"
 
 docker compose --env-file "$RELEASE_ENV" -f "$COMPOSE" config >/dev/null
 docker compose --env-file "$RELEASE_ENV" -f "$COMPOSE" \
-  up -d --force-recreate app web
+  up -d --force-recreate nats app web
 
 for _ in $(seq 1 30); do
   if [ "$(docker inspect --format '{{.State.Health.Status}}' daoyou-hono 2>/dev/null || true)" = healthy ]; then

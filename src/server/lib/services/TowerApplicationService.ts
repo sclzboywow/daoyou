@@ -7,10 +7,8 @@ import {
   towerService,
   type TowerBattleRuntimeCommit,
 } from '@server/lib/tower/service';
-import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
 import type { TowerBlessingId } from '@shared/lib/tower';
 import { playerCommandExecutor } from './CommandExecutors';
-import { readPlayerMailSummary } from './PlayerResourceReaderService';
 import { toPlayerStateMutationResponse } from './ResourceMutationResponse';
 
 const TOWER_COMMAND_TIMEOUT_MS = 240_000;
@@ -20,9 +18,7 @@ type TowerBattlePublicResult = {
     ReturnType<typeof towerService.executeBattle>
   >['battleResult'];
   callbackData: {
-    towerState: Awaited<
-      ReturnType<typeof towerService.executeBattle>
-    >['state'];
+    towerState: Awaited<ReturnType<typeof towerService.executeBattle>>['state'];
     isFinished: boolean;
     settlement: Awaited<
       ReturnType<typeof towerService.executeBattle>
@@ -101,21 +97,12 @@ export function executeTowerBattleCommand(args: {
                 milestoneReward: battle.milestoneReward,
               },
             };
-            const resourceChanges: ResourceChangeDescriptor[] = [];
-            if (battle.milestoneReward) {
-              resourceChanges.push({
-                resourceTopic: 'player.mail-summary',
-                eventType: 'mail.tower_milestone.created',
-                operation: 'replace',
-                payload: await readPlayerMailSummary(args.cultivatorId, tx),
-              });
-            }
             return {
               result: {
                 response,
                 runtimeCommit: battle.runtimeCommit,
               },
-              resourceChanges,
+              resourceChanges: [],
             };
           },
         });

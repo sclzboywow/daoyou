@@ -82,6 +82,7 @@ export class ClaimSectTaskRewardHandler {
       definition: args.definition,
       record: claimed,
       executor: args.executor,
+      now: args.context.clock.now(),
       state: 'claimed',
       enabled: true,
     });

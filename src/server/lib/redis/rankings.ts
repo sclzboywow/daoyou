@@ -81,7 +81,7 @@ async function getRankingOrder(
   const members = await redis.zrange(
     getRankingListKey(realm),
     0,
-    MAX_RANKING_SIZE - 1,
+    String(MAX_RANKING_SIZE - 1),
   );
 
   return members.map((cultivatorId, index) => ({
@@ -95,7 +95,7 @@ async function compactRankingScores(realm: RealmType): Promise<void> {
   const members = (await redis.zrange(
     rankingKey,
     0,
-    MAX_RANKING_SIZE - 1,
+    String(MAX_RANKING_SIZE - 1),
   )) as string[];
 
   if (members.length === 0) return;
@@ -287,7 +287,7 @@ async function adjustRankingsAfterInsert(
   const members = (await redis.zrange(
     rankingKey,
     targetRank - 1,
-    -1,
+    '-1',
   )) as string[];
 
   if (members.length === 0) {
@@ -335,7 +335,7 @@ export async function updateRanking(
     const members = (await redis.zrange(
       rankingKey,
       targetRank,
-      -1,
+      '-1',
     )) as string[];
     for (let i = 0; i < members.length; i++) {
       const id = members[i];
@@ -355,7 +355,7 @@ export async function updateRanking(
     const members = (await redis.zrange(
       rankingKey,
       targetRank,
-      -1,
+      '-1',
     )) as string[];
 
     // 将获取到的成员（除了挑战者）都下移一位

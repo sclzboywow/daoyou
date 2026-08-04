@@ -1,22 +1,20 @@
 import type { DbTransaction } from '@server/lib/drizzle/db';
 import { cultivators } from '@server/lib/drizzle/schema';
-import * as betBattleRepository from '@server/lib/repositories/betBattleRepository';
-import { createMessage } from '@server/lib/repositories/worldChatRepository';
+import { createDomainEvent } from '@server/lib/mq/domainEventWriter';
+import { publishTransactionalMessageBestEffort } from '@server/lib/mq/transactionalMessagePublisher';
 import { redisLockKeys, withRedisLock } from '@server/lib/redis/lock';
+import * as betBattleRepository from '@server/lib/repositories/betBattleRepository';
+import { getPlayerLoadoutByCultivatorId } from '@server/lib/services/cultivator/CultivatorLoadoutReader';
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
 import type { RealmType } from '@shared/types/constants';
 import { eq } from 'drizzle-orm';
-import { playerCommandExecutor } from './CommandExecutors';
 import {
   cancelBetBattle,
   challengeBetBattle,
   createBetBattle,
   type BetStakeInventoryChange,
 } from './BetBattleService';
-import {
-  getPlayerLoadoutByCultivatorId,
-} from '@server/lib/services/cultivator/CultivatorLoadoutReader';
-import { readPlayerMailSummary } from './PlayerResourceReaderService';
+import { playerCommandExecutor } from './CommandExecutors';
 import { readCultivatorName } from './cultivator/CultivatorFactsReader';
 
 type Stake = {
@@ -81,9 +79,12 @@ async function stakeResourceChanges(
 }
 
 export async function executeBetBattleCreateCommand(
-  args: Parameters<typeof createBetBattle>[0] & { tx: DbTransaction },
+  args: Parameters<typeof createBetBattle>[0] & {
+    creatorUserId: string;
+    tx: DbTransaction;
+  },
 ) {
-  const { tx, ...input } = args;
+  const { tx, creatorUserId, ...input } = args;
   const created = await createBetBattle(input, { tx });
   const resourceChanges = await stakeResourceChanges({
     ...input,
@@ -96,6 +97,21 @@ export async function executeBetBattleCreateCommand(
     tx,
   );
   if (!listing) throw new Error('赌战创建后记录不存在');
+  const event = await createDomainEvent(
+    {
+      type: 'bet-battle.created',
+      aggregate: { type: 'bet-battle', id: created.battleId },
+      data: {
+        userId: creatorUserId,
+        cultivatorId: input.creatorId,
+        cultivatorName: input.creatorName,
+        battleId: created.battleId,
+        ...(input.taunt?.trim() ? { taunt: input.taunt.trim() } : {}),
+      },
+      deduplicationKey: created.battleId,
+    },
+    tx,
+  );
   return {
     result: {
       battleId: created.battleId,
@@ -103,6 +119,7 @@ export async function executeBetBattleCreateCommand(
       listing,
     },
     resourceChanges,
+    domainEventId: event.id,
   };
 }
 
@@ -117,23 +134,12 @@ export async function executeBetBattleCancelCommand(args: {
     args.tx,
   );
   if (!listing) throw new Error('赌战取消后记录不存在');
-  const mailSummary = await readPlayerMailSummary(
-    args.cultivatorId,
-    args.tx,
-  );
   return {
     result: {
       message: '赌战已取消，押注将通过邮件返还',
       listing,
     },
-    resourceChanges: [
-      {
-        resourceTopic: 'player.mail-summary',
-        eventType: 'mail.bet_battle.cancel.created',
-        operation: 'replace',
-        payload: mailSummary,
-      },
-    ] satisfies ResourceChangeDescriptor[],
+    resourceChanges: [],
   };
 }
 
@@ -149,7 +155,20 @@ export async function executeBetBattleChallengeCommand(
     tx,
     inventoryChange: challenge.stakeInventoryChange,
   });
-  const winnerMailSummary = await readPlayerMailSummary(challenge.winnerId, tx);
+  const event = await createDomainEvent(
+    {
+      type: 'bet-battle.settled',
+      aggregate: { type: 'bet-battle', id: challenge.battleId },
+      data: {
+        userId: input.challengerUserId,
+        cultivatorId: input.challengerId,
+        battleId: challenge.battleId,
+        rumor: challenge.rumor,
+      },
+      deduplicationKey: challenge.battleId,
+    },
+    tx,
+  );
   return {
     result: {
       type: 'battle_result',
@@ -165,16 +184,8 @@ export async function executeBetBattleChallengeCommand(
         rumor: challenge.rumor,
       },
     },
-    resourceChanges: [
-      ...stakeChanges,
-      {
-        scope: { kind: 'cultivator', id: challenge.winnerId },
-        resourceTopic: 'player.mail-summary',
-        eventType: 'mail.bet_battle.settlement.created',
-        operation: 'replace',
-        payload: winnerMailSummary,
-      },
-    ] satisfies ResourceChangeDescriptor[],
+    resourceChanges: stakeChanges,
+    domainEventId: event.id,
   };
 }
 
@@ -193,45 +204,26 @@ type BetStake = {
   } | null;
 };
 
-async function publishRumor(args: {
-  userId: string;
-  messageType: 'duel_invite' | 'text';
-  text: string;
-  payload: Record<string, unknown>;
-}): Promise<void> {
-  try {
-    await createMessage({
-      senderUserId: args.userId,
-      senderCultivatorId: null,
-      senderName: '修仙界传闻',
-      senderRealm: '炼气',
-      senderRealmStage: '系统',
-      channel: 'system',
-      messageType: args.messageType,
-      textContent: args.text,
-      payload: args.payload,
-    });
-  } catch (error) {
-    console.error('赌战结算成功但世界频道广播失败:', error);
-  }
-}
-
-export async function createBetBattleCommand(args: {
-  actor: BetBattleActor;
-  minRealm: RealmType;
-  maxRealm: RealmType;
-  taunt?: string;
-} & BetStake) {
+export async function createBetBattleCommand(
+  args: {
+    actor: BetBattleActor;
+    minRealm: RealmType;
+    maxRealm: RealmType;
+    taunt?: string;
+  } & BetStake,
+) {
   const { name: cultivatorName } = await readCultivatorName(
     args.actor.cultivatorId,
   );
+  let domainEventId: string | undefined;
   const committed = await playerCommandExecutor.executeWithLock({
     userId: args.actor.userId,
     cultivatorId: args.actor.cultivatorId,
     source: 'bet_battle_create',
     lock: { context: 'bet-battle-create', timeoutMs: 10_000 },
-    command: (tx) =>
-      executeBetBattleCreateCommand({
+    command: async (tx) => {
+      const command = await executeBetBattleCreateCommand({
+        creatorUserId: args.actor.userId,
         creatorId: args.actor.cultivatorId,
         creatorName: cultivatorName,
         minRealm: args.minRealm,
@@ -241,22 +233,14 @@ export async function createBetBattleCommand(args: {
         spiritStones: args.spiritStones,
         stakeItem: args.stakeItem,
         tx,
-      }),
-  });
-  const taunt = args.taunt?.trim();
-  const rumor = taunt
-    ? `${cultivatorName}在赌战台放话：${taunt} 有胆便来应战！`
-    : `${cultivatorName}在赌战台摆下战帖，静候各路道友应战！`;
-  await publishRumor({
-    userId: args.actor.userId,
-    messageType: 'duel_invite',
-    text: rumor,
-    payload: {
-      battleId: committed.result.battleId,
-      routePath: '/game/bet-battle',
-      taunt: taunt || undefined,
-      expiresAt: undefined,
+      });
+      domainEventId = command.domainEventId;
+      return command;
     },
+  });
+  publishTransactionalMessageBestEffort(domainEventId, {
+    source: 'bet_battle_create',
+    cultivatorId: args.actor.cultivatorId,
   });
   return committed;
 }
@@ -281,6 +265,7 @@ export async function cancelBetBattleCommand(args: {
         userId: args.actor.userId,
         cultivatorId: args.actor.cultivatorId,
         source: 'bet_battle_cancel',
+        allowEmpty: true,
         idempotency: {
           key: `bet-battle-cancel:${args.battleId}`,
           fingerprint: `${args.actor.cultivatorId}:${args.battleId}`,
@@ -295,14 +280,17 @@ export async function cancelBetBattleCommand(args: {
   );
 }
 
-export async function challengeBetBattleCommand(args: {
-  actor: BetBattleActor;
-  battleId: string;
-  requestFingerprint: string;
-} & BetStake) {
+export async function challengeBetBattleCommand(
+  args: {
+    actor: BetBattleActor;
+    battleId: string;
+    requestFingerprint: string;
+  } & BetStake,
+) {
   const { name: cultivatorName } = await readCultivatorName(
     args.actor.cultivatorId,
   );
+  let domainEventId: string | undefined;
   const committed = await withRedisLock(
     {
       keys: [
@@ -323,8 +311,8 @@ export async function challengeBetBattleCommand(args: {
           key: `bet-battle-challenge:${args.battleId}`,
           fingerprint: args.requestFingerprint,
         },
-        command: (tx) =>
-          executeBetBattleChallengeCommand({
+        command: async (tx) => {
+          const command = await executeBetBattleChallengeCommand({
             battleId: args.battleId,
             challengerId: args.actor.cultivatorId,
             challengerName: cultivatorName,
@@ -333,16 +321,15 @@ export async function challengeBetBattleCommand(args: {
             spiritStones: args.spiritStones,
             stakeItem: args.stakeItem,
             tx,
-          }),
+          });
+          domainEventId = command.domainEventId;
+          return command;
+        },
       }),
   );
-  if (!committed.state.replayed) {
-    await publishRumor({
-      userId: args.actor.userId,
-      messageType: 'text',
-      text: committed.result.settlement.rumor,
-      payload: { text: committed.result.settlement.rumor },
-    });
-  }
+  publishTransactionalMessageBestEffort(domainEventId, {
+    source: 'bet_battle_challenge',
+    cultivatorId: args.actor.cultivatorId,
+  });
   return committed;
 }

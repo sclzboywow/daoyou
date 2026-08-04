@@ -477,6 +477,16 @@ function TaskConversation({
       body: '带来的东西已经验明，回执也已写好，现在可以交回结清。',
       tone: 'attention',
     });
+  } else if (
+    decoded?.ok &&
+    decoded.value.renderer === 'sect.outcome.abandoned'
+  ) {
+    messages.push({
+      id: 'abandoned',
+      speaker: npc.name,
+      body: '这份委托已经从你名下撤下。若仍想经办，可以回到事务册重新领取。',
+      tone: 'attention',
+    });
   } else {
     messages.push({
       id: 'instruction',

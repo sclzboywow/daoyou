@@ -1,4 +1,4 @@
-import { publishLocalTransactionMessageBestEffort } from '@server/lib/mq/localTransactionMessagePublisher';
+import { publishTransactionalMessageBestEffort } from '@server/lib/mq/transactionalMessagePublisher';
 import {
   releaseSectConstructionDaily,
   reserveSectConstructionDaily,
@@ -83,7 +83,7 @@ export async function executeSectConstructionDonationCommand(
     throw error;
   }
 
-  publishLocalTransactionMessageBestEffort(committed.result.messageId, {
+  publishTransactionalMessageBestEffort(committed.result.eventId, {
     source: 'sect_construction',
   });
   return committed;

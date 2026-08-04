@@ -9,28 +9,13 @@ export const MQ_KEYS = {
   redisPrefix: 'bull',
   /** 队列名称：会成为 BullMQ 在 Redis 中生成键的核心组成部分。 */
   queues: {
-    /** 宗门设施建设进度异步结算队列。 */
-    sectFacilityConstruction: 'sect-facility-construction',
-    /** 通用任务进度异步结算队列。 */
-    taskProgress: 'task-progress',
     /** 后台群发、补发与活动投递队列。 */
     adminBatch: 'admin-batch',
   },
   /** 作业名称：用于区分同一队列中的不同消息处理类型。 */
   jobs: {
-    /** 将一条已完成玩家结算的建设事件应用到宗门设施。 */
-    applySectFacilityConstruction: 'apply-construction',
-    /** 将一条玩家行为事件应用到任务进度。 */
-    applyTaskProgress: 'apply-task-progress',
     /** 执行一条持久化后台批处理任务。 */
     processAdminBatch: 'process-admin-batch',
-  },
-  /** 本地事务消息类型：作为数据库消息与 MQ 路由之间的稳定标识。 */
-  messages: {
-    /** 宗门设施建设进度结算消息。 */
-    sectFacilityConstruction: 'sect.facility-construction.apply',
-    /** 玩家任务进度结算消息。 */
-    taskProgress: 'task.progress.apply',
   },
 } as const;
 
@@ -41,5 +26,3 @@ export const MQ_KEYS = {
 
 export type MqQueueKey = (typeof MQ_KEYS.queues)[keyof typeof MQ_KEYS.queues];
 export type MqJobKey = (typeof MQ_KEYS.jobs)[keyof typeof MQ_KEYS.jobs];
-export type LocalTransactionMessageKey =
-  (typeof MQ_KEYS.messages)[keyof typeof MQ_KEYS.messages];

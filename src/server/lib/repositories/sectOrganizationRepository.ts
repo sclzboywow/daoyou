@@ -8,7 +8,6 @@ import {
   creationProducts,
   cultivators,
   materials,
-  sectContributionLedger,
   sectFacilities,
   sectMemberships,
   sectStipendClaims,
@@ -16,7 +15,7 @@ import {
 } from '@server/lib/drizzle/schema';
 import type { SectDiscipleRank, SectOffice } from '@shared/engine/sect';
 import type { RealmType } from '@shared/types/constants';
-import { and, asc, count, desc, eq, gt, gte, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, lte, sql } from 'drizzle-orm';
 
 export async function ensureSectFacilities(
   sectId: string,
@@ -91,8 +90,6 @@ export async function saveSectFacilityConstruction(
 export async function addSectContribution(
   membershipId: string,
   amount: number,
-  source: string,
-  referenceId: string | null,
   tx: DbTransaction,
 ) {
   const [membership] = await tx
@@ -104,21 +101,12 @@ export async function addSectContribution(
     .where(eq(sectMemberships.id, membershipId))
     .returning({ contribution: sectMemberships.contribution });
   if (!membership) throw new Error('宗门成员不存在');
-  await tx.insert(sectContributionLedger).values({
-    membershipId,
-    delta: amount,
-    balanceAfter: membership.contribution,
-    source,
-    referenceId,
-  });
   return membership.contribution;
 }
 
 export async function spendSectContribution(
   membershipId: string,
   amount: number,
-  source: string,
-  referenceId: string | null,
   tx: DbTransaction,
 ) {
   const [membership] = await tx
@@ -135,13 +123,6 @@ export async function spendSectContribution(
     )
     .returning({ contribution: sectMemberships.contribution });
   if (!membership) return null;
-  await tx.insert(sectContributionLedger).values({
-    membershipId,
-    delta: -amount,
-    balanceAfter: membership.contribution,
-    source,
-    referenceId,
-  });
   return membership.contribution;
 }
 
@@ -240,6 +221,24 @@ export async function completeSectTaskRecord(
     )
     .returning();
   return row ?? null;
+}
+
+export async function abandonSectTaskRecord(
+  id: string,
+  acceptedBefore: Date,
+  tx: DbTransaction,
+): Promise<boolean> {
+  const [row] = await tx
+    .delete(sectTaskRecords)
+    .where(
+      and(
+        eq(sectTaskRecords.id, id),
+        eq(sectTaskRecords.status, 'active'),
+        lte(sectTaskRecords.createdAt, acceptedBefore),
+      ),
+    )
+    .returning({ id: sectTaskRecords.id });
+  return Boolean(row);
 }
 
 export async function updateSectTaskPayload(

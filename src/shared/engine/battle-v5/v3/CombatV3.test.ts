@@ -1811,6 +1811,54 @@ describe('combat facts V3', () => {
     }
   });
 
+  it('keeps pending ability transformations out of concise logs', () => {
+    const owner = { id: 'owner', name: '陆逆行' };
+    const sequence: CombatSequenceV3 = {
+      id: 'sequence:ability-transform',
+      turn: 1,
+      phase: 'action_after',
+      facts: [
+        {
+          id: 'ability-transform',
+          type: 'mechanic',
+          trace: {
+            eventId: 'ability-transform',
+            sequenceId: 'sequence:ability-transform',
+            ordinal: 1,
+          },
+          origin: {
+            kind: 'owned',
+            owner,
+            carrier: {
+              kind: 'gongfa',
+              id: 'memory-art',
+              name: '逆生玄雷真解',
+            },
+          },
+          target: owner,
+          code: 'stored-damage',
+          payload: {
+            kind: 'ability_transform',
+            triggers: 1,
+            modifiers: [{ kind: 'stored_damage' }],
+          },
+        },
+      ],
+    };
+
+    const concise = new CombatPresenterV3('concise')
+      .format(sequence)
+      .join('\n');
+    const detailed = new CombatPresenterV3('detailed')
+      .format(sequence)
+      .join('\n');
+
+    expect(concise).toBe('');
+    expect(detailed).toContain(
+      '接下来 1 次符合条件的技能获得强化：附加已记录伤害',
+    );
+  });
+
   it('keeps memory bookkeeping out of concise logs', () => {
     const origin: CombatOriginV3 = {
       kind: 'owned',

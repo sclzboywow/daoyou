@@ -1,4 +1,7 @@
-import { publishRedisMessage, subscribeRedisChannel } from '@server/lib/services/redisPubSub';
+import {
+  publishNatsCoreMessage,
+  subscribeNatsCoreSubject,
+} from '@server/lib/services/natsCorePubSub';
 import {
   createPubSubEnvelope,
   parsePubSubEnvelope,
@@ -7,24 +10,28 @@ import type { WorldChatMessageDTO } from '@shared/types/world-chat';
 
 type Listener = (message: WorldChatMessageDTO) => void;
 
-const WORLD_CHAT_CHANNEL = 'world-chat';
+const WORLD_CHAT_SUBJECT = 'daoyou.realtime.world-chat';
 const localListeners = new Set<Listener>();
-let unsubscribeRedis: (() => void) | null = null;
+let unsubscribeNats: (() => void) | null = null;
 
 function isWorldChatMessage(value: unknown): value is WorldChatMessageDTO {
-  return Boolean(value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'string');
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    typeof (value as { id?: unknown }).id === 'string',
+  );
 }
 
 function parseMessage(raw: string): WorldChatMessageDTO | null {
   return parsePubSubEnvelope(raw, isWorldChatMessage);
 }
 
-function ensureRedisSubscription() {
-  if (unsubscribeRedis) {
+function ensureNatsSubscription() {
+  if (unsubscribeNats) {
     return;
   }
 
-  unsubscribeRedis = subscribeRedisChannel(WORLD_CHAT_CHANNEL, (raw) => {
+  unsubscribeNats = subscribeNatsCoreSubject(WORLD_CHAT_SUBJECT, (raw) => {
     const message = parseMessage(raw);
     if (message) {
       notifyLocalWorldChatListeners(message);
@@ -40,21 +47,21 @@ function notifyLocalWorldChatListeners(message: WorldChatMessageDTO) {
 
 export function subscribeWorldChatMessages(listener: Listener): () => void {
   localListeners.add(listener);
-  ensureRedisSubscription();
+  ensureNatsSubscription();
 
   return () => {
     localListeners.delete(listener);
     if (localListeners.size === 0) {
-      unsubscribeRedis?.();
-      unsubscribeRedis = null;
+      unsubscribeNats?.();
+      unsubscribeNats = null;
     }
   };
 }
 
 export function publishWorldChatMessage(message: WorldChatMessageDTO): void {
   notifyLocalWorldChatListeners(message);
-  void publishRedisMessage(
-    WORLD_CHAT_CHANNEL,
+  void publishNatsCoreMessage(
+    WORLD_CHAT_SUBJECT,
     JSON.stringify(createPubSubEnvelope(message)),
   );
 }

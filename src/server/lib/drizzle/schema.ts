@@ -25,6 +25,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -272,23 +273,40 @@ export const sectFacilities = pgTable(
   ],
 );
 
-export const localTransactionMessages = pgTable(
-  'wanjiedaoyou_local_transaction_messages',
+export const transactionalMessages = pgTable(
+  'wanjiedaoyou_transactional_messages',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    messageKey: varchar('message_key', { length: 96 }).notNull(),
+    messageKey: varchar('message_key', { length: 128 }).notNull(),
+    destination: varchar('destination', { length: 160 }).notNull(),
     payload: jsonb('payload').notNull(),
     deduplicationKey: varchar('deduplication_key', { length: 256 }),
-    completedAt: timestamp('completed_at'),
+    publishedAt: timestamp('published_at'),
+    publishAttempts: integer('publish_attempts').notNull().default(0),
+    lastPublishError: text('last_publish_error'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('local_transaction_messages_dedupe_unique')
+    uniqueIndex('transactional_messages_dedupe_unique')
       .on(table.messageKey, table.deduplicationKey)
       .where(sql`${table.deduplicationKey} is not null`),
-    index('local_transaction_messages_pending_idx')
+    index('transactional_messages_pending_idx')
       .on(table.createdAt)
-      .where(sql`${table.completedAt} is null`),
+      .where(sql`${table.publishedAt} is null`),
+  ],
+);
+
+export const messageConsumptions = pgTable(
+  'wanjiedaoyou_message_consumptions',
+  {
+    consumerName: varchar('consumer_name', { length: 96 }).notNull(),
+    messageId: uuid('message_id').notNull(),
+    messageKey: varchar('message_key', { length: 128 }).notNull(),
+    processedAt: timestamp('processed_at').notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.consumerName, table.messageId] }),
+    index('message_consumptions_processed_idx').on(table.processedAt),
   ],
 );
 
@@ -327,27 +345,6 @@ export const sectTaskRecords = pgTable(
   ],
 );
 
-export const sectContributionLedger = pgTable(
-  'wanjiedaoyou_sect_contribution_ledger',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    membershipId: uuid('membership_id')
-      .references(() => sectMemberships.id, { onDelete: 'cascade' })
-      .notNull(),
-    delta: integer('delta').notNull(),
-    balanceAfter: integer('balance_after').notNull(),
-    source: varchar('source', { length: 32 }).notNull(),
-    referenceId: varchar('reference_id', { length: 128 }),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-  },
-  (table) => [
-    index('sect_contribution_membership_created_idx').on(
-      table.membershipId,
-      table.createdAt,
-    ),
-  ],
-);
-
 export const sectStipendClaims = pgTable(
   'wanjiedaoyou_sect_stipend_claims',
   {
@@ -364,6 +361,7 @@ export const sectStipendClaims = pgTable(
       table.membershipId,
       table.weekKey,
     ),
+    index('sect_stipend_claimed_idx').on(table.claimedAt),
   ],
 );
 
@@ -463,27 +461,6 @@ export const sectAbilityLoadouts = pgTable(
     uniqueIndex('sect_ability_membership_ability_unique').on(
       table.membershipId,
       table.abilityId,
-    ),
-  ],
-);
-
-export const sectDailyCommissions = pgTable(
-  'wanjiedaoyou_sect_daily_commissions',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    membershipId: uuid('membership_id')
-      .references(() => sectMemberships.id, { onDelete: 'cascade' })
-      .notNull(),
-    dateKey: varchar('date_key', { length: 10 }).notNull(),
-    completionType: varchar('completion_type', { length: 16 }).notNull(),
-    completedAt: timestamp('completed_at').notNull(),
-    claimedAt: timestamp('claimed_at'),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex('sect_commission_membership_date_unique').on(
-      table.membershipId,
-      table.dateKey,
     ),
   ],
 );

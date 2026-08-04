@@ -84,7 +84,18 @@ function parseStoredMessage(raw: unknown): WorldChatMessageDTO | null {
   return null;
 }
 
+function newestFirst(
+  left: WorldChatMessageDTO,
+  right: WorldChatMessageDTO,
+): number {
+  const difference =
+    Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  return Number.isFinite(difference) ? difference : 0;
+}
+
 export async function createMessage(data: {
+  id?: string;
+  createdAt?: string;
   senderUserId: string;
   senderCultivatorId: string | null;
   senderName: string;
@@ -96,7 +107,7 @@ export async function createMessage(data: {
   payload: WorldChatPayload;
 }): Promise<WorldChatMessageDTO> {
   const message: WorldChatMessageDTO = {
-    id: randomUUID(),
+    id: data.id ?? randomUUID(),
     channel: data.channel ?? 'world',
     sectId: null,
     senderUserId: data.senderUserId,
@@ -108,11 +119,16 @@ export async function createMessage(data: {
     textContent: data.textContent ?? null,
     payload: data.payload,
     status: 'active',
-    createdAt: new Date().toISOString(),
+    createdAt: data.createdAt ?? new Date().toISOString(),
   };
 
-  await redis.lpush(WORLD_CHAT_LIST_KEY, JSON.stringify(message));
-  await redis.ltrim(WORLD_CHAT_LIST_KEY, 0, WORLD_CHAT_MAX_MESSAGES - 1);
+  const encoded = JSON.stringify(message);
+  await redis
+    .multi()
+    .lrem(WORLD_CHAT_LIST_KEY, 0, encoded)
+    .lpush(WORLD_CHAT_LIST_KEY, encoded)
+    .ltrim(WORLD_CHAT_LIST_KEY, 0, WORLD_CHAT_MAX_MESSAGES - 1)
+    .exec();
   publishWorldChatMessage(message);
 
   return message;
@@ -137,9 +153,9 @@ export async function listMessages(options: {
     .map((raw) => parseStoredMessage(raw))
     .filter((item): item is WorldChatMessageDTO => Boolean(item))
     .filter(
-      (item) =>
-        options.channel === 'all' || item.channel === options.channel,
-    );
+      (item) => options.channel === 'all' || item.channel === options.channel,
+    )
+    .sort(newestFirst);
   const pageRows = parsedRows.slice(start, end);
   const hasMore = pageRows.length > options.pageSize;
   const trimmedRows = hasMore ? pageRows.slice(0, options.pageSize) : pageRows;
@@ -163,5 +179,6 @@ export async function listLatestMessages(
     .map((raw) => parseStoredMessage(raw))
     .filter((item): item is WorldChatMessageDTO => Boolean(item))
     .filter((item) => channel === 'all' || item.channel === channel)
+    .sort(newestFirst)
     .slice(0, limit);
 }

@@ -1,6 +1,5 @@
 import { createBullMqProducerRedisConnection } from '@server/lib/redis';
 import { Queue, type JobsOptions } from 'bullmq';
-import type { LocalTransactionMessageJobData } from './localTransactionMessages';
 import type { AdminBatchJobData } from './admin-batch/types';
 import { MQ_KEYS, type MqQueueKey } from './mqKeys';
 
@@ -9,22 +8,6 @@ interface MqQueueConfig {
 }
 
 const QUEUE_CONFIGS: Readonly<Record<MqQueueKey, MqQueueConfig>> = {
-  [MQ_KEYS.queues.sectFacilityConstruction]: {
-    defaultJobOptions: {
-      attempts: 10,
-      backoff: { type: 'exponential', delay: 1_000 },
-      removeOnComplete: { age: 24 * 60 * 60, count: 10_000 },
-      removeOnFail: { age: 7 * 24 * 60 * 60, count: 10_000 },
-    },
-  },
-  [MQ_KEYS.queues.taskProgress]: {
-    defaultJobOptions: {
-      attempts: 10,
-      backoff: { type: 'exponential', delay: 1_000 },
-      removeOnComplete: { age: 24 * 60 * 60, count: 10_000 },
-      removeOnFail: { age: 7 * 24 * 60 * 60, count: 10_000 },
-    },
-  },
   [MQ_KEYS.queues.adminBatch]: {
     defaultJobOptions: {
       attempts: 3,
@@ -35,9 +18,7 @@ const QUEUE_CONFIGS: Readonly<Record<MqQueueKey, MqQueueConfig>> = {
   },
 };
 
-type RegisteredMqJobData =
-  | LocalTransactionMessageJobData
-  | AdminBatchJobData;
+type RegisteredMqJobData = AdminBatchJobData;
 
 const queues = new Map<MqQueueKey, Queue<RegisteredMqJobData>>();
 

@@ -111,7 +111,7 @@ async function readRedisSnapshot(today: string): Promise<AdminOnlineUsersSnapsho
   const nowMs = Date.now();
   await redis.zremrangebyscore(ONLINE_CONNECTIONS_KEY, '-inf', nowMs);
   const [connections, todayPeak, allTimePeak] = await Promise.all([
-    redis.zrange(ONLINE_CONNECTIONS_KEY, 0, -1),
+    redis.zrange(ONLINE_CONNECTIONS_KEY, 0, '-1'),
     redis.get(getTodayPeakKey(today)),
     redis.get(ALL_TIME_PEAK_KEY),
   ]);
@@ -283,7 +283,7 @@ export async function getOnlineCultivatorIds(
   const requested = new Set(cultivatorIds);
   try {
     await redis.zremrangebyscore(ONLINE_CONNECTIONS_KEY, '-inf', Date.now());
-    const connections = await redis.zrange(ONLINE_CONNECTIONS_KEY, 0, -1);
+    const connections = await redis.zrange(ONLINE_CONNECTIONS_KEY, 0, '-1');
     return new Set(
       connections
         .map(parseCultivatorIdFromConnectionMember)

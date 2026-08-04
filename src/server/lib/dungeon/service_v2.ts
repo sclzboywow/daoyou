@@ -1,6 +1,6 @@
 import { renderPrompt } from '@server/lib/prompts';
-import { publishLocalTransactionMessageBestEffort } from '@server/lib/mq/localTransactionMessagePublisher';
-import { createTaskProgressMessage } from '@server/lib/mq/task-progress/message';
+import { createDomainEvent } from '@server/lib/mq/domainEventWriter';
+import { publishTransactionalMessageBestEffort } from '@server/lib/mq/transactionalMessagePublisher';
 import { findActiveCultivatorOwnerId } from '@server/lib/repositories/cultivatorRepository';
 import type { BattleRecordV3 } from '@server/lib/services/battleResult';
 import {
@@ -2179,14 +2179,16 @@ export class DungeonService {
       }
     }
 
-    let taskMessageId: string | undefined;
-    const enqueueTaskProgress = async (tx: DbTransaction) => {
+    let domainEventId: string | undefined;
+    const recordDungeonSettledEvent = async (tx: DbTransaction) => {
       if (!state.runId) throw new Error('副本结算缺少运行编号');
-      const message = await createTaskProgressMessage(
+      const event = await createDomainEvent(
         {
-          payload: {
-            kind: 'dungeon_settlement',
+          type: 'dungeon.run.settled',
+          aggregate: { type: 'dungeon-run', id: state.runId },
+          data: {
             cultivatorId: state.cultivatorId,
+            runId: state.runId,
             mapNodeId: state.mapNodeId,
             outcome: endDisposition,
           },
@@ -2194,7 +2196,7 @@ export class DungeonService {
         },
         tx,
       );
-      taskMessageId = message.id;
+      domainEventId = event.id;
     };
 
     if (!deferPersistence) {
@@ -2203,10 +2205,10 @@ export class DungeonService {
           tx,
           clearRedis: false,
         });
-        await enqueueTaskProgress(tx);
+        await recordDungeonSettledEvent(tx);
       });
       await redis.del(getDungeonKey(state.cultivatorId));
-      publishLocalTransactionMessageBestEffort(taskMessageId, {
+      publishTransactionalMessageBestEffort(domainEventId, {
         source: 'dungeon_settlement',
         cultivatorId: state.cultivatorId,
         runId: state.runId,
@@ -2277,7 +2279,7 @@ export class DungeonService {
           tx,
           clearRedis: false,
         });
-        await enqueueTaskProgress(tx);
+        await recordDungeonSettledEvent(tx);
         return mergeDungeonPersistenceSettlements(
           consumedSettlement,
           gainedSettlement,
@@ -2286,7 +2288,7 @@ export class DungeonService {
       },
       afterCommit: async () => {
         await redis.del(getDungeonKey(state.cultivatorId));
-        publishLocalTransactionMessageBestEffort(taskMessageId, {
+        publishTransactionalMessageBestEffort(domainEventId, {
           source: 'dungeon_settlement',
           cultivatorId: state.cultivatorId,
           runId: state.runId,

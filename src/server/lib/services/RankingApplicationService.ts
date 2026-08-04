@@ -1,6 +1,6 @@
 import type { DbTransaction } from '@server/lib/drizzle/db';
-import { publishLocalTransactionMessageBestEffort } from '@server/lib/mq/localTransactionMessagePublisher';
-import { createTaskProgressMessage } from '@server/lib/mq/task-progress/message';
+import { createDomainEvent } from '@server/lib/mq/domainEventWriter';
+import { publishTransactionalMessageBestEffort } from '@server/lib/mq/transactionalMessagePublisher';
 import {
   acquireChallengeLock,
   addToRanking,
@@ -13,17 +13,13 @@ import {
   updateRanking,
 } from '@server/lib/redis/rankings';
 import { createBattleRecordV3 } from '@server/lib/repositories/battleRecordV3Repository';
-import { createMessage } from '@server/lib/repositories/worldChatRepository';
+import { loadCultivatorCombatInput } from '@server/lib/services/cultivator/CultivatorCombatProjectionReader';
 import { prepareStandardFullBattle } from '@shared/engine/battle-v5/setup/BattleStateStrategy';
 import type { RealmType } from '@shared/types/constants';
 import { playerCommandExecutor } from './CommandExecutors';
-import {
-  loadCultivatorCombatInput,
-} from '@server/lib/services/cultivator/CultivatorCombatProjectionReader';
-import { MailService, type MailAttachment } from './MailService';
-import { readPlayerMailSummary } from './PlayerResourceReaderService';
-import { simulateBattleV5 } from './simulateBattleV5';
 import { readCultivatorPublicIdentity } from './cultivator/CultivatorFactsReader';
+import { MailService, type MailAttachment } from './MailService';
+import { simulateBattleV5 } from './simulateBattleV5';
 
 export function settleRankingDirectEntry<T>(result: T) {
   return {
@@ -50,12 +46,17 @@ export async function executeRankingBattleCommand<T>(args: {
     },
     args.tx,
   );
-  const taskMessage = await createTaskProgressMessage(
+  const domainEvent = await createDomainEvent(
     {
-      payload: {
-        kind: 'activity_event',
+      type: 'ranking.challenge.completed',
+      aggregate: {
+        type: 'cultivator',
+        id: args.cultivatorId,
+      },
+      data: {
         cultivatorId: args.cultivatorId,
-        event: 'ranking_challenge_battled',
+        opponentCultivatorId: args.opponentCultivatorId,
+        battleRecordId: battleRecord.id,
       },
       deduplicationKey: `${args.cultivatorId}:ranking:${battleRecord.id}`,
     },
@@ -64,7 +65,7 @@ export async function executeRankingBattleCommand<T>(args: {
   return {
     result: args.result,
     resourceChanges: [],
-    taskMessageId: taskMessage.id,
+    domainEventId: domainEvent.id,
   };
 }
 
@@ -79,37 +80,6 @@ export class RankingCommandError extends Error {
   }
 }
 
-async function broadcastRankingChange(params: {
-  userId: string;
-  changeType: Exclude<RankingChangeType, null> | 'direct_entry';
-  challengerName: string;
-  targetName?: string;
-  realm: RealmType;
-  rank: number;
-}): Promise<void> {
-  const rumor =
-    params.changeType === 'direct_entry'
-      ? `万界金榜初开，${params.challengerName}登临${params.realm}天骄榜第${params.rank}名。`
-      : params.changeType === 'vacancy_entry'
-        ? `万界金榜有感，${params.challengerName}虽挑战${params.targetName ?? '榜上修士'}未胜，仍补入${params.realm}天骄榜第${params.rank}名。`
-        : `万界金榜有感，${params.challengerName}击败${params.targetName ?? '榜上修士'}，登临${params.realm}天骄榜第${params.rank}名。`;
-  try {
-    await createMessage({
-      senderUserId: params.userId,
-      senderCultivatorId: null,
-      senderName: '修仙界传闻',
-      senderRealm: '炼气',
-      senderRealmStage: '系统',
-      channel: 'system',
-      messageType: 'text',
-      textContent: rumor,
-      payload: { text: rumor },
-    });
-  } catch (error) {
-    console.error('天骄榜名次变动传音发送失败:', error);
-  }
-}
-
 export async function runRankingBattleCommand(args: {
   userId: string;
   cultivatorId: string;
@@ -120,10 +90,7 @@ export async function runRankingBattleCommand(args: {
   const affectsRanking = args.rankingRealm === identity.realm;
   const challengeCheck = await checkDailyChallenges(args.cultivatorId);
   if (!challengeCheck.success) {
-    throw new RankingCommandError(
-      '今日挑战次数已用完（每日限10次）',
-      403,
-    );
+    throw new RankingCommandError('今日挑战次数已用完（每日限10次）', 403);
   }
   const [isEmpty, challengerRank] = await Promise.all([
     isRankingEmpty(args.rankingRealm),
@@ -132,25 +99,42 @@ export async function runRankingBattleCommand(args: {
   const targetId = args.targetId?.trim() || null;
   if (!targetId && affectsRanking && isEmpty && challengerRank === null) {
     await addToRanking(args.rankingRealm, args.cultivatorId, args.userId, 1);
+    let domainEventId: string | undefined;
     const committed = await playerCommandExecutor.executeWithLock({
       userId: args.userId,
       cultivatorId: args.cultivatorId,
       source: 'ranking_challenge_direct_entry',
       allowEmpty: true,
-      command: async () =>
-        settleRankingDirectEntry({
+      command: async (tx) => {
+        const settled = settleRankingDirectEntry({
           type: 'direct_entry' as const,
           realm: args.rankingRealm,
           rank: 1,
           remainingChallenges: challengeCheck.remaining,
-        }),
+        });
+        domainEventId = (
+          await createDomainEvent(
+            {
+              type: 'ranking.position.changed',
+              aggregate: { type: 'cultivator', id: args.cultivatorId },
+              data: {
+                userId: args.userId,
+                cultivatorId: args.cultivatorId,
+                challengerName: identity.name,
+                realm: args.rankingRealm,
+                rank: 1,
+                changeType: 'direct_entry',
+              },
+            },
+            tx,
+          )
+        ).id;
+        return settled;
+      },
     });
-    await broadcastRankingChange({
-      userId: args.userId,
-      changeType: 'direct_entry',
-      challengerName: identity.name,
-      realm: args.rankingRealm,
-      rank: 1,
+    publishTransactionalMessageBestEffort(domainEventId, {
+      source: 'ranking_challenge_direct_entry',
+      cultivatorId: args.cultivatorId,
     });
     return committed;
   }
@@ -212,7 +196,7 @@ export async function runRankingBattleCommand(args: {
     const remainingChallenges = await incrementDailyChallenges(
       args.cultivatorId,
     );
-    let taskMessageId: string | undefined;
+    const domainEventIds: string[] = [];
     const committed = await playerCommandExecutor.executeWithLock({
       userId: args.userId,
       cultivatorId: args.cultivatorId,
@@ -239,22 +223,34 @@ export async function runRankingBattleCommand(args: {
           battleResult,
           tx,
         });
-        taskMessageId = command.taskMessageId;
+        domainEventIds.push(command.domainEventId);
+        if (rankChangeType && newChallengerRank !== null) {
+          const positionEvent = await createDomainEvent(
+            {
+              type: 'ranking.position.changed',
+              aggregate: { type: 'cultivator', id: args.cultivatorId },
+              data: {
+                userId: args.userId,
+                cultivatorId: args.cultivatorId,
+                challengerName: challengerRecord.cultivator.name,
+                targetName: targetRecord.cultivator.name,
+                realm: args.rankingRealm,
+                rank: newChallengerRank,
+                changeType: rankChangeType,
+              },
+              deduplicationKey: `${args.cultivatorId}:${args.rankingRealm}:${command.domainEventId}`,
+            },
+            tx,
+          );
+          domainEventIds.push(positionEvent.id);
+        }
         return command;
       },
     });
-    publishLocalTransactionMessageBestEffort(taskMessageId, {
-      source: 'ranking_challenge_battle',
-      cultivatorId: args.cultivatorId,
-    });
-    if (rankChangeType && newChallengerRank !== null) {
-      await broadcastRankingChange({
-        userId: args.userId,
-        changeType: rankChangeType,
-        challengerName: challengerRecord.cultivator.name,
-        targetName: targetRecord.cultivator.name,
-        realm: args.rankingRealm,
-        rank: newChallengerRank,
+    for (const domainEventId of domainEventIds) {
+      publishTransactionalMessageBestEffort(domainEventId, {
+        source: 'ranking_challenge_battle',
+        cultivatorId: args.cultivatorId,
       });
     }
     return committed;
@@ -276,6 +272,7 @@ export async function sendWeeklyRankingRewardCommand(args: {
     userId: args.userId,
     cultivatorId: args.cultivatorId,
     source: 'rank_weekly_rewards',
+    allowEmpty: true,
     idempotency: {
       key: args.requestKey,
       fingerprint: args.requestFingerprint,
@@ -292,17 +289,9 @@ export async function sendWeeklyRankingRewardCommand(args: {
       if (!mail) {
         throw new Error('排行榜奖励邮件创建失败');
       }
-      const mailSummary = await readPlayerMailSummary(args.cultivatorId, tx);
       return {
         result: { mailId: mail.id },
-        resourceChanges: [
-          {
-            resourceTopic: 'player.mail-summary',
-            eventType: 'mail.rank_weekly_reward.created',
-            operation: 'replace',
-            payload: mailSummary,
-          },
-        ],
+        resourceChanges: [],
       };
     },
   });

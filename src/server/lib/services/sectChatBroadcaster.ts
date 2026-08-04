@@ -1,32 +1,33 @@
 import {
+  encodeNatsSubjectToken,
+  publishNatsCoreMessage,
+  subscribeNatsCoreSubject,
+} from '@server/lib/services/natsCorePubSub';
+import {
   createPubSubEnvelope,
   parsePubSubEnvelope,
 } from '@server/lib/services/pubSubEnvelope';
-import {
-  publishRedisMessage,
-  subscribeRedisChannel,
-} from '@server/lib/services/redisPubSub';
 import type { WorldChatMessageDTO } from '@shared/types/world-chat';
 
 type Listener = (message: WorldChatMessageDTO) => void;
 type SectSubscription = {
   listeners: Set<Listener>;
-  unsubscribeRedis: () => void;
+  unsubscribeNats: () => void;
 };
 
 const subscriptions = new Map<string, SectSubscription>();
 
-function channelForSect(sectId: string) {
-  return `sect-chat:${sectId}`;
+function subjectForSect(sectId: string) {
+  return `daoyou.realtime.sect-chat.${encodeNatsSubjectToken(sectId)}`;
 }
 
 function isSectChatMessage(value: unknown): value is WorldChatMessageDTO {
   return Boolean(
     value &&
-      typeof value === 'object' &&
-      (value as { channel?: unknown }).channel === 'sect' &&
-      typeof (value as { id?: unknown }).id === 'string' &&
-      typeof (value as { sectId?: unknown }).sectId === 'string',
+    typeof value === 'object' &&
+    (value as { channel?: unknown }).channel === 'sect' &&
+    typeof (value as { id?: unknown }).id === 'string' &&
+    typeof (value as { sectId?: unknown }).sectId === 'string',
   );
 }
 
@@ -45,12 +46,15 @@ export function subscribeSectChatMessages(
     const listeners = new Set<Listener>();
     const created: SectSubscription = {
       listeners,
-      unsubscribeRedis: subscribeRedisChannel(channelForSect(sectId), (raw) => {
-        const message = parsePubSubEnvelope(raw, isSectChatMessage);
-        if (message?.sectId === sectId) {
-          notify(created, message);
-        }
-      }),
+      unsubscribeNats: subscribeNatsCoreSubject(
+        subjectForSect(sectId),
+        (raw) => {
+          const message = parsePubSubEnvelope(raw, isSectChatMessage);
+          if (message?.sectId === sectId) {
+            notify(created, message);
+          }
+        },
+      ),
     };
     subscription = created;
     subscriptions.set(sectId, created);
@@ -62,7 +66,7 @@ export function subscribeSectChatMessages(
     if (!current) return;
     current.listeners.delete(listener);
     if (current.listeners.size > 0) return;
-    current.unsubscribeRedis();
+    current.unsubscribeNats();
     subscriptions.delete(sectId);
   };
 }
@@ -75,8 +79,8 @@ export function publishSectChatMessage(
   if (subscription) {
     notify(subscription, message);
   }
-  void publishRedisMessage(
-    channelForSect(sectId),
+  void publishNatsCoreMessage(
+    subjectForSect(sectId),
     JSON.stringify(createPubSubEnvelope(message)),
   );
 }

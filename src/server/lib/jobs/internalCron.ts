@@ -8,7 +8,7 @@ import {
 } from '@server/lib/redis/lock';
 import { getTopRankingCultivatorIds } from '@server/lib/redis/rankings';
 import { getItemLibraryDailyMaterialGenerationSettings } from '@server/lib/repositories/appSettingsRepository';
-import { pruneCompletedLocalTransactionMessages } from '@server/lib/repositories/localTransactionMessageRepository';
+import { pruneMessageConsumptions } from '@server/lib/repositories/messageConsumptionRepository';
 import {
   prunePlayerMutationRequestsOlderThan,
   pruneResourceEventsOlderThan,
@@ -17,6 +17,7 @@ import {
   pruneExpiredData,
   type ExpiredDataCleanupResult,
 } from '@server/lib/repositories/retentionRepository';
+import { prunePublishedTransactionalMessages } from '@server/lib/repositories/transactionalMessageRepository';
 import { expireListings } from '@server/lib/services/AuctionService';
 import { expireBetBattles } from '@server/lib/services/BetBattleService';
 import { dispatchActivities } from '@server/lib/services/AdminActivityService';
@@ -42,9 +43,13 @@ const QI_LOG_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 const DUNGEON_HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const DUNGEON_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const BATTLE_RECORD_V3_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const BET_BATTLE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const REPUTATION_SHOP_PURCHASE_RETENTION_MS = 21 * 24 * 60 * 60 * 1000;
+const SECT_SHOP_PURCHASE_RETENTION_MS = 8 * 7 * 24 * 60 * 60 * 1000;
+const SECT_STIPEND_CLAIM_RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
 const AUCTION_LISTING_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
-const LOCAL_TRANSACTION_MESSAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const TRANSACTIONAL_MESSAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const MESSAGE_CONSUMPTION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type CronJobResult = {
   success: true;
@@ -66,7 +71,8 @@ export type TowerEnemySetsJobResult = CronJobResult & {
 
 export type ExpiredDataCleanupJobResult = CronJobResult & {
   deleted: ExpiredDataCleanupResult & {
-    localTransactionMessages: number;
+    transactionalMessages: number;
+    messageConsumptions: number;
   };
 };
 
@@ -244,11 +250,12 @@ export async function runBetBattleExpireJob(): Promise<CronJobResult> {
   });
 }
 
-export async function runRankRewardsJob(): Promise<RankRewardsJobResult> {
+export async function runRankRewardsJob(
+  scheduledAt = new Date(),
+): Promise<RankRewardsJobResult> {
   return withJobLock('rank-rewards', async () => {
-    const now = new Date();
-    const settlementDate = getSettlementDateCN(now);
-    if (!isSettlementMondayCN(now)) {
+    const settlementDate = getSettlementDateCN(scheduledAt);
+    if (!isSettlementMondayCN(scheduledAt)) {
       return {
         success: true,
         processed: 0,
@@ -343,7 +350,9 @@ export async function runMarketRefreshCronJob(): Promise<CronJobResult> {
   });
 }
 
-export async function runMaterialLibraryDailyGenerationJob(): Promise<CronJobResult> {
+export async function runMaterialLibraryDailyGenerationJob(
+  scheduledAt = new Date(),
+): Promise<CronJobResult> {
   return withJobLock(
     'material-library-daily-generation',
     async () => {
@@ -361,7 +370,7 @@ export async function runMaterialLibraryDailyGenerationJob(): Promise<CronJobRes
         count: settings.count,
         userId: ITEM_LIBRARY_SYSTEM_USER_ID,
         source: 'daily_cron',
-        seed: `daily_cron:${new Date().toISOString()}`,
+        seed: `daily_cron:${getSettlementDateCN(scheduledAt)}`,
       });
 
       return {
@@ -439,15 +448,26 @@ export async function runExpiredDataCleanupJob(): Promise<
           dungeonHistories: new Date(now - DUNGEON_HISTORY_RETENTION_MS),
           dungeonRuns: new Date(now - DUNGEON_RUN_RETENTION_MS),
           battleRecordsV3: new Date(now - BATTLE_RECORD_V3_RETENTION_MS),
+          betBattles: new Date(now - BET_BATTLE_RETENTION_MS),
           reputationShopPurchases: new Date(
             now - REPUTATION_SHOP_PURCHASE_RETENTION_MS,
+          ),
+          sectShopPurchases: new Date(
+            now - SECT_SHOP_PURCHASE_RETENTION_MS,
+          ),
+          sectStipendClaims: new Date(
+            now - SECT_STIPEND_CLAIM_RETENTION_MS,
           ),
           auctionListings: new Date(now - AUCTION_LISTING_RETENTION_MS),
         },
         tx,
       )),
-      localTransactionMessages: await pruneCompletedLocalTransactionMessages(
-        new Date(now - LOCAL_TRANSACTION_MESSAGE_RETENTION_MS),
+      transactionalMessages: await prunePublishedTransactionalMessages(
+        new Date(now - TRANSACTIONAL_MESSAGE_RETENTION_MS),
+        tx,
+      ),
+      messageConsumptions: await pruneMessageConsumptions(
+        new Date(now - MESSAGE_CONSUMPTION_RETENTION_MS),
         tx,
       ),
     }));

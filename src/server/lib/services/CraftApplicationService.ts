@@ -1,8 +1,7 @@
 import type { DbTransaction } from '@server/lib/drizzle/db';
-import { publishLocalTransactionMessageBestEffort } from '@server/lib/mq/localTransactionMessagePublisher';
-import { createTaskProgressMessage } from '@server/lib/mq/task-progress/message';
+import { createDomainEvent } from '@server/lib/mq/domainEventWriter';
+import { publishTransactionalMessageBestEffort } from '@server/lib/mq/transactionalMessagePublisher';
 import { redisLockKeys, withRedisLock } from '@server/lib/redis/lock';
-import { createMessage } from '@server/lib/repositories/worldChatRepository';
 import { getPlayerLoadoutByCultivatorId } from '@server/lib/services/cultivator/CultivatorLoadoutReader';
 import { normalizeFreeformLlmInput } from '@server/utils/llmPayload';
 import type { QiAction } from '@shared/config/qiSystem';
@@ -38,8 +37,6 @@ import {
   type QiSettlementBaseline,
 } from './QiResourceChanges';
 import { QiService } from './QiService';
-
-const WORLD_CHAT_BROADCAST_QUALITY_FLOOR: Quality = '天品';
 
 type CraftTargetPolicy = {
   team: 'enemy' | 'ally' | 'self' | 'any';
@@ -110,7 +107,7 @@ export async function executeCraftCommand(args: {
             input.analysisId,
           );
     let afterCommit: (() => Promise<void>) | undefined;
-    let taskMessageId: string | undefined;
+    const domainEventIds: string[] = [];
     const actionInstanceId = randomUUID();
     const committed = await playerCommandExecutor.executeWithLock({
       userId: args.userId,
@@ -140,19 +137,36 @@ export async function executeCraftCommand(args: {
           metadata: { committedAt: new Date().toISOString() },
           tx,
         });
-        taskMessageId = (
-          await createTaskProgressMessage(
+        domainEventIds.push(
+          await createDomainEvent(
             {
-              payload: {
-                kind: 'activity_event',
+              type: 'alchemy.craft.completed',
+              aggregate: {
+                type: 'cultivator',
+                id: args.cultivatorId,
+              },
+              data: {
                 cultivatorId: args.cultivatorId,
-                event: 'alchemy_crafted',
+                actionInstanceId,
+                mode,
               },
               deduplicationKey: `${args.cultivatorId}:alchemy:${actionInstanceId}`,
             },
             tx,
-          )
-        ).id;
+          ).then((event) => event.id),
+        );
+        const rumorEventId = await createAlchemyItemCreatedEvent(
+          {
+            userId: args.userId,
+            cultivatorId: args.cultivatorId,
+            cultivatorName,
+            actionInstanceId,
+            consumable: (preparedCommit.result as { consumable?: Consumable })
+              .consumable,
+          },
+          tx,
+        );
+        if (rumorEventId) domainEventIds.push(rumorEventId);
         return {
           result: preparedCommit.result,
           resourceChanges: settleAlchemyCraft({
@@ -163,15 +177,12 @@ export async function executeCraftCommand(args: {
       },
     });
     await runAfterCommit(afterCommit, args.cultivatorId, `alchemy_${mode}`);
-    publishLocalTransactionMessageBestEffort(taskMessageId, {
-      source: `alchemy_${mode}`,
-      cultivatorId: args.cultivatorId,
-    });
-    await broadcastAlchemyRumor({
-      userId: args.userId,
-      cultivatorName: cultivatorName,
-      consumable: (committed.result as { consumable?: Consumable }).consumable,
-    });
+    for (const domainEventId of domainEventIds) {
+      publishTransactionalMessageBestEffort(domainEventId, {
+        source: `alchemy_${mode}`,
+        cultivatorId: args.cultivatorId,
+      });
+    }
     return committed;
   }
 
@@ -188,6 +199,7 @@ export async function executeCraftCommand(args: {
     },
   );
   let afterCommit: (() => Promise<void>) | undefined;
+  let domainEventId: string | undefined;
   const actionInstanceId = randomUUID();
   const committed = await playerCommandExecutor.executeWithLock({
     userId: args.userId,
@@ -216,6 +228,16 @@ export async function executeCraftCommand(args: {
         metadata: { committedAt: new Date().toISOString() },
         tx,
       });
+      domainEventId = await createCreationItemCreatedEvent(
+        {
+          userId: args.userId,
+          cultivatorId: args.cultivatorId,
+          cultivatorName,
+          actionInstanceId,
+          item: preparedCommit.result as BroadcastableCreationResult,
+        },
+        tx,
+      );
       return {
         result: preparedCommit.result,
         resourceChanges: await settleCreationCraft({
@@ -234,10 +256,9 @@ export async function executeCraftCommand(args: {
     args.cultivatorId,
     `creation_${creationCraftType}`,
   );
-  await broadcastCreationRumor({
-    userId: args.userId,
-    cultivatorName: cultivatorName,
-    item: committed.result as BroadcastableCreationResult,
+  publishTransactionalMessageBestEffort(domainEventId, {
+    source: `creation_${creationCraftType}`,
+    cultivatorId: args.cultivatorId,
   });
   return committed;
 }
@@ -281,6 +302,8 @@ export async function executeCreationConfirmationCommand(args: {
     args.replaceId ?? null,
   );
   let afterCommit: (() => Promise<void>) | undefined;
+  let domainEventId: string | undefined;
+  const actionInstanceId = randomUUID();
   const committed = await playerCommandExecutor.executeWithLock({
     userId: args.userId,
     cultivatorId: args.cultivatorId,
@@ -289,6 +312,16 @@ export async function executeCreationConfirmationCommand(args: {
     command: async (tx) => {
       const preparedCommit = await prepared.commit(tx);
       afterCommit = preparedCommit.afterCommit;
+      domainEventId = await createCreationItemCreatedEvent(
+        {
+          userId: args.userId,
+          cultivatorId: args.cultivatorId,
+          cultivatorName,
+          actionInstanceId,
+          item: preparedCommit.result as BroadcastableCreationResult,
+        },
+        tx,
+      );
       return {
         result: {
           message: '领悟成功，已纳入道基',
@@ -304,10 +337,9 @@ export async function executeCreationConfirmationCommand(args: {
     },
   });
   await runAfterCommit(afterCommit, args.cultivatorId, 'creation_confirm');
-  await broadcastCreationRumor({
-    userId: args.userId,
-    cultivatorName: cultivatorName,
-    item: committed.result.item as BroadcastableCreationResult,
+  publishTransactionalMessageBestEffort(domainEventId, {
+    source: 'creation_confirm',
+    cultivatorId: args.cultivatorId,
   });
   return { kind: 'committed', committed };
 }
@@ -458,13 +490,8 @@ async function runAfterCommit(
   }
 }
 
-function isBroadcastQuality(quality: string | null): quality is Quality {
-  return (
-    typeof quality === 'string' &&
-    quality in QUALITY_ORDER &&
-    QUALITY_ORDER[quality as Quality] >=
-      QUALITY_ORDER[WORLD_CHAT_BROADCAST_QUALITY_FLOOR]
-  );
+function isKnownQuality(quality: string | null): quality is Quality {
+  return typeof quality === 'string' && quality in QUALITY_ORDER;
 }
 
 function buildCreationShowcaseSnapshot(
@@ -505,79 +532,86 @@ function buildCreationShowcaseSnapshot(
   };
 }
 
-async function broadcastCreationRumor(args: {
-  userId: string;
-  cultivatorName: string;
-  item: BroadcastableCreationResult;
-}): Promise<void> {
+async function createCreationItemCreatedEvent(
+  args: {
+    userId: string;
+    cultivatorId: string;
+    cultivatorName: string;
+    actionInstanceId: string;
+    item: BroadcastableCreationResult;
+  },
+  tx: DbTransaction,
+): Promise<string | undefined> {
   if (
     !args.item.id ||
     args.item.needs_replace ||
-    !isBroadcastQuality(args.item.quality)
+    !isKnownQuality(args.item.quality)
   ) {
-    return;
+    return undefined;
   }
-  const text = `由${args.cultivatorName}炼成，品阶已入${args.item.quality}，灵韵自生，足令诸修侧目。`;
-  try {
-    await createMessage({
-      senderUserId: args.userId,
-      senderCultivatorId: null,
-      senderName: '修仙界传闻',
-      senderRealm: '炼气',
-      senderRealmStage: '系统',
-      channel: 'system',
-      messageType: 'item_showcase',
-      textContent: text,
-      payload: {
+  const event = await createDomainEvent(
+    {
+      type: 'craft.item.created',
+      aggregate: { type: 'creation-product', id: args.item.id },
+      data: {
+        userId: args.userId,
+        cultivatorId: args.cultivatorId,
+        cultivatorName: args.cultivatorName,
         itemType: args.item.productType,
         itemId: args.item.id,
-        snapshot: buildCreationShowcaseSnapshot(args.item),
-        text,
+        itemName: args.item.name,
+        quality: args.item.quality,
+        snapshot: buildCreationShowcaseSnapshot(args.item) as unknown as Record<
+          string,
+          unknown
+        >,
       },
-    });
-  } catch (error) {
-    console.error('造物传闻发送失败:', error);
-  }
+      deduplicationKey: `${args.cultivatorId}:craft-item:${args.actionInstanceId}`,
+    },
+    tx,
+  );
+  return event.id;
 }
 
-async function broadcastAlchemyRumor(args: {
-  userId: string;
-  cultivatorName: string;
-  consumable?: Consumable;
-}): Promise<void> {
-  if (
-    !args.consumable?.id ||
-    !isBroadcastQuality(args.consumable.quality ?? null)
-  ) {
-    return;
+async function createAlchemyItemCreatedEvent(
+  args: {
+    userId: string;
+    cultivatorId: string;
+    cultivatorName: string;
+    actionInstanceId: string;
+    consumable?: Consumable;
+  },
+  tx: DbTransaction,
+): Promise<string | undefined> {
+  const quality = args.consumable?.quality ?? null;
+  if (!args.consumable?.id || !isKnownQuality(quality)) {
+    return undefined;
   }
-  const text = `由${args.cultivatorName}炼成，丹品已入${args.consumable.quality}，药香化霞，足令诸修侧目。`;
-  try {
-    await createMessage({
-      senderUserId: args.userId,
-      senderCultivatorId: null,
-      senderName: '修仙界传闻',
-      senderRealm: '炼气',
-      senderRealmStage: '系统',
-      channel: 'system',
-      messageType: 'item_showcase',
-      textContent: text,
-      payload: {
+  const event = await createDomainEvent(
+    {
+      type: 'craft.item.created',
+      aggregate: { type: 'consumable', id: args.consumable.id },
+      data: {
+        userId: args.userId,
+        cultivatorId: args.cultivatorId,
+        cultivatorName: args.cultivatorName,
         itemType: 'consumable',
         itemId: args.consumable.id,
+        itemName: args.consumable.name,
+        quality,
         snapshot: {
           id: args.consumable.id,
           name: args.consumable.name,
           type: args.consumable.type,
-          quality: args.consumable.quality,
+          quality,
           quantity: args.consumable.quantity,
           description: args.consumable.description,
           spec: args.consumable.spec,
         },
-        text,
       },
-    });
-  } catch (error) {
-    console.error('造物传闻发送失败:', error);
-  }
+      deduplicationKey: `${args.cultivatorId}:craft-item:${args.actionInstanceId}`,
+    },
+    tx,
+  );
+  return event.id;
 }

@@ -1,12 +1,9 @@
 import type { DbTransaction } from '@server/lib/drizzle/db';
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
 import { RESOURCE_DATA_SCHEMAS } from '@shared/contracts/resources';
-import {
-  readPlayerMailSummary,
-  readPlayerTaskSummary,
-} from './PlayerResourceReaderService';
-import { TaskService } from './TaskService';
 import { playerCommandExecutor } from './CommandExecutors';
+import { readPlayerTaskSummary } from './PlayerResourceReaderService';
+import { TaskService } from './TaskService';
 
 export function claimTaskRewardCommand(args: {
   userId: string;
@@ -87,14 +84,7 @@ export async function executeTaskRewardClaimCommand(args: {
     args.taskId,
     args.tx,
   );
-  const mailSummary = await readPlayerMailSummary(
-    args.cultivatorId,
-    args.tx,
-  );
-  const taskSummary = await readPlayerTaskSummary(
-    args.cultivatorId,
-    args.tx,
-  );
+  const taskSummary = await readPlayerTaskSummary(args.cultivatorId, args.tx);
 
   return {
     result,
@@ -113,12 +103,6 @@ export async function executeTaskRewardClaimCommand(args: {
           idKey: 'id',
           items: [result.task],
         },
-      },
-      {
-        resourceTopic: 'player.mail-summary',
-        eventType: 'mail.reward_created',
-        payload: mailSummary,
-        operation: 'merge',
       },
     ],
   };

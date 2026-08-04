@@ -31,6 +31,7 @@ export class GetSectTasksQueryHandler {
     );
     const dateKey = context.clock.dateKey();
     const weekKey = context.clock.weekKey();
+    const now = context.clock.now();
     const records = await context.tasks.list(membership.id, [
       dateKey,
       weekKey,
@@ -104,6 +105,7 @@ export class GetSectTasksQueryHandler {
           definition,
           record: persisted,
           executor,
+          now,
           state,
           enabled,
           disabledReason: enabled

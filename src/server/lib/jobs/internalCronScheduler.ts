@@ -1,14 +1,6 @@
-import {
-  runAuctionExpireJob,
-  runActivityDispatchJob,
-  runBetBattleExpireJob,
-  runExpiredDataCleanupJob,
-  runMarketRefreshCronJob,
-  runMaterialLibraryDailyGenerationJob,
-  runResourceReplayCleanupJob,
-  runRankRewardsJob,
-  runTowerEnemySetRefreshJob,
-} from './internalCron';
+import { publishScheduledBackgroundCommand } from '@server/lib/mq/backgroundCommandPublisher';
+import type { BackgroundCommandType } from '@shared/contracts/backgroundCommands';
+import { runActivityDispatchJob } from './internalCron';
 
 const AUCTION_EXPIRE_SCHEDULE = '*/2 * * * *';
 const ACTIVITY_DISPATCH_SCHEDULE = '*/1 * * * *';
@@ -27,13 +19,20 @@ let schedulerRegistered = false;
 let scheduledTasks: Bun.CronJob[] = [];
 
 async function runScheduledJob(
-  jobName: string,
-  runJob: () => Promise<unknown>,
+  commandType: BackgroundCommandType,
 ): Promise<void> {
   try {
-    await runJob();
+    await publishScheduledBackgroundCommand(commandType);
   } catch (error) {
-    console.error(`[cron] scheduled ${jobName} failed`, error);
+    console.error(`[cron] publish ${commandType} failed`, error);
+  }
+}
+
+async function runActivityDispatch(): Promise<void> {
+  try {
+    await runActivityDispatchJob();
+  } catch (error) {
+    console.error('[cron] scheduled activity-dispatch failed', error);
   }
 }
 
@@ -49,38 +48,26 @@ export function registerInternalCronJobs(
   }
 
   scheduledTasks = [
-    Bun.cron(ACTIVITY_DISPATCH_SCHEDULE, () =>
-      runScheduledJob('activity-dispatch', runActivityDispatchJob),
-    ),
-    Bun.cron(AUCTION_EXPIRE_SCHEDULE, () =>
-      runScheduledJob('auction-expire', runAuctionExpireJob),
-    ),
+    Bun.cron(ACTIVITY_DISPATCH_SCHEDULE, runActivityDispatch),
+    Bun.cron(AUCTION_EXPIRE_SCHEDULE, () => runScheduledJob('auction.expire')),
     Bun.cron(BET_BATTLE_EXPIRE_SCHEDULE, () =>
-      runScheduledJob('bet-battle-expire', runBetBattleExpireJob),
+      runScheduledJob('bet-battle.expire'),
     ),
     Bun.cron(RANK_REWARDS_SCHEDULE, () =>
-      runScheduledJob('rank-rewards', runRankRewardsJob),
+      runScheduledJob('ranking.rewards.distribute'),
     ),
-    Bun.cron(MARKET_REFRESH_SCHEDULE, () =>
-      runScheduledJob('market-refresh', runMarketRefreshCronJob),
-    ),
+    Bun.cron(MARKET_REFRESH_SCHEDULE, () => runScheduledJob('market.refresh')),
     Bun.cron(TOWER_ENEMY_SETS_SCHEDULE, () =>
-      runScheduledJob('tower-enemy-sets', runTowerEnemySetRefreshJob),
+      runScheduledJob('tower.enemy-sets.refresh'),
     ),
     Bun.cron(RESOURCE_REPLAY_CLEANUP_SCHEDULE, () =>
-      runScheduledJob(
-        'resource-replay-cleanup',
-        runResourceReplayCleanupJob,
-      ),
+      runScheduledJob('resource-replay.cleanup'),
     ),
     Bun.cron(EXPIRED_DATA_CLEANUP_SCHEDULE, () =>
-      runScheduledJob('expired-data-cleanup', runExpiredDataCleanupJob),
+      runScheduledJob('expired-data.cleanup'),
     ),
     Bun.cron(MATERIAL_LIBRARY_DAILY_GENERATION_SCHEDULE, () =>
-      runScheduledJob(
-        'material-library-daily-generation',
-        runMaterialLibraryDailyGenerationJob,
-      ),
+      runScheduledJob('material-library.generate'),
     ),
   ];
   schedulerRegistered = true;

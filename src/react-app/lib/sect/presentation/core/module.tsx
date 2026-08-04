@@ -1,4 +1,5 @@
 import {
+  AbandonAction,
   AcceptAction,
   BattleAction,
   ClaimAction,
@@ -143,6 +144,7 @@ export const CORE_SECT_TASK_RENDERER_PLUGIN: SectTaskRendererPluginManifest = {
   sectId: '*',
   actions: [
     { key: 'sect.action.accept', renderer: AcceptAction },
+    { key: 'sect.action.abandon', renderer: AbandonAction },
     { key: 'sect.action.battle', renderer: BattleAction },
     { key: 'sect.action.sweep-entry', renderer: SweepEntryAction },
     { key: 'sect.action.mining-entry', renderer: MiningEntryAction },
@@ -173,6 +175,11 @@ export const CORE_SECT_TASK_RENDERER_PLUGIN: SectTaskRendererPluginManifest = {
     {
       key: 'sect.outcome.accepted',
       schema: z.record(z.string(), z.unknown()),
+      renderer: CompletedOutcome,
+    },
+    {
+      key: 'sect.outcome.abandoned',
+      schema: z.object({ abandoned: z.literal(true) }),
       renderer: CompletedOutcome,
     },
     {

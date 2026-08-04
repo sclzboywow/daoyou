@@ -4,23 +4,24 @@ import type {
 } from '@shared/contracts/resources';
 import { ResourceChangeSchema } from '@shared/contracts/resources';
 import {
-  createPubSubEnvelope,
-  parsePubSubEnvelope,
-} from './pubSubEnvelope';
-import { publishRedisMessage, subscribeRedisChannel } from './redisPubSub';
+  encodeNatsSubjectToken,
+  publishNatsCoreMessage,
+  subscribeNatsCoreSubject,
+} from './natsCorePubSub';
+import { createPubSubEnvelope, parsePubSubEnvelope } from './pubSubEnvelope';
 
 type Listener = (changes: ResourceChange[]) => void;
 
-const RESOURCE_CHANNEL_PREFIX = 'resource-state:';
+const RESOURCE_SUBJECT_PREFIX = 'daoyou.realtime.resource-state';
 const listeners = new Map<string, Set<Listener>>();
-const redisSubscriptions = new Map<string, () => void>();
+const natsSubscriptions = new Map<string, () => void>();
 
 function scopeKey(scope: ResourceScope): string {
   return `${scope.kind}:${scope.id}`;
 }
 
-function channelForScope(scope: ResourceScope): string {
-  return `${RESOURCE_CHANNEL_PREFIX}${scopeKey(scope)}`;
+function subjectForScope(scope: ResourceScope): string {
+  return `${RESOURCE_SUBJECT_PREFIX}.${scope.kind}.${encodeNatsSubjectToken(scope.id)}`;
 }
 
 function isResourceChanges(value: unknown): value is ResourceChange[] {
@@ -32,14 +33,17 @@ function parseEvents(raw: string): ResourceChange[] {
   return changes ? ResourceChangeSchema.array().parse(changes) : [];
 }
 
-function ensureRedisSubscription(scope: ResourceScope): void {
+function ensureNatsSubscription(scope: ResourceScope): void {
   const key = scopeKey(scope);
-  if (redisSubscriptions.has(key)) return;
-  const unsubscribe = subscribeRedisChannel(channelForScope(scope), (raw) => {
-    const events = parseEvents(raw);
-    if (events.length > 0) notifyLocalListeners(scope, events);
-  });
-  redisSubscriptions.set(key, unsubscribe);
+  if (natsSubscriptions.has(key)) return;
+  const unsubscribe = subscribeNatsCoreSubject(
+    subjectForScope(scope),
+    (raw) => {
+      const events = parseEvents(raw);
+      if (events.length > 0) notifyLocalListeners(scope, events);
+    },
+  );
+  natsSubscriptions.set(key, unsubscribe);
 }
 
 function notifyLocalListeners(
@@ -60,13 +64,13 @@ export function subscribeResourceEvents(
     const set = listeners.get(key) ?? new Set<Listener>();
     set.add(listener);
     listeners.set(key, set);
-    ensureRedisSubscription(scope);
+    ensureNatsSubscription(scope);
     return () => {
       set.delete(listener);
       if (set.size === 0) {
         listeners.delete(key);
-        redisSubscriptions.get(key)?.();
-        redisSubscriptions.delete(key);
+        natsSubscriptions.get(key)?.();
+        natsSubscriptions.delete(key);
       }
     };
   });
@@ -88,8 +92,8 @@ export function publishResourceEvents(events: ResourceChange[]): void {
   }
   for (const group of grouped.values()) {
     notifyLocalListeners(group.scope, group.events);
-    void publishRedisMessage(
-      channelForScope(group.scope),
+    void publishNatsCoreMessage(
+      subjectForScope(group.scope),
       JSON.stringify(createPubSubEnvelope(group.events)),
     );
   }

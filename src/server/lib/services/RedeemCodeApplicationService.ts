@@ -1,12 +1,8 @@
-import {
-  redeemCodeClaims,
-  redeemCodes,
-} from '@server/lib/drizzle/schema';
+import { redeemCodeClaims, redeemCodes } from '@server/lib/drizzle/schema';
 import { resolveRedeemCodeRewardAttachments } from '@server/lib/redeem/reward';
 import { and, eq, sql } from 'drizzle-orm';
 import { playerCommandExecutor } from './CommandExecutors';
 import { MailService } from './MailService';
-import { readPlayerMailSummary } from './PlayerResourceReaderService';
 
 export class RedeemClaimError extends Error {
   constructor(
@@ -26,6 +22,7 @@ export function claimRedeemCode(args: {
     userId: args.userId,
     cultivatorId: args.cultivatorId,
     source: 'redeem_code_claim',
+    allowEmpty: true,
     command: async (tx) => {
       const redeemCode = await tx.query.redeemCodes.findFirst({
         where: eq(redeemCodes.code, args.code),
@@ -86,23 +83,12 @@ export function claimRedeemCode(args: {
         cultivatorId: args.cultivatorId,
         mailId: mail.id,
       });
-      const mailSummary = await readPlayerMailSummary(
-        args.cultivatorId,
-        tx,
-      );
       return {
         result: {
           message: '兑换成功，奖励已通过传音玉简发放',
           mailId: mail.id,
         },
-        resourceChanges: [
-          {
-            resourceTopic: 'player.mail-summary',
-            eventType: 'mail.redeem_code.created',
-            operation: 'replace',
-            payload: mailSummary,
-          },
-        ],
+        resourceChanges: [],
       };
     },
   });

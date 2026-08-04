@@ -169,6 +169,20 @@
       "when": 1785746854884,
       "tag": "0023_official_legacy_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785770540240,
+      "tag": "0024_mute_molten_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785824804443,
+      "tag": "0025_burly_paladin",
+      "breakpoints": true
     }
   ]
 }

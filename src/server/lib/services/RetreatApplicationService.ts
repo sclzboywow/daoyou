@@ -1,11 +1,11 @@
 import { consumeLifespanAndHandleDepletion } from '@server/lib/lifespan/handleLifespan';
+import { createDomainEvent } from '@server/lib/mq/domainEventWriter';
+import { publishTransactionalMessageBestEffort } from '@server/lib/mq/transactionalMessagePublisher';
 import {
   redisLockKeys,
   withRedisLock,
   type RedisLeaseContext,
 } from '@server/lib/redis/lock';
-import { removeFromAllRankingRealmsExcept } from '@server/lib/redis/rankings';
-import { createMessage } from '@server/lib/repositories/worldChatRepository';
 import { loadPlayerRetreatFacts } from '@server/lib/services/cultivator/CultivatorConditionFactsReader';
 import {
   addBreakthroughHistoryEntry,
@@ -23,7 +23,6 @@ import {
   attemptBreakthrough,
   performCultivation,
 } from '@shared/engine/cultivation/CultivationEngine';
-import type { RealmType } from '@shared/types/constants';
 import type { BreakthroughHistoryEntry } from '@shared/types/cultivator';
 import { randomUUID } from 'crypto';
 import { playerCommandExecutor } from './CommandExecutors';
@@ -46,22 +45,6 @@ export class RetreatCommandError extends Error {
   ) {
     super(message);
   }
-}
-
-function buildMajorBreakthroughRumor(
-  cultivatorName: string,
-  toRealm?: string,
-  toStage?: string,
-): string {
-  const target = `${toRealm ?? '未知境界'}${toStage ?? ''}`;
-  const templates = [
-    `${cultivatorName}闭关洞府霞光冲霄，竟一举破境，踏入「${target}」！`,
-    `有修士夜观天象见异光东来，传闻${cultivatorName}已至「${target}」！`,
-    `${cultivatorName}冲关成功，道音震荡八方，自此迈入「${target}」！`,
-    `灵潮翻涌，雷声隐隐，${cultivatorName}于万众传闻中晋升「${target}」！`,
-    `${cultivatorName}破开桎梏，境界再上一重楼，正式踏入「${target}」！`,
-  ];
-  return templates[Math.floor(Math.random() * templates.length)];
 }
 
 function buildLifespanHistoryEntry(
@@ -185,53 +168,22 @@ export function executeRetreatCommand(args: {
             },
           }
         : null;
-      const isMajorBreakthrough =
-        result.summary.success &&
-        result.summary.toRealm &&
-        result.summary.toRealm !== result.summary.fromRealm;
       const retreatResult: RetreatResultData = {
         summary: result.summary,
         storyType: storySource ? 'breakthrough' : null,
         action: 'breakthrough',
       };
-      const committed = await commitBreakthroughRetreat({
+      const { committed, domainEventId } = await commitBreakthroughRetreat({
         userId: args.userId,
         cultivatorId: args.cultivatorId,
         result,
         retreatResult,
         lease,
       });
-
-      if (isMajorBreakthrough) {
-        const rumor = buildMajorBreakthroughRumor(
-          result.cultivator.name,
-          result.summary.toRealm,
-          result.summary.toStage,
-        );
-        try {
-          await createMessage({
-            senderUserId: args.userId,
-            senderCultivatorId: null,
-            senderName: '修仙界传闻',
-            senderRealm: '炼气',
-            senderRealmStage: '系统',
-            channel: 'system',
-            messageType: 'text',
-            textContent: rumor,
-            payload: { text: rumor },
-          });
-        } catch (error) {
-          console.error('突破传闻发送失败:', error);
-        }
-        try {
-          await removeFromAllRankingRealmsExcept(
-            args.cultivatorId,
-            result.summary.toRealm as RealmType,
-          );
-        } catch (error) {
-          console.error('大境界突破后清理天骄榜旧境界失败:', error);
-        }
-      }
+      publishTransactionalMessageBestEffort(domainEventId, {
+        source: 'retreat_breakthrough',
+        cultivatorId: args.cultivatorId,
+      });
       return {
         committed,
         storySource,
@@ -356,7 +308,7 @@ export async function commitCultivationRetreat(args: {
   return { committed, lifespanStoryPayload };
 }
 
-export function commitBreakthroughRetreat(args: {
+export async function commitBreakthroughRetreat(args: {
   userId: string;
   cultivatorId: string;
   result: ReturnType<typeof attemptBreakthrough>;
@@ -364,7 +316,8 @@ export function commitBreakthroughRetreat(args: {
   lease: RedisLeaseContext;
 }) {
   const actionInstanceId = randomUUID();
-  return playerCommandExecutor.execute({
+  let domainEventId: string | undefined;
+  const committed = await playerCommandExecutor.execute({
     coordination: { mode: 'redis', lease: args.lease },
     userId: args.userId,
     cultivatorId: args.cultivatorId,
@@ -410,6 +363,36 @@ export function commitBreakthroughRetreat(args: {
           tx,
         });
       }
+      if (args.result.summary.success) {
+        const fromRealm = args.result.summary.fromRealm;
+        const fromStage = args.result.summary.fromStage;
+        const toRealm = args.result.summary.toRealm;
+        const toStage = args.result.summary.toStage;
+        if (!toRealm || !toStage) {
+          throw new Error('突破成功但缺少目标境界');
+        }
+        domainEventId = (
+          await createDomainEvent(
+            {
+              type: 'cultivator.realm.changed',
+              aggregate: { type: 'cultivator', id: args.cultivatorId },
+              data: {
+                userId: args.userId,
+                cultivatorId: args.cultivatorId,
+                actionInstanceId,
+                cultivatorName: next.name,
+                fromRealm,
+                fromStage,
+                toRealm,
+                toStage,
+                major: toRealm !== fromRealm,
+              },
+              deduplicationKey: `${args.cultivatorId}:realm:${actionInstanceId}`,
+            },
+            tx,
+          )
+        ).id;
+      }
       return {
         result: args.retreatResult,
         resourceChanges: breakthroughChanges({
@@ -432,4 +415,5 @@ export function commitBreakthroughRetreat(args: {
       };
     },
   });
+  return { committed, domainEventId };
 }

@@ -48,16 +48,16 @@ function shouldResetRedisClient(error: unknown): boolean {
 
 function createRedisClient(
   redisUrl: string,
-  options: { bullMqWorker?: boolean; label?: string } = {},
+  options: { label?: string } = {},
 ): Redis {
   const label = options.label ?? 'redis';
   const client = new Redis(redisUrl, {
     lazyConnect: true,
     connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
-    commandTimeout: options.bullMqWorker ? undefined : REDIS_COMMAND_TIMEOUT_MS,
-    socketTimeout: options.bullMqWorker ? undefined : REDIS_SOCKET_TIMEOUT_MS,
+    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
+    socketTimeout: REDIS_SOCKET_TIMEOUT_MS,
     keepAlive: REDIS_KEEP_ALIVE_MS,
-    maxRetriesPerRequest: options.bullMqWorker ? null : 1,
+    maxRetriesPerRequest: 1,
     retryStrategy(times) {
       return Math.min(times * 200, REDIS_MAX_RETRY_DELAY_MS);
     },
@@ -80,7 +80,7 @@ function createRedisClient(
   });
   client.on('end', () => {
     console.error(`[${label}] reconnect attempts stopped`);
-    if (!options.bullMqWorker) clearRedisClientIfCurrent(client);
+    clearRedisClientIfCurrent(client);
   });
   client.on('error', (error) => {
     console.error(`[${label}] error`, error);
@@ -100,27 +100,6 @@ function getRedisClient(): Redis {
   }
 
   return redisClient;
-}
-
-export function createBullMqWorkerRedisConnection(): Redis {
-  const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) {
-    throw new Error('REDIS_URL is required before starting BullMQ workers');
-  }
-  return createRedisClient(redisUrl, {
-    bullMqWorker: true,
-    label: 'redis:bullmq-worker',
-  });
-}
-
-export function createBullMqProducerRedisConnection(): Redis {
-  const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) {
-    throw new Error('REDIS_URL is required before using BullMQ');
-  }
-  return createRedisClient(redisUrl, {
-    label: 'redis:bullmq-producer',
-  });
 }
 
 export async function getRedisHealthStatus(): Promise<

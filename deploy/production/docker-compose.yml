@@ -1,6 +1,25 @@
 name: daoyou-official
 
 services:
+  nats:
+    image: docker.m.daocloud.io/library/nats:2.11-alpine
+    container_name: daoyou-nats
+    restart: unless-stopped
+    command: ["-c", "/etc/nats/nats.conf"]
+    volumes:
+      - /home/ubuntu/daoyou-runtime/nats/nats.conf:/etc/nats/nats.conf:ro
+      - nats-data:/data/jetstream
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8222/healthz | grep -q ok",
+        ]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+
   app:
     image: ${DAOYOU_APP_IMAGE:?DAOYOU_APP_IMAGE is required}
     container_name: daoyou-hono
@@ -11,6 +30,9 @@ services:
       default:
         aliases:
           - app
+    depends_on:
+      nats:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -45,3 +67,6 @@ networks:
   default:
     external: true
     name: daoyou_default
+
+volumes:
+  nats-data:

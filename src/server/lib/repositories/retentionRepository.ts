@@ -3,11 +3,14 @@ import { getExecutor } from '@server/lib/drizzle/db';
 import {
   auctionListings,
   battleRecordsV3,
+  betBattles,
   dungeonHistories,
   dungeonRuns,
   mails,
   qiLogs,
   reputationShopPurchases,
+  sectShopPurchases,
+  sectStipendClaims,
 } from '@server/lib/drizzle/schema';
 import { and, inArray, lt, ne, sql } from 'drizzle-orm';
 
@@ -17,7 +20,10 @@ export type ExpiredDataCleanupCutoffs = {
   dungeonHistories: Date;
   dungeonRuns: Date;
   battleRecordsV3: Date;
+  betBattles: Date;
   reputationShopPurchases: Date;
+  sectShopPurchases: Date;
+  sectStipendClaims: Date;
   auctionListings: Date;
 };
 
@@ -27,7 +33,10 @@ export type ExpiredDataCleanupResult = {
   dungeonHistories: number;
   dungeonRuns: number;
   battleRecordsV3: number;
+  betBattles: number;
   reputationShopPurchases: number;
+  sectShopPurchases: number;
+  sectStipendClaims: number;
   auctionListings: number;
 };
 
@@ -85,6 +94,18 @@ export async function pruneExpiredData(
       .returning({ id: battleRecordsV3.id }),
   );
 
+  const betBattlesDeleted = await deleteExpiredRows(q, (executor) =>
+    executor
+      .delete(betBattles)
+      .where(
+        and(
+          inArray(betBattles.status, ['settled', 'cancelled', 'expired']),
+          lt(betBattles.createdAt, cutoffs.betBattles),
+        ),
+      )
+      .returning({ id: betBattles.id }),
+  );
+
   const reputationShopPurchasesDeleted = await deleteExpiredRows(
     q,
     (executor) =>
@@ -97,6 +118,20 @@ export async function pruneExpiredData(
           ),
         )
         .returning({ id: reputationShopPurchases.id }),
+  );
+
+  const sectShopPurchasesDeleted = await deleteExpiredRows(q, (executor) =>
+    executor
+      .delete(sectShopPurchases)
+      .where(lt(sectShopPurchases.createdAt, cutoffs.sectShopPurchases))
+      .returning({ id: sectShopPurchases.id }),
+  );
+
+  const sectStipendClaimsDeleted = await deleteExpiredRows(q, (executor) =>
+    executor
+      .delete(sectStipendClaims)
+      .where(lt(sectStipendClaims.claimedAt, cutoffs.sectStipendClaims))
+      .returning({ id: sectStipendClaims.id }),
   );
 
   const auctionListingsDeleted = await deleteExpiredRows(q, (executor) =>
@@ -118,7 +153,10 @@ export async function pruneExpiredData(
     dungeonHistories: dungeonHistoriesDeleted,
     dungeonRuns: dungeonRunsDeleted,
     battleRecordsV3: battleRecordsV3Deleted,
+    betBattles: betBattlesDeleted,
     reputationShopPurchases: reputationShopPurchasesDeleted,
+    sectShopPurchases: sectShopPurchasesDeleted,
+    sectStipendClaims: sectStipendClaimsDeleted,
     auctionListings: auctionListingsDeleted,
   };
 }

@@ -1,7 +1,3 @@
-import {
-  SECT_FACILITY_CONSTRUCTION_MESSAGE_KEY,
-  SectFacilityConstructionMessagePayloadSchema,
-} from '@server/lib/mq/sect-construction/message';
 import { getSectConstructionDailyStatus } from '@server/lib/redis/sectConstructionDaily';
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
 import type { SectConstructionMemberData } from '@shared/contracts/sect';
@@ -85,18 +81,23 @@ export class SectConstructionApplicationService {
       'construction_donation',
       input.referenceId,
     );
-    const message = await context.messages.create({
-      messageKey: SECT_FACILITY_CONSTRUCTION_MESSAGE_KEY,
-      payload: SectFacilityConstructionMessagePayloadSchema.parse({
+    const event = await context.events.create({
+      type: 'sect.construction.donated',
+      aggregate: { type: 'sect', id: membership.sectId },
+      data: {
+        cultivatorId,
         sectId: membership.sectId,
         facilityKey: input.facilityKey,
+        spiritStones: quote.spiritStones,
         constructionPoints: quote.constructionPoints,
-      }),
+        contribution: quote.contribution,
+        referenceId: input.referenceId,
+      },
       deduplicationKey: `${cultivatorId}:${input.referenceId}`,
     });
     return {
       result: {
-        messageId: message.id,
+        eventId: event.id,
         member: input.dailyStatus,
       },
       resourceChanges: [

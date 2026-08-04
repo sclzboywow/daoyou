@@ -1,9 +1,6 @@
 import { isRedisConfigured } from '@server/lib/redis';
 import type { Worker } from 'bullmq';
 import { MQ_KEYS } from './mqKeys';
-import { startLocalTransactionOutboxRelay } from './outboxRelay';
-import { createSectConstructionWorker } from './sect-construction/worker';
-import { createTaskProgressWorker } from './task-progress/worker';
 import { createAdminBatchWorker } from './admin-batch/worker';
 import { startAdminBatchRecovery } from './admin-batch/recovery';
 
@@ -26,14 +23,6 @@ const WORKER_REGISTRATIONS: readonly MqWorkerRegistration[] = [
     queueKey: MQ_KEYS.queues.adminBatch,
     createWorker: createAdminBatchWorker,
   },
-  {
-    queueKey: MQ_KEYS.queues.sectFacilityConstruction,
-    createWorker: createSectConstructionWorker,
-  },
-  {
-    queueKey: MQ_KEYS.queues.taskProgress,
-    createWorker: createTaskProgressWorker,
-  },
 ];
 
 /**
@@ -44,10 +33,6 @@ const AUXILIARY_REGISTRATIONS: readonly MqAuxiliaryRegistration[] = [
   {
     name: 'admin-batch-recovery',
     start: startAdminBatchRecovery,
-  },
-  {
-    name: 'local-transaction-outbox-relay',
-    start: startLocalTransactionOutboxRelay,
   },
 ];
 
