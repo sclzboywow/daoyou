@@ -22,9 +22,15 @@ WEB_STAGE="/home/ubuntu/daoyou/dist-web.next-$RELEASE_ID"
 WEB_BACKUP="/home/ubuntu/daoyou/dist-web.pre-$RELEASE_ID"
 BACKUP_FILE="$RUNTIME_DIR/backups/pre-$RELEASE_ID.dump"
 PREFLIGHT_CONTAINER="daoyou-preflight-$RELEASE_ID"
+DEPLOY_BACKUP_RETENTION_COUNT="${DAOYOU_DEPLOY_BACKUP_RETENTION_COUNT:-3}"
 
 if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "Invalid release id: $RELEASE_ID" >&2
+  exit 1
+fi
+
+if ! [[ "$DEPLOY_BACKUP_RETENTION_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+  echo "DAOYOU_DEPLOY_BACKUP_RETENTION_COUNT must be a positive integer" >&2
   exit 1
 fi
 
@@ -177,6 +183,26 @@ curl -fsS -o /dev/null https://yzdoc.cn/api/health-check
 
 cp -a "$RELEASE_DIR/release.json" "$RUNTIME_DIR/current-release.json"
 trap - ERR
+
+mapfile -t expired_deploy_backups < <(
+  find "$RUNTIME_DIR/backups" -maxdepth 1 -type f -name 'pre-*.dump' \
+    -printf '%T@|%p\n' \
+    | sort -t'|' -k1,1nr \
+    | tail -n "+$((DEPLOY_BACKUP_RETENTION_COUNT + 1))" \
+    | cut -d'|' -f2-
+)
+
+for expired_backup in "${expired_deploy_backups[@]}"; do
+  case "$expired_backup" in
+    "$RUNTIME_DIR/backups/"pre-*.dump)
+      rm -f -- "$expired_backup"
+      ;;
+    *)
+      echo "Refusing unexpected deployment backup path: $expired_backup" >&2
+      exit 1
+      ;;
+  esac
+done
 
 echo "==> Production release deployed"
 echo "release=$RELEASE_ID"
