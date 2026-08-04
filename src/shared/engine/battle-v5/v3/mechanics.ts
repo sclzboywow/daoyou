@@ -21,7 +21,16 @@ export type AbilityTransformModifierV3 =
   | { kind: 'force_critical' }
   | { kind: 'stored_damage' };
 
-export type DamageMemoryReleaseKindV3 =
+export type MemoryRecordSourceV3 =
+  | 'damage_taken'
+  | 'damage_dealt'
+  | 'heal'
+  | 'shield'
+  | 'critical_taken'
+  | 'shield_break'
+  | 'shield_absorbed';
+
+export type MemoryReleaseKindV3 =
   'damage' | 'heal' | 'shield' | 'reflect' | 'counter' | 'follow_up';
 
 /**
@@ -61,13 +70,16 @@ export type CombatMechanicPayloadV3 =
       rounds: number;
     }
   | {
-      kind: 'damage_memory_record';
-      amount: number;
+      kind: 'memory_record';
+      source: MemoryRecordSourceV3;
+      sampledAmount: number;
+      before: number;
+      after: number;
     }
   | {
-      kind: 'damage_memory_release';
+      kind: 'memory_release';
       amount: number;
-      releaseAs: DamageMemoryReleaseKindV3;
+      releaseAs: MemoryReleaseKindV3;
     }
   | {
       kind: 'control_skip';
@@ -86,7 +98,7 @@ export type CombatMechanicPayloadV3 =
 
 export const COMBAT_MECHANIC_CUE_KINDS_V3 = [
   'tag_trigger',
-  'damage_memory_release',
+  'memory_release',
 ] as const satisfies readonly CombatMechanicPayloadV3['kind'][];
 
 export type CombatMechanicCueKindV3 =

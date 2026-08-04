@@ -536,8 +536,31 @@ export class BattleRecordValidatorV3 {
         break;
       case 'hp_sacrifice':
       case 'mana_burn':
-      case 'damage_memory_record':
         this.assertPositiveFinite(payload.amount, fact, 'amount');
+        break;
+      case 'memory_record':
+        if (
+          ![
+            'damage_taken',
+            'damage_dealt',
+            'heal',
+            'shield',
+            'critical_taken',
+            'shield_break',
+            'shield_absorbed',
+          ].includes(payload.source)
+        ) {
+          throw new Error(
+            `BattleRecordV3 mechanic fact ${fact.id} has invalid memory source`,
+          );
+        }
+        this.assertPositiveFinite(
+          payload.sampledAmount,
+          fact,
+          'sampledAmount',
+        );
+        this.assertNonNegativeFinite(payload.before, fact, 'before');
+        this.assertNonNegativeFinite(payload.after, fact, 'after');
         break;
       case 'damage_defer':
         this.assertPositiveFinite(payload.amount, fact, 'amount');
@@ -551,7 +574,7 @@ export class BattleRecordValidatorV3 {
           );
         }
         break;
-      case 'damage_memory_release':
+      case 'memory_release':
         this.assertPositiveFinite(payload.amount, fact, 'amount');
         if (
           ![

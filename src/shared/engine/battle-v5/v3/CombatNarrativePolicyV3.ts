@@ -77,8 +77,12 @@ export class CombatNarrativePolicyV3 {
     ) {
       return true;
     }
-    if (fact.type === 'mechanic' && this.catalog.importance(fact) === 'cue') {
-      return this.hasLinkedResult(fact, facts);
+    if (fact.type === 'mechanic') {
+      const policy = this.catalog.concisePolicy(fact);
+      if (policy === 'detailed_only') return true;
+      if (policy === 'hide_when_result') {
+        return this.hasLinkedResult(fact, facts);
+      }
     }
     return false;
   }

@@ -1745,13 +1745,19 @@ describe('combat facts V3', () => {
         { kind: 'cooldown_change', abilityName: '一叹', rounds: -1 },
         '冷却缩短 1 回合',
       ],
-      damage_memory_record: [
-        { kind: 'damage_memory_record', amount: 215 },
-        '记录 215 点伤害',
+      memory_record: [
+        {
+          kind: 'memory_record',
+          source: 'damage_taken',
+          sampledAmount: 215,
+          before: 80,
+          after: 295,
+        },
+        '记录受到的伤害 215，储存 80 → 295',
       ],
-      damage_memory_release: [
-        { kind: 'damage_memory_release', amount: 215, releaseAs: 'damage' },
-        '转化为 215 点伤害',
+      memory_release: [
+        { kind: 'memory_release', amount: 215, releaseAs: 'damage' },
+        '生成 215 点伤害',
       ],
       control_skip: [
         { kind: 'control_skip', controlName: '失魂' },
@@ -1801,8 +1807,136 @@ describe('combat facts V3', () => {
         .format(sequence)
         .join('\n');
       expect(output).toContain(expected);
-      expect(output).not.toMatch(/数值：|ability_transform|damage_memory/);
+      expect(output).not.toMatch(/数值：|ability_transform|memory_record/);
     }
+  });
+
+  it('keeps memory bookkeeping out of concise logs', () => {
+    const origin: CombatOriginV3 = {
+      kind: 'owned',
+      owner: { id: 'owner', name: '归属者' },
+      carrier: { kind: 'gongfa', id: 'memory-art', name: '归藏诀' },
+    };
+    const sequence: CombatSequenceV3 = {
+      id: 'sequence:memory-bookkeeping',
+      turn: 1,
+      phase: 'action_after',
+      facts: [
+        {
+          id: 'memory-record',
+          type: 'mechanic',
+          trace: {
+            eventId: 'memory-record',
+            sequenceId: 'sequence:memory-bookkeeping',
+            ordinal: 1,
+          },
+          origin,
+          target: { id: 'owner', name: '归属者' },
+          code: 'stored-heal',
+          payload: {
+            kind: 'memory_record',
+            source: 'heal',
+            sampledAmount: 100,
+            before: 80,
+            after: 150,
+          },
+        },
+        {
+          id: 'memory-release',
+          type: 'mechanic',
+          trace: {
+            eventId: 'memory-release',
+            sequenceId: 'sequence:memory-bookkeeping',
+            ordinal: 2,
+            narrativeCauseId: 'cause:memory-release',
+          },
+          narrative: { causeId: 'cause:memory-release', role: 'cue' },
+          origin,
+          target: { id: 'owner', name: '归属者' },
+          code: 'stored-heal',
+          payload: {
+            kind: 'memory_release',
+            amount: 75,
+            releaseAs: 'heal',
+          },
+        },
+      ],
+    };
+
+    const concise = new CombatPresenterV3('concise')
+      .format(sequence)
+      .join('\n');
+    const detailed = new CombatPresenterV3('detailed')
+      .format(sequence)
+      .join('\n');
+
+    expect(concise).toBe('');
+    expect(detailed).toContain('记录治疗量 100，储存 80 → 150');
+    expect(detailed).toContain('释放记录，生成 75 点治疗');
+  });
+
+  it('keeps the final memory result in concise logs', () => {
+    const owner = { id: 'owner', name: '归属者' };
+    const origin: CombatOriginV3 = {
+      kind: 'owned',
+      owner,
+      carrier: { kind: 'gongfa', id: 'memory-art', name: '归藏诀' },
+    };
+    const causeId = 'cause:memory-release';
+    const sequence: CombatSequenceV3 = {
+      id: 'sequence:memory-result',
+      turn: 1,
+      phase: 'action_after',
+      facts: [
+        {
+          id: 'memory-release',
+          type: 'mechanic',
+          trace: {
+            eventId: 'memory-release',
+            sequenceId: 'sequence:memory-result',
+            ordinal: 1,
+            narrativeCauseId: causeId,
+          },
+          narrative: { causeId, role: 'cue' },
+          origin,
+          target: owner,
+          code: 'stored-heal',
+          payload: {
+            kind: 'memory_release',
+            amount: 75,
+            releaseAs: 'heal',
+          },
+        },
+        {
+          id: 'memory-recovery',
+          type: 'recovery',
+          trace: {
+            eventId: 'memory-recovery',
+            sequenceId: 'sequence:memory-result',
+            ordinal: 2,
+            narrativeCauseId: causeId,
+          },
+          narrative: { causeId, role: 'result' },
+          origin,
+          target: owner,
+          resource: 'hp',
+          amount: 40,
+          after: 100,
+        },
+      ],
+    };
+
+    const concise = new CombatPresenterV3('concise')
+      .format(sequence)
+      .join('\n');
+    const detailed = new CombatPresenterV3('detailed')
+      .format(sequence)
+      .join('\n');
+
+    expect(concise).toContain('恢复 40 点气血');
+    expect(concise).not.toContain('释放记录');
+    expect(detailed).toContain('释放记录，生成 75 点治疗');
+    expect(detailed).toContain('恢复 40 点气血');
   });
 
   it('renders every top-level fact type', () => {

@@ -29,7 +29,7 @@ export class DamageMemoryEffect extends GameplayEffect {
     if (this.params.mode === 'record') {
       const amount = this.getRecordAmount(context);
       if (amount > 0) {
-        rememberAmount(
+        const stored = rememberAmount(
           owner,
           this.params.key,
           amount,
@@ -38,7 +38,13 @@ export class DamageMemoryEffect extends GameplayEffect {
         commitMechanicResultV3(context, {
           code: this.params.key,
           target: owner,
-          payload: { kind: 'damage_memory_record', amount },
+          payload: {
+            kind: 'memory_record',
+            source: this.params.event ?? 'damage_taken',
+            sampledAmount: amount,
+            before: stored.before,
+            after: stored.after,
+          },
         });
       }
       return;
@@ -156,7 +162,7 @@ export class DamageMemoryEffect extends GameplayEffect {
       type: 'mechanic',
       code: this.params.key,
       payload: {
-        kind: 'damage_memory_release',
+        kind: 'memory_release',
         amount,
         releaseAs:
           this.params.releaseAs === 'resolved_follow_up'

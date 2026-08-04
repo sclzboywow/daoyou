@@ -312,14 +312,16 @@ export function rememberAmount(
   key: string,
   amount: number,
   maxStored = Number.POSITIVE_INFINITY,
-): void {
+): { before: number; after: number } {
   const memory = getBattleRuntimeState(unit).memories.get(key) ?? {
     amount: 0,
     count: 0,
   };
+  const before = memory.amount;
   memory.amount = Math.min(maxStored, memory.amount + Math.max(0, amount));
   memory.count += 1;
   getBattleRuntimeState(unit).memories.set(key, memory);
+  return { before, after: memory.amount };
 }
 
 export function readMemory(unit: Unit, key: string): DamageMemoryEntry {

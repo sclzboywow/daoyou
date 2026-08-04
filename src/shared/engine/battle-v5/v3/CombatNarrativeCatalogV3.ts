@@ -1,9 +1,9 @@
 import type {
   AbilityTransformModifierV3,
   CombatMechanicPayloadV3,
-  DamageMemoryReleaseKindV3,
+  MemoryRecordSourceV3,
+  MemoryReleaseKindV3,
 } from './mechanics';
-import { isCombatMechanicCuePayloadV3 } from './mechanics';
 import type {
   CombatFactV3,
   PresentedLogLineV3,
@@ -20,11 +20,15 @@ type MechanicFormatterV3<K extends MechanicKindV3> = (
   payload: MechanicPayloadV3<K>,
   fact: MechanicFactV3,
 ) => PresentedLogPartV3[];
-export type CombatMechanicImportanceV3 = 'result' | 'cue';
+export type CombatMechanicConcisePolicyV3 =
+  | 'show'
+  | 'hide_when_result'
+  | 'detailed_only';
 type MechanicNarrativeDefinitionMapV3 = {
   [K in MechanicKindV3]: {
     format: MechanicFormatterV3<K>;
     attributionLink: NonNullable<PresentedLogLineV3['attributionLink']>;
+    concise: CombatMechanicConcisePolicyV3;
   };
 };
 
@@ -52,7 +56,17 @@ const ABILITY_MODIFIER_TEXT: Record<
   stored_damage: '附加已记录伤害',
 };
 
-const RELEASE_TEXT: Record<DamageMemoryReleaseKindV3, string> = {
+const MEMORY_RECORD_TEXT: Record<MemoryRecordSourceV3, string> = {
+  damage_taken: '受到的伤害',
+  damage_dealt: '造成的伤害',
+  heal: '治疗量',
+  shield: '护盾量',
+  critical_taken: '受到的暴击伤害',
+  shield_break: '破盾量',
+  shield_absorbed: '护盾吸收量',
+};
+
+const RELEASE_TEXT: Record<MemoryReleaseKindV3, string> = {
   damage: '伤害',
   heal: '治疗',
   shield: '护盾',
@@ -72,6 +86,7 @@ function abilityModifierText(modifier: AbilityTransformModifierV3): string {
 
 const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
   ability_transform: {
+    concise: 'show',
     attributionLink: 'caused',
     format: (payload) => [
       part('接下来 '),
@@ -85,6 +100,7 @@ const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
     ],
   },
   ability_lock: {
+    concise: 'show',
     attributionLink: 'caused',
     format: (payload) => [
       part(`封禁《${payload.abilityName}》`, 'ability', 'ability'),
@@ -94,10 +110,12 @@ const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
     ],
   },
   tag_trigger: {
+    concise: 'hide_when_result',
     attributionLink: 'context',
     format: (payload) => [part(`触发「${payload.label}」`, 'status')],
   },
   hp_sacrifice: {
+    concise: 'show',
     attributionLink: 'caused',
     format: (payload) => [
       part('消耗 '),
@@ -106,6 +124,7 @@ const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
     ],
   },
   damage_defer: {
+    concise: 'show',
     attributionLink: 'caused',
     format: (payload) => [
       part('将 '),
@@ -116,6 +135,7 @@ const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
     ],
   },
   mana_burn: {
+    concise: 'show',
     attributionLink: 'caused',
     format: (payload, fact) => [
       part(`燃烧「${fact.target.name}」`, 'unit'),
@@ -125,6 +145,7 @@ const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
     ],
   },
   cooldown_change: {
+    concise: 'show',
     attributionLink: 'caused',
     format: (payload) => [
       part(`《${payload.abilityName}》`, 'ability', 'ability'),
@@ -133,23 +154,29 @@ const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
       part(' 回合'),
     ],
   },
-  damage_memory_record: {
+  memory_record: {
+    concise: 'detailed_only',
     attributionLink: 'caused',
     format: (payload) => [
-      part('记录 '),
-      part(String(payload.amount), 'number', 'mechanic'),
-      part(' 点伤害'),
+      part(`记录${MEMORY_RECORD_TEXT[payload.source]} `),
+      part(String(payload.sampledAmount), 'number', 'mechanic'),
+      part('，储存 '),
+      part(String(payload.before), 'number', 'mechanic'),
+      part(' → '),
+      part(String(payload.after), 'number', 'mechanic'),
     ],
   },
-  damage_memory_release: {
+  memory_release: {
+    concise: 'detailed_only',
     attributionLink: 'caused',
     format: (payload) => [
-      part('释放记录，转化为 '),
+      part('释放记录，生成 '),
       part(String(payload.amount), 'number', 'mechanic'),
       part(` 点${RELEASE_TEXT[payload.releaseAs]}`),
     ],
   },
   control_skip: {
+    concise: 'show',
     attributionLink: 'caused',
     format: (payload, fact) => [
       part(`「${fact.target.name}」`, 'unit'),
@@ -161,10 +188,12 @@ const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
     ],
   },
   named_trigger: {
+    concise: 'show',
     attributionLink: 'context',
     format: (payload) => [part(`触发「${payload.label}」`, 'status')],
   },
   status_transition: {
+    concise: 'show',
     attributionLink: 'caused',
     format: (payload) => {
       switch (payload.operation) {
@@ -190,8 +219,8 @@ const DEFINITIONS: MechanicNarrativeDefinitionMapV3 = {
 
 /** 玩家机制文案的唯一目录。 */
 export class CombatNarrativeCatalogV3 {
-  importance(fact: MechanicFactV3): CombatMechanicImportanceV3 {
-    return isCombatMechanicCuePayloadV3(fact.payload) ? 'cue' : 'result';
+  concisePolicy(fact: MechanicFactV3): CombatMechanicConcisePolicyV3 {
+    return DEFINITIONS[fact.payload.kind].concise;
   }
 
   narrate(fact: MechanicFactV3): CombatMechanicNarrativeV3 {

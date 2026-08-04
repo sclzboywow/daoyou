@@ -575,6 +575,7 @@ describe('Advanced battle effects', () => {
   it('damage memory maxStoredValue scales with runtime max HP', () => {
     const caster = createUnit('caster');
     const target = createUnit('target');
+    const mechanics = collectCommittedResultsV3('mechanic');
     target.attributes.addModifier({
       id: 'test_hp_override',
       attrType: AttributeType.MAX_HP,
@@ -609,6 +610,17 @@ describe('Advanced battle effects', () => {
     );
 
     expect(readMemory(target, 'scaled_cap').amount).toBe(10_000);
+    expect(mechanics).toHaveLength(1);
+    expect(mechanics[0].result).toMatchObject({
+      type: 'mechanic',
+      payload: {
+        kind: 'memory_record',
+        source: 'damage_taken',
+        sampledAmount: 50_000,
+        before: 0,
+        after: 10_000,
+      },
+    });
   });
 
   it('damage memory can release shield break amount as true damage', () => {
