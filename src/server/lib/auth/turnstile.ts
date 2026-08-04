@@ -13,6 +13,13 @@ export function isTurnstileServerEnabled(): boolean {
   return Boolean(getTurnstileSecret());
 }
 
+export function isTurnstileAuthEnabled(): boolean {
+  return (
+    isTurnstileServerEnabled() &&
+    Boolean(process.env.VITE_TURNSTILE_SITE_KEY?.trim())
+  );
+}
+
 export async function verifyTurnstileToken(
   token: string,
   remoteIp?: string,

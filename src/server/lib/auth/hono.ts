@@ -1,7 +1,7 @@
 import { auth } from '@server/lib/auth/auth';
 import { authUsers } from '@server/lib/auth/schema';
 import {
-  isTurnstileServerEnabled,
+  isTurnstileAuthEnabled,
   verifyTurnstileToken,
 } from '@server/lib/auth/turnstile';
 import { db } from '@server/lib/drizzle/db';
@@ -50,7 +50,7 @@ async function validateCaptcha(context: Context): Promise<Response | null> {
     return null;
   }
 
-  if (!isTurnstileServerEnabled()) {
+  if (!isTurnstileAuthEnabled()) {
     return null;
   }
 
