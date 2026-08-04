@@ -8,12 +8,12 @@ import {
   cultivatorTasks,
   dungeonHistories,
   itemLibrary,
-  localTransactionMessages,
   mails,
   reputationShopPurchases,
   sectMemberships,
   sectShopPurchases,
   sectTaskRecords,
+  transactionalMessages,
 } from '@server/lib/drizzle/schema';
 import { DAILY_MATERIAL_LIBRARY_TARGETS } from '@server/lib/services/MaterialLibraryService';
 import type {
@@ -149,8 +149,8 @@ export async function getAdminOperationsSnapshot(): Promise<AdminOperationsSnaps
     () =>
       q
         .select({ pending: count() })
-        .from(localTransactionMessages)
-        .where(isNull(localTransactionMessages.completedAt)),
+        .from(transactionalMessages)
+        .where(isNull(transactionalMessages.publishedAt)),
     () =>
       q
         .select({
