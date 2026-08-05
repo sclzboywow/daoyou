@@ -247,6 +247,7 @@ export function useInventoryViewModel(): UseInventoryViewModelReturn {
     materialParams,
     activeTab === 'materials' && Boolean(cultivatorId),
   );
+  const reloadMaterialPage = materialsQuery.reload;
   const consumablesQuery = useResource(
     inventoryConsumablesResource,
     consumableParams,
@@ -496,6 +497,7 @@ export function useInventoryViewModel(): UseInventoryViewModelReturn {
               body: JSON.stringify({ materialId }),
             }),
           );
+          await reloadMaterialPage();
 
           const revealed = result.revealedItem
             ? {
@@ -553,7 +555,7 @@ export function useInventoryViewModel(): UseInventoryViewModelReturn {
         onConfirm: executeIdentify,
       });
     },
-    [cultivatorId, mutate, pushToast],
+    [cultivatorId, mutate, pushToast, reloadMaterialPage],
   );
 
   const pagination =
