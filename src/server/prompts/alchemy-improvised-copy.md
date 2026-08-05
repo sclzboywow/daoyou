@@ -31,7 +31,6 @@ id: alchemy-improvised-copy
 
 ## 输出要求
 
-- 必须输出符合 Schema 的 JSON。
 - `name` 与 `description` 风格统一、名实相符。
 - `styleInsight` 可选，只用一句话概括本次命名抓住的意象。
 

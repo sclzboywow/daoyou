@@ -8,21 +8,50 @@ import type {
 import type { EnemyGenerationDraft } from '@shared/engine/enemy-generation/types';
 import { z } from 'zod';
 
-const enemyCopySchema = z.object({
-  character: z.object({
-    name: z.string().min(2).max(12),
-    title: z.string().min(2).max(16),
-    background: z.string().min(10).max(240),
-    description: z.string().min(8).max(120),
-  }),
-  products: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string().min(2).max(18),
-      description: z.string().min(8).max(120),
-    }),
-  ),
-});
+const characterCopyFieldSchemas = {
+  name: z.string().min(2).max(12),
+  title: z.string().min(2).max(16),
+  background: z.string().min(10).max(240),
+  description: z.string().min(8).max(120),
+} as const;
+
+type CharacterCopyField = keyof typeof characterCopyFieldSchemas;
+type GeneratedEnemyCopyPayload = {
+  character: Partial<EnemyCopyPayload['character']>;
+  products: Array<{
+    index: number;
+    name: string;
+    description: string;
+  }>;
+};
+
+function createEnemyCopySchema(draft: EnemyGenerationDraft) {
+  const characterShape: Record<string, z.ZodType> = {};
+  for (const field of Object.keys(
+    characterCopyFieldSchemas,
+  ) as CharacterCopyField[]) {
+    if (draft.missingNarrative[field]) {
+      characterShape[field] = characterCopyFieldSchemas[field];
+    }
+  }
+
+  return z.object({
+    character: z.object(characterShape),
+    products: z
+      .array(
+        z.object({
+          index: z
+            .number()
+            .int()
+            .min(0)
+            .max(Math.max(0, draft.copyFacts.products.length - 1)),
+          name: z.string().min(2).max(18),
+          description: z.string().min(8).max(120),
+        }),
+      )
+      .length(draft.copyFacts.products.length),
+  });
+}
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -64,8 +93,8 @@ export function buildEnemyNarrativeFacts(draft: EnemyGenerationDraft) {
       requestedFields: requestedFieldsFromDraft(draft),
       existingCopy: existingCharacterCopyFromDraft(draft),
     },
-    products: draft.copyFacts.products.map((product) => ({
-      id: product.id,
+    products: draft.copyFacts.products.map((product, index) => ({
+      index,
       productType: product.productType,
       role: product.role,
       quality: product.quality,
@@ -111,12 +140,35 @@ export class ServerEnemyCopyProvider implements EnemyCopyProvider {
         generateAiObject({
           system,
           prompt: user,
-          schema: enemyCopySchema,
+          schema: createEnemyCopySchema(draft),
           name: 'EnemyCopyPayload',
           sceneId: 'enemy-narrative',
         }),
       );
-      return response.output;
+      const generated = response.output as GeneratedEnemyCopyPayload;
+      const products = generated.products.map((product) => ({
+        id: draft.copyFacts.products[product.index]!.id,
+        name: product.name,
+        description: product.description,
+      }));
+
+      return {
+        character: {
+          name: draft.missingNarrative.name
+            ? generated.character.name!
+            : draft.cultivator.name,
+          title: draft.missingNarrative.title
+            ? generated.character.title!
+            : (draft.cultivator.title ?? ''),
+          background: draft.missingNarrative.background
+            ? generated.character.background!
+            : (draft.cultivator.background ?? ''),
+          description: draft.missingNarrative.description
+            ? generated.character.description!
+            : (draft.cultivator.description ?? ''),
+        },
+        products,
+      };
     } catch (error) {
       console.error('[ServerEnemyCopyProvider] copy generation failed:', error);
       return null;

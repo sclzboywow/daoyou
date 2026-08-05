@@ -220,28 +220,25 @@ const DungeonCostLlmSchema = z
     }
   });
 
-export const DungeonRoundLlmSchema = z.object({
-  scene_description: z.string(),
-  interaction: z.object({
-    options: z
-      .array(
-        z.object({
-          id: z.number(),
-          text: z.string(),
-          risk_level: z.enum(['low', 'medium', 'high']),
-          requirement: z.string().optional(),
-          potential_cost: z.string().optional(),
-          costs: z.array(DungeonCostLlmSchema).optional(),
-        }),
-      )
-      .length(3),
-  }),
-  acquired_items: z.array(RewardBlueprintLlmSchema).max(10).optional(),
-  status_update: z.object({
-    is_final_round: z.boolean(),
-    internal_danger_score: z.number().min(0).max(100),
-  }),
+const DungeonOptionLlmSchema = z.object({
+  text: z.string(),
+  risk_level: z.enum(['low', 'medium', 'high']),
+  requirement: z.string().optional(),
+  potential_cost: z.string().optional(),
+  costs: z.array(DungeonCostLlmSchema).optional(),
 });
+
+export function createDungeonRoundLlmSchema(maxRewardCount: number) {
+  return z.object({
+    scene_description: z.string(),
+    options: z.array(DungeonOptionLlmSchema).length(3),
+    acquired_items: z
+      .array(RewardBlueprintLlmSchema)
+      .max(Math.max(0, maxRewardCount))
+      .optional(),
+    internal_danger_score: z.number().int().min(0).max(100),
+  });
+}
 
 // Settlement info from AI
 export const DungeonSettlementSchema = z
@@ -261,14 +258,16 @@ export const DungeonSettlementSchema = z
   })
   .describe('结算信息');
 
-export const DungeonSettlementLlmSchema = z.object({
-  ending_narrative: z.string(),
-  settlement: z.object({
+export function createDungeonSettlementLlmSchema(maxRewardCount: number) {
+  return z.object({
+    ending_narrative: z.string(),
     reward_tier: z.enum(['S', 'A', 'B', 'C', 'D']),
-    reward_blueprints: z.array(RewardBlueprintLlmSchema).max(5),
+    reward_blueprints: z
+      .array(RewardBlueprintLlmSchema)
+      .max(Math.max(0, maxRewardCount)),
     performance_tags: z.array(z.string()).max(10),
-  }),
-});
+  });
+}
 
 export const DungeonSettlementGeneratedSchema = z.object({
   ending_narrative: z.string(),

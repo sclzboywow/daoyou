@@ -123,9 +123,10 @@ export class MaterialGenerator {
     });
   }
 
-  private static generateRandomSkeletons(
+  public static generateRandomSkeletons(
     count: number,
-    options: MaterialRandomOptions,
+    options: MaterialRandomOptions = {},
+    rng: () => number = Math.random,
   ): MaterialSkeleton[] {
     const skeletons: MaterialSkeleton[] = [];
 
@@ -133,17 +134,21 @@ export class MaterialGenerator {
       // 1. 确定品质
       const rank =
         options.guaranteedRank ||
-        this.randomQuality({
-          qualityChanceMap: options.qualityChanceMap,
-          rankRange: options.rankRange,
-        });
+        this.randomQuality(
+          {
+            qualityChanceMap: options.qualityChanceMap,
+            rankRange: options.rankRange,
+          },
+          rng,
+        );
 
       // 2. 确定类型
-      const type = options.specifiedType || this.randomType(options.regionTags);
+      const type =
+        options.specifiedType || this.randomType(options.regionTags, rng);
 
       // 3. 确定数量
       const [min, max] = QUANTITY_RANGE_MAP[rank] || [1, 1];
-      const quantity = Math.floor(Math.random() * (max - min + 1)) + min;
+      const quantity = Math.floor(rng() * (max - min + 1)) + min;
 
       skeletons.push({
         type,
@@ -158,9 +163,10 @@ export class MaterialGenerator {
 
   private static randomQuality(
     options: Pick<MaterialRandomOptions, 'qualityChanceMap' | 'rankRange'> = {},
+    rng: () => number = Math.random,
   ): Quality {
     if (options.qualityChanceMap) {
-      return this.rollQualityByChanceMap(options.qualityChanceMap);
+      return this.rollQualityByChanceMap(options.qualityChanceMap, rng);
     }
 
     const { rankRange } = options;
@@ -170,18 +176,18 @@ export class MaterialGenerator {
       const normalizedMin = Math.min(minRank, maxRank);
       const normalizedMax = Math.max(minRank, maxRank);
       const roll =
-        Math.floor(Math.random() * (normalizedMax - normalizedMin + 1)) +
-        normalizedMin;
+        Math.floor(rng() * (normalizedMax - normalizedMin + 1)) + normalizedMin;
       return RANK_TO_QUALITY[roll];
     }
 
-    return this.rollQualityByChanceMap(QUALITY_CHANCE_MAP);
+    return this.rollQualityByChanceMap(QUALITY_CHANCE_MAP, rng);
   }
 
   private static rollQualityByChanceMap(
     qualityChanceMap: Record<Quality, number>,
+    rng: () => number = Math.random,
   ): Quality {
-    const rand = Math.random();
+    const rand = rng();
     let accumulated = 0;
     for (const quality of QUALITY_VALUES) {
       accumulated += qualityChanceMap[quality] || 0;
@@ -190,9 +196,12 @@ export class MaterialGenerator {
     return '凡品';
   }
 
-  private static randomType(regionTags?: string[]): MaterialType {
+  private static randomType(
+    regionTags?: string[],
+    rng: () => number = Math.random,
+  ): MaterialType {
     const weightedMap = this.getTypeChanceMapByRegion(regionTags);
-    const rand = Math.random();
+    const rand = rng();
     let accumulated = 0;
     for (const type of MATERIAL_TYPE_VALUES) {
       accumulated += weightedMap[type] || 0;

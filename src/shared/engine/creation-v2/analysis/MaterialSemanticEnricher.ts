@@ -38,18 +38,23 @@ export interface MaterialSemanticEnricher {
   ): Promise<MaterialSemanticEnrichmentReport>;
 }
 
-const enrichmentSchema = z.object({
-  batchInsight: z.string().optional(),
-  materials: z.array(
-    z.object({
-      materialId: z.string().optional(),
-      materialName: z.string(),
-      additionalSemanticTags: z.array(z.string()).default([]),
-      confidence: z.number().min(0).max(1).optional(),
-      reason: z.string().optional(),
-    }),
-  ),
-});
+function createEnrichmentSchema(materialCount: number) {
+  return z.object({
+    batchInsight: z.string().optional(),
+    materials: z.array(
+      z.object({
+        materialIndex: z
+          .number()
+          .int()
+          .min(0)
+          .max(Math.max(0, materialCount - 1)),
+        additionalSemanticTags: z.array(z.string()).default([]),
+        confidence: z.number().min(0).max(1).optional(),
+        reason: z.string().optional(),
+      }),
+    ),
+  });
+}
 
 export interface DeepSeekMaterialSemanticEnricherOptions {
   enabled?: boolean;
@@ -103,7 +108,7 @@ export class DeepSeekMaterialSemanticEnricher implements MaterialSemanticEnriche
         .join('\n');
       const payloadJson = stableCompactStringify({
         materials: materials.map((material, index) => ({
-          materialId: material.id,
+          materialIndex: index,
           materialName: material.name,
           description: truncateText(material.description, 64),
           rank: material.rank,
@@ -120,7 +125,7 @@ export class DeepSeekMaterialSemanticEnricher implements MaterialSemanticEnriche
         generateAiObject({
           system,
           prompt: user,
-          schema: enrichmentSchema,
+          schema: createEnrichmentSchema(materials.length),
           name: 'CreationMaterialSemanticEnrichment',
           sceneId: 'material-semantic-enrichment',
         }),
@@ -131,10 +136,16 @@ export class DeepSeekMaterialSemanticEnricher implements MaterialSemanticEnriche
         provider: this.providerName,
         batchInsight: response.output.batchInsight,
         materials: response.output.materials.map((item) => {
+          const fingerprint = fingerprints[item.materialIndex];
+          if (!fingerprint) {
+            throw new Error(
+              `material enrichment returned unknown material index: ${item.materialIndex}`,
+            );
+          }
           const normalized = normalizeSemanticTags(item.additionalSemanticTags);
           return {
-            materialId: item.materialId,
-            materialName: item.materialName,
+            materialId: fingerprint.materialId,
+            materialName: fingerprint.materialName,
             addedTags: normalized.tags,
             droppedTags: normalized.droppedTags,
             confidence: item.confidence,

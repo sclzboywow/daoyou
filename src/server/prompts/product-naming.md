@@ -119,7 +119,6 @@ id: product-naming
 
 ## 输出要求
 
-- 必须输出严格符合 Schema 的 JSON 对象。
 - `name` 与 `description` 要互相印证，不能风格分裂。
 - `styleInsight` 只需一句话，点明本次命名抓住的核心即可；若拿不准，可省略。
 

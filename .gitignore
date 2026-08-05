@@ -213,3 +213,5 @@ certbot/
 # Local database backups and one-off synchronization artifacts.
 backups/
 *.bundle
+
+.venv*

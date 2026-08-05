@@ -26,7 +26,6 @@ const weightedAlchemyPropertySchema = z.object({
 
 const materialVectorSchema = z.object({
   materialRef: z.string().min(1),
-  materialName: z.string().min(1),
   properties: z.array(weightedAlchemyPropertySchema).min(1).max(3),
 });
 
@@ -77,7 +76,6 @@ export class AlchemyFormulaAnalyzer {
   }> {
     const payloadJson = stableCompactStringify({
       formula: {
-        formulaId: input.formula.id,
         name: input.formula.name,
         description: truncateText(input.formula.description, 96),
         family: input.formula.family,
@@ -90,7 +88,6 @@ export class AlchemyFormulaAnalyzer {
         },
       },
       materials: input.materials.map((material) => ({
-        materialId: material.id,
         materialRef: material.materialRef,
         materialName: material.name,
         type: material.type,
@@ -133,7 +130,7 @@ export class AlchemyFormulaAnalyzer {
     }
 
     const seenVectorRefs = new Set<string>();
-    for (const vector of normalized.materialVectors) {
+    const materialVectors = normalized.materialVectors.map((vector) => {
       if (seenVectorRefs.has(vector.materialRef)) {
         throw new Error(
           `formula analyzer returned duplicate materialRef: ${vector.materialRef}`,
@@ -147,9 +144,14 @@ export class AlchemyFormulaAnalyzer {
           `formula analyzer returned unknown material ref: ${vector.materialRef}`,
         );
       }
-      vector.materialName = material.name;
-      vector.properties = mergeAlchemyMaterialPropertyHints(vector, material).properties;
-    }
+      return mergeAlchemyMaterialPropertyHints(
+        {
+          ...vector,
+          materialName: material.name,
+        },
+        material,
+      );
+    });
 
     const seenJudgmentRefs = new Set<string>();
     const materialJudgments = normalized.materialJudgments.map((judgment) => {
@@ -177,7 +179,7 @@ export class AlchemyFormulaAnalyzer {
 
     return {
       plan: {
-        materialVectors: normalized.materialVectors,
+        materialVectors,
         intentVector: [],
         focusMode: normalized.focusMode,
         requestedElementBias: input.formula.pattern.dominantElement,

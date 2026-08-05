@@ -43,14 +43,6 @@ id: dungeon-settlement
 | C    | 0 个                                | 表现平庸，或中途被迫撤离。 |
 | D    | 0 个                                | 仓皇逃窜，一无所获。       |
 
-## 输出约束 (核心：严禁 Markdown)
-
-直接输出原始 JSON，不含 ```json 标签，不含解释。
-
-### 结构示例
-
-{ "ending_narrative": "结局描述...", "settlement": { "reward_tier": "D", "reward_blueprints": [], "performance_tags": ["空手而归"] } }
-
 ## user
 
 请根据以下结算上下文，输出结算结果：

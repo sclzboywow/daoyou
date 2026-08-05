@@ -196,6 +196,20 @@ function expandWeightedSlots<T extends string>(
   );
 }
 
+function shuffleSlotsDeterministically<T>(items: T[], seed: string): T[] {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(
+      computeItemLibrarySampleKey(`${seed}:${index}`) * (index + 1),
+    );
+    [shuffled[index], shuffled[swapIndex]] = [
+      shuffled[swapIndex],
+      shuffled[index],
+    ];
+  }
+  return shuffled;
+}
+
 export function buildDailyMarketMaterialGenerationPlan(input: {
   count: number;
   seed: string;
@@ -204,19 +218,25 @@ export function buildDailyMarketMaterialGenerationPlan(input: {
   const count = normalizePositiveCount(input.count);
   if (count <= 0) return [];
 
-  const qualitySlots = expandWeightedSlots(
-    count,
-    DAILY_MARKET_QUALITY_WEIGHTS.map((item) => ({
-      value: item.quality,
-      weight: item.weight,
-    })),
+  const qualitySlots = shuffleSlotsDeterministically(
+    expandWeightedSlots(
+      count,
+      DAILY_MARKET_QUALITY_WEIGHTS.map((item) => ({
+        value: item.quality,
+        weight: item.weight,
+      })),
+    ),
+    `${input.seed}:quality`,
   );
-  const typeSlots = expandWeightedSlots(
-    count,
-    DAILY_MARKET_TYPE_WEIGHTS.map((item) => ({
-      value: item.materialType,
-      weight: item.weight,
-    })),
+  const typeSlots = shuffleSlotsDeterministically(
+    expandWeightedSlots(
+      count,
+      DAILY_MARKET_TYPE_WEIGHTS.map((item) => ({
+        value: item.materialType,
+        weight: item.weight,
+      })),
+    ),
+    `${input.seed}:type`,
   );
   const groups = new Map<string, ItemLibraryMaterialGenerateInput>();
 
@@ -471,6 +491,78 @@ export async function sampleMaterialLibraryEntryDeterministic(
     computeItemLibrarySampleKey(request.seed),
   );
   return entry ?? null;
+}
+
+export async function sampleMaterialLibraryEntryByPreferences(
+  request: {
+    materialTypes: readonly MaterialType[];
+    qualities: readonly Quality[];
+    seed: string;
+    excludeItemIds?: ReadonlySet<string>;
+  },
+  executor?: DbExecutor | DbTransaction,
+): Promise<ItemLibraryEntry | null> {
+  const materialTypes = [...new Set(request.materialTypes)];
+  const qualities = [...new Set(request.qualities)];
+  if (materialTypes.length === 0 || qualities.length === 0) return null;
+
+  const excluded = request.excludeItemIds ?? new Set<string>();
+  const candidateCount = Math.max(1, excluded.size + 1);
+  const targetMaterialType = materialTypes[0];
+  const targetQuality = qualities[0];
+  const exactEntries = await sampleExactMaterialEntries(
+    {
+      materialType: targetMaterialType,
+      quality: targetQuality,
+      count: candidateCount,
+    },
+    executor,
+    computeItemLibrarySampleKey(
+      `${request.seed}:${targetMaterialType}:${targetQuality}`,
+    ),
+  );
+  const exactEntry = exactEntries.find(
+    (candidate) => !excluded.has(candidate.itemId),
+  );
+  if (exactEntry) return exactEntry;
+
+  const qualityPriority = sql`CASE ${sql.join(
+    qualities.map(
+      (quality, index) =>
+        sql`WHEN ${itemLibrary.quality} = ${quality} THEN ${index}`,
+    ),
+    sql.raw(' '),
+  )} ELSE ${qualities.length} END`;
+  const typePriority = sql`CASE ${sql.join(
+    materialTypes.map(
+      (materialType, index) =>
+        sql`WHEN ${itemLibrary.category} = ${materialType} THEN ${index}`,
+    ),
+    sql.raw(' '),
+  )} ELSE ${materialTypes.length} END`;
+  const anchor = computeItemLibrarySampleKey(`${request.seed}:fallback`);
+  const q = executor ?? getExecutor();
+  const rows = await q
+    .select()
+    .from(itemLibrary)
+    .where(
+      and(
+        eq(itemLibrary.type, 'material'),
+        eq(itemLibrary.status, 'published'),
+        inArray(itemLibrary.category, materialTypes),
+        inArray(itemLibrary.quality, qualities),
+      ),
+    )
+    .orderBy(
+      qualityPriority,
+      typePriority,
+      sql`CASE WHEN ${itemLibrary.sampleKey} >= ${anchor} THEN 0 ELSE 1 END`,
+      asc(itemLibrary.sampleKey),
+      asc(itemLibrary.itemId),
+    )
+    .limit(candidateCount);
+  const entry = rows.find((candidate) => !excluded.has(candidate.itemId));
+  return entry ? parseRow(entry) : null;
 }
 
 function qualitiesInRange(range: { min: Quality; max: Quality }): Quality[] {

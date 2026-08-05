@@ -65,17 +65,17 @@ import type { RewardBlueprint } from './reward';
 import { RewardFactory } from './reward';
 import {
   BattleSession,
+  createDungeonRoundLlmSchema,
+  createDungeonSettlementLlmSchema,
   DungeonOptionCost,
   DungeonPendingAction,
   DungeonRecoverAction,
   DungeonRound,
   DungeonRoundLlmContext,
-  DungeonRoundLlmSchema,
   DungeonRoundSchema,
   DungeonSettlement,
   DungeonSettlementGeneratedSchema,
   DungeonSettlementLlmContext,
-  DungeonSettlementLlmSchema,
   DungeonSettlementSchema,
   DungeonState,
   PlayerInfo,
@@ -840,11 +840,9 @@ export class DungeonService {
       `
 
 ### 成本(costs)规范:
-- **必须使用指定类型**: spirit_stones, lifespan, cultivation_exp, comprehension_insight, material, hp_loss, mp_loss, weak, battle, artifact_damage。
 - **数值范围**: hp_loss, mp_loss 必须是 0-1 之间的小数；其他类型为正整数。
 - **材料(material)**: 禁止指定 name，必须提供 required_type 和 required_quality。
 - **冲突禁止**: 若有 'battle'，严禁同时出现 'hp_loss' 或 'mp_loss'。
-- **战斗元数据(battle.metadata)**: 必须提供 race 与 realm_stage；可选提供 enemy_name、background、description、is_boss。
 - **战斗难度**: battle.value 只作为剧情风险参考；最终敌人 difficulty 与 realm_stage 会由服务端按副本档位配置表覆盖或钳制。`
     );
   }
@@ -2039,13 +2037,22 @@ export class DungeonService {
       const aiRes = await generateAiObject({
         system: settlementPrompt,
         prompt: settlementUserPrompt,
-        schema: DungeonSettlementLlmSchema,
-        resultSchema: DungeonSettlementGeneratedSchema,
+        schema: createDungeonSettlementLlmSchema(
+          settlementContext.remainingExtraRewardSlots,
+        ),
         name: 'DungeonSettlement',
         sceneId: 'dungeon-settlement',
       });
+      const generatedSettlement = DungeonSettlementGeneratedSchema.parse({
+        ending_narrative: aiRes.output.ending_narrative,
+        settlement: {
+          reward_tier: aiRes.output.reward_tier,
+          reward_blueprints: aiRes.output.reward_blueprints,
+          performance_tags: aiRes.output.performance_tags,
+        },
+      });
       settlement = normalizeSettlementRewards(
-        aiRes.output,
+        generatedSettlement,
         state.accumulatedRewards ?? [],
       );
     }
@@ -2329,16 +2336,33 @@ export class DungeonService {
       phase,
     });
 
+    const remainingRewardSlots = Math.max(
+      0,
+      DUNGEON_REWARD_BLUEPRINT_LIMIT - state.accumulatedRewards.length,
+    );
     const aiRes = await generateAiObject({
       system: this.getSystemPrompt(),
       prompt: stableCompactStringify(userContext),
-      schema: DungeonRoundLlmSchema,
-      resultSchema: DungeonRoundSchema,
+      schema: createDungeonRoundLlmSchema(remainingRewardSlots),
       name: 'DungeonRound',
       sceneId: 'dungeon-round',
     });
 
-    return aiRes.output;
+    return DungeonRoundSchema.parse({
+      scene_description: aiRes.output.scene_description,
+      interaction: {
+        options: aiRes.output.options.map((option, index) => ({
+          ...option,
+          id: index + 1,
+          costs: option.costs ?? [],
+        })),
+      },
+      acquired_items: aiRes.output.acquired_items,
+      status_update: {
+        is_final_round: state.currentRound >= state.maxRounds,
+        internal_danger_score: aiRes.output.internal_danger_score,
+      },
+    });
   }
 
   async saveState(

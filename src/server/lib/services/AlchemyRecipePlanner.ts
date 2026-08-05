@@ -22,7 +22,6 @@ const weightedAlchemyPropertySchema = z.object({
 
 const materialVectorSchema = z.object({
   materialRef: z.string().min(1),
-  materialName: z.string().min(1),
   properties: z.array(weightedAlchemyPropertySchema).min(1).max(3),
 });
 
@@ -39,7 +38,7 @@ function buildPropertyGuide(): string {
   ).join('\n');
 }
 
-function normalizePlan(plan: AlchemyRecipePlan): AlchemyRecipePlan {
+function normalizePlan(plan: z.infer<typeof alchemyRecipePlanSchema>) {
   return {
     ...plan,
     materialVectors: plan.materialVectors.map((vector) => ({
@@ -118,7 +117,7 @@ export class AlchemyRecipePlanner {
       seenRefs.add(vector.materialRef);
     }
 
-    for (const vector of normalized.materialVectors) {
+    const materialVectors = normalized.materialVectors.map((vector) => {
       const material = materialMap.get(vector.materialRef);
       if (!material) {
         throw new Error(
@@ -130,9 +129,14 @@ export class AlchemyRecipePlanner {
           `alchemy planner returned empty property vector: ${vector.materialRef}`,
         );
       }
-      vector.materialName = material.name;
-      vector.properties = mergeAlchemyMaterialPropertyHints(vector, material).properties;
-    }
+      return mergeAlchemyMaterialPropertyHints(
+        {
+          ...vector,
+          materialName: material.name,
+        },
+        material,
+      );
+    });
 
     if (!input.userPrompt?.trim()) {
       normalized.intentVector = [];
@@ -140,7 +144,10 @@ export class AlchemyRecipePlanner {
       normalized.requestedElementBias = undefined;
     }
 
-    return normalized;
+    return {
+      ...normalized,
+      materialVectors,
+    };
   }
 
   private async withTimeout<T>(promise: Promise<T>): Promise<T> {

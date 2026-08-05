@@ -111,8 +111,6 @@ id: material-generation
 
 ## 输出要求
 
-- 必须返回纯 JSON 数组，严格符合 Schema
-- 每个对象包含：name, description, element
 - 名称必须独特，严禁照搬命名规范中的示例
 - 同一批次中的材料名称也应互不相同
 
