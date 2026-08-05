@@ -1,4 +1,5 @@
 import { auth } from '@server/lib/auth/auth';
+import { authError } from '@server/lib/auth/errors';
 import { authUsers } from '@server/lib/auth/schema';
 import {
   isTurnstileAuthEnabled,
@@ -35,16 +36,6 @@ async function readRequestBody(request: Request): Promise<Record<string, unknown
   return {};
 }
 
-function authError(message: string, status = 400) {
-  return Response.json(
-    {
-      success: false,
-      error: message,
-    },
-    { status },
-  );
-}
-
 async function validateCaptcha(context: Context): Promise<Response | null> {
   if (!CAPTCHA_PROTECTED_PATHS.has(context.req.path)) {
     return null;
@@ -61,13 +52,13 @@ async function validateCaptcha(context: Context): Promise<Response | null> {
   const captchaToken = captchaTokenHeader || captchaTokenBody;
 
   if (!captchaToken) {
-    return authError('请先完成人机验证');
+    return authError('请先完成人机验证', 400, 'CAPTCHA_REQUIRED');
   }
 
   const verified = await verifyTurnstileToken(captchaToken, getRequestIp(context));
 
   if (!verified) {
-    return authError('人机验证失败，请重试');
+    return authError('人机验证失败，请重试', 400, 'CAPTCHA_FAILED');
   }
 
   return null;
@@ -83,7 +74,7 @@ async function validateOtpSignUpName(context: Context): Promise<Response | null>
   const name = typeof body.name === 'string' ? body.name.trim() : '';
 
   if (!email) {
-    return authError('缺少邮箱地址');
+    return authError('缺少邮箱地址', 400, 'MISSING_EMAIL');
   }
 
   const existingUser = await db
@@ -93,7 +84,7 @@ async function validateOtpSignUpName(context: Context): Promise<Response | null>
     .limit(1);
 
   if (existingUser.length === 0 && !name) {
-    return authError('首次注册请填写昵称');
+    return authError('首次注册请填写昵称', 400, 'NAME_REQUIRED');
   }
 
   return null;
@@ -104,7 +95,7 @@ export async function handleAuthRequest(context: Context): Promise<Response> {
     context.req.path === ADMIN_AUTH_PATH ||
     context.req.path.startsWith(`${ADMIN_AUTH_PATH}/`)
   ) {
-    return authError('未找到该接口', 404);
+    return authError('未找到该接口', 404, 'NOT_FOUND');
   }
 
   if (context.req.method === 'POST') {
