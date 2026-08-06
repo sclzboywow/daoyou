@@ -10,11 +10,11 @@ import {
   parseRewardSelectionDrafts,
   type RewardSelectionDraft,
 } from '../../_components/RewardSelectionEditor.helpers';
+import { TemplateVariableFields } from '../../_components/TemplateVariableFields';
 import {
   createTemplatePayload,
-  TemplateVariableFields,
   type BroadcastTemplateOption,
-} from '../../_components/TemplateVariableFields';
+} from '../../_components/TemplateVariableFields.helpers';
 
 interface GameMailBroadcastResult {
   dryRun?: boolean;

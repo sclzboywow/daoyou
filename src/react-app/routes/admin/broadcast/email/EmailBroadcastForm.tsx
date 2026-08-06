@@ -5,11 +5,11 @@ import { InkNotice } from '@app/components/ui/InkNotice';
 import { InkSelect } from '@app/components/ui/InkSelect';
 import { REALM_VALUES } from '@shared/types/constants';
 import { useEffect, useState } from 'react';
+import { TemplateVariableFields } from '../../_components/TemplateVariableFields';
 import {
   createTemplatePayload,
-  TemplateVariableFields,
   type BroadcastTemplateOption,
-} from '../../_components/TemplateVariableFields';
+} from '../../_components/TemplateVariableFields.helpers';
 
 interface EmailBroadcastResult {
   dryRun?: boolean;
