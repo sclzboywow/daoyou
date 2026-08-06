@@ -5,11 +5,11 @@ import { InkNotice } from '@app/components/ui/InkNotice';
 import { InkSelect } from '@app/components/ui/InkSelect';
 import { REALM_VALUES } from '@shared/types/constants';
 import { useEffect, useState } from 'react';
-
-interface EmailTemplateOption {
-  id: string;
-  name: string;
-}
+import {
+  createTemplatePayload,
+  TemplateVariableFields,
+  type BroadcastTemplateOption,
+} from '../../_components/TemplateVariableFields';
 
 interface EmailBroadcastResult {
   dryRun?: boolean;
@@ -25,7 +25,7 @@ export function EmailBroadcastForm() {
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
   const [templateId, setTemplateId] = useState('');
-  const [payloadText, setPayloadText] = useState('{}');
+  const [payload, setPayload] = useState<Record<string, string | number>>({});
   const [registeredFrom, setRegisteredFrom] = useState('');
   const [registeredTo, setRegisteredTo] = useState('');
   const [hasActiveCultivator, setHasActiveCultivator] = useState('');
@@ -34,7 +34,7 @@ export function EmailBroadcastForm() {
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EmailBroadcastResult | null>(null);
-  const [templates, setTemplates] = useState<EmailTemplateOption[]>([]);
+  const [templates, setTemplates] = useState<BroadcastTemplateOption[]>([]);
 
   useEffect(() => {
     const loadTemplates = async () => {
@@ -44,12 +44,7 @@ export function EmailBroadcastForm() {
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? '加载模板失败');
-        setTemplates(
-          (data.templates ?? []).map((item: { id: string; name: string }) => ({
-            id: item.id,
-            name: item.name,
-          })),
-        );
+        setTemplates(data.templates ?? []);
       } catch {
         // 模板加载失败不阻塞手动发送
       }
@@ -64,14 +59,6 @@ export function EmailBroadcastForm() {
     }
     if (!dryRun && reason.trim().length < 3) {
       pushToast({ message: '请填写本次群发原因', tone: 'warning' });
-      return;
-    }
-
-    let payload: unknown;
-    try {
-      payload = JSON.parse(payloadText || '{}');
-    } catch {
-      pushToast({ message: '变量 JSON 格式错误', tone: 'warning' });
       return;
     }
 
@@ -124,21 +111,30 @@ export function EmailBroadcastForm() {
   return (
     <div className="space-y-5">
       <InkNotice tone="info">
-        可选模板 + 人群筛选。正式发送进入任务中心，可追踪、取消和失败重试。
+        此处发送到用户的注册邮箱，仅适合站外通知；游戏内补偿请使用“游戏邮件群发”。
       </InkNotice>
+
+      <InkButton href="/admin/broadcast/game-mail" variant="secondary">
+        前往全服游戏补偿
+      </InkButton>
 
       <InkSelect
         label="模板（可选）"
         value={templateId}
-        onChange={(value) => setTemplateId(value)}
+        onChange={(value) => {
+          setTemplateId(value);
+          setPayload(
+            createTemplatePayload(templates.find((item) => item.id === value)),
+          );
+        }}
         disabled={loading}
       >
-          <option value="">不使用模板（手动填写）</option>
-          {templates.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
+        <option value="">不使用模板（手动填写）</option>
+        {templates.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.name}
+          </option>
+        ))}
       </InkSelect>
 
       <InkInput
@@ -159,12 +155,10 @@ export function EmailBroadcastForm() {
         disabled={loading}
       />
 
-      <InkInput
-        label="模板变量（JSON）"
-        value={payloadText}
-        onChange={(value) => setPayloadText(value)}
-        multiline
-        rows={4}
+      <TemplateVariableFields
+        template={templates.find((item) => item.id === templateId)}
+        value={payload}
+        onChange={setPayload}
         disabled={loading}
       />
 
@@ -192,9 +186,9 @@ export function EmailBroadcastForm() {
           onChange={(value) => setHasActiveCultivator(value)}
           disabled={loading}
         >
-            <option value="">不限</option>
-            <option value="true">仅有活跃角色</option>
-            <option value="false">仅无活跃角色</option>
+          <option value="">不限</option>
+          <option value="true">仅有活跃角色</option>
+          <option value="false">仅无活跃角色</option>
         </InkSelect>
         <InkSelect
           label="境界下限"
@@ -202,12 +196,12 @@ export function EmailBroadcastForm() {
           onChange={(value) => setRealmMin(value)}
           disabled={loading}
         >
-            <option value="">不限</option>
-            {REALM_VALUES.map((realm) => (
-              <option key={realm} value={realm}>
-                {realm}
-              </option>
-            ))}
+          <option value="">不限</option>
+          {REALM_VALUES.map((realm) => (
+            <option key={realm} value={realm}>
+              {realm}
+            </option>
+          ))}
         </InkSelect>
         <InkSelect
           label="境界上限"
@@ -215,12 +209,12 @@ export function EmailBroadcastForm() {
           onChange={(value) => setRealmMax(value)}
           disabled={loading}
         >
-            <option value="">不限</option>
-            {REALM_VALUES.map((realm) => (
-              <option key={realm} value={realm}>
-                {realm}
-              </option>
-            ))}
+          <option value="">不限</option>
+          {REALM_VALUES.map((realm) => (
+            <option key={realm} value={realm}>
+              {realm}
+            </option>
+          ))}
         </InkSelect>
       </div>
 
