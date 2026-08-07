@@ -11,6 +11,7 @@ import { readCultivatorRealm } from '@server/lib/services/cultivator/CultivatorF
 import { mapMaterialRow } from '@server/lib/services/cultivator/CultivatorInventoryRepository';
 import { addMaterialStackToInventory } from '@server/lib/services/materialInventory';
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
+import { blackMarketInspectionPlayerBody } from '@shared/lib/blackMarketMessages';
 import {
   BLACK_MARKET_MAX_INSPECTIONS,
   BLACK_MARKET_REFRESH_MS,
@@ -606,7 +607,7 @@ export async function interactWithBlackMarket(input: {
       const playerBody =
         input.command.message?.trim() ||
         (selectedClue
-          ? `查验：${selectedClue.kind}`
+          ? blackMarketInspectionPlayerBody(selectedClue.kind)
           : input.command.action === 'haggle' && input.command.offeredPrice
             ? `我出${input.command.offeredPrice.toLocaleString()}灵石。`
             : '再次出价');

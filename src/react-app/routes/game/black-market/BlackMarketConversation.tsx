@@ -5,6 +5,7 @@ import {
   type InkDialogState,
   InkNotice,
 } from '@app/components/ui';
+import { normalizeBlackMarketPlayerBody } from '@shared/lib/blackMarketMessages';
 import { getGameConceptInfo } from '@shared/lib/gameConceptDisplay';
 import type {
   BlackMarketInspectionKind,
@@ -83,7 +84,10 @@ export function BlackMarketConversation({
   const messages = session.messages.map((message) => ({
     id: message.id,
     speaker: message.role === 'npc' ? npc.name : undefined,
-    body: message.role === 'player' ? `你：${message.body}` : message.body,
+    body:
+      message.role === 'player'
+        ? `你：${normalizeBlackMarketPlayerBody(message.body)}`
+        : message.body,
     tone:
       message.role === 'player'
         ? ('muted' as const)
