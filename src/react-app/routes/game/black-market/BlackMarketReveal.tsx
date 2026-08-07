@@ -42,6 +42,12 @@ export function BlackMarketRevealPanel({
       </p>
 
       <div className="border-ink/15 mt-8 grid w-full max-w-xl gap-3 border-y py-5 text-sm sm:grid-cols-2 sm:text-base">
+        {reveal.initialPrice ? (
+          <p>
+            最初喊价：
+            <strong>{reveal.initialPrice.toLocaleString()} 灵石</strong>
+          </p>
+        ) : null}
         <p>
           成交价：<strong>{reveal.paidPrice.toLocaleString()} 灵石</strong>
         </p>

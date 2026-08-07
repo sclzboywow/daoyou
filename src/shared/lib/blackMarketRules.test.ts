@@ -36,6 +36,7 @@ describe('black market rules', () => {
 
   it('never lets negotiation cross the hidden floor', () => {
     const decision = evaluateBlackMarketHaggle({
+      seed: 'secret-player-cycle-seed',
       npcId: 'silent-elder',
       currentPrice: 18_000,
       floorPrice: 8_000,
@@ -45,10 +46,27 @@ describe('black market rules', () => {
       argumentQuality: 2,
       validEvidenceCount: 2,
       randomRoll: 1,
-      isFinalTurn: false,
     });
 
     expect(decision.nextPrice).toBeGreaterThanOrEqual(8_000);
+  });
+
+  it('gives the same npc different hidden negotiation profiles across cycles', () => {
+    const profiles = Array.from({ length: 80 }, (_, index) =>
+      createBlackMarketPricing({
+        seed: `cycle-${index}`,
+        npcId: 'silent-elder',
+        anchorValue: 10_000,
+      }),
+    );
+
+    expect(profiles.some((profile) => profile.floorPrice === 10_000)).toBe(
+      true,
+    );
+    expect(profiles.some((profile) => profile.floorPrice < 8_000)).toBe(true);
+    expect(
+      new Set(profiles.map((profile) => profile.patience)).size,
+    ).toBeGreaterThan(1);
   });
 
   it('grades both losses and windfalls from the server anchor', () => {

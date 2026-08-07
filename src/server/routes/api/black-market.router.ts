@@ -39,12 +39,16 @@ const InteractSchema = z
     if (value.action === 'question' && !value.message) {
       context.addIssue({ code: 'custom', message: '请输入想问的问题' });
     }
-    if (value.action === 'haggle' && (!value.message || !value.offeredPrice)) {
-      context.addIssue({ code: 'custom', message: '请输入说辞和灵石报价' });
+    if (value.action === 'haggle' && !value.offeredPrice) {
+      context.addIssue({ code: 'custom', message: '请输入灵石报价' });
     }
   });
 
 const LeaveSchema = z.object({ version: z.number().int().min(1) });
+const CommitSchema = z.object({
+  version: z.number().int().min(1),
+  expectedPrice: z.number().int().min(1).max(2_000_000_000),
+});
 
 const router = new Hono<AppEnv>();
 router.use('*', requireActiveCultivatorRef());
@@ -115,10 +119,13 @@ router.post('/:nodeId/sessions/:sessionId/interact', async (c) => {
 
 router.post('/:nodeId/sessions/:sessionId/commit', async (c) => {
   try {
+    const parsed = CommitSchema.parse(await c.req.json());
     const committed = await commitBlackMarketPurchase({
       actor: actor(c),
       nodeId: c.req.param('nodeId'),
       sessionId: c.req.param('sessionId'),
+      version: parsed.version,
+      expectedPrice: parsed.expectedPrice,
     });
     return c.json(toPlayerStateMutationResponse(await committed));
   } catch (error) {

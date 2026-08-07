@@ -9,6 +9,7 @@ import { useResourceMutation } from '@app/lib/resources/mutations';
 import { useCultivatorCurrency } from '@app/lib/resources/player';
 import type {
   BlackMarketInspectionKind,
+  BlackMarketNegotiationMood,
   BlackMarketNpcId,
   BlackMarketOverview,
   BlackMarketSessionView,
@@ -27,6 +28,14 @@ import {
 } from './blackMarketApi';
 
 const DEFAULT_NODE_ID = 'TN_YUE_01';
+
+const NEGOTIATION_MOOD_LABEL: Record<BlackMarketNegotiationMood, string> = {
+  calm: '神色从容',
+  guarded: '开始掂量',
+  impatient: '已有不耐',
+  agreed: '已经认价',
+  closed: '咬死价格',
+};
 
 function formatCountdown(target: number): string {
   const seconds = Math.max(0, Math.floor((target - Date.now()) / 1000));
@@ -77,12 +86,40 @@ export default function BlackMarketPage() {
 
   useEffect(() => {
     if (!overview) return;
+    let cancelled = false;
     const timer = window.setInterval(
       () => setTimeLeft(formatCountdown(overview.nextRefresh)),
       1000,
     );
-    return () => window.clearInterval(timer);
-  }, [overview]);
+    const rolloverTimer = window.setTimeout(
+      () => {
+        void (async () => {
+          try {
+            const nextOverview = await loadOverview();
+            if (cancelled) return;
+            setSession(undefined);
+            setOverview(nextOverview);
+            setTimeLeft(formatCountdown(nextOverview.nextRefresh));
+            setError(undefined);
+            setNotice(undefined);
+          } catch (reason) {
+            if (cancelled) return;
+            pushToast({
+              message:
+                reason instanceof Error ? reason.message : '新一轮黑市暂未开门',
+              tone: 'warning',
+            });
+          }
+        })();
+      },
+      Math.max(250, overview.nextRefresh - Date.now() + 250),
+    );
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.clearTimeout(rolloverTimer);
+    };
+  }, [loadOverview, overview, pushToast]);
 
   const selectedNpc = useMemo(
     () => overview?.npcs.find((npc) => npc.id === session?.npcId),
@@ -93,7 +130,7 @@ export default function BlackMarketPage() {
     input:
       | { action: 'inspect'; inspectionKind: BlackMarketInspectionKind }
       | { action: 'question'; message: string }
-      | { action: 'haggle'; message: string; offeredPrice: number },
+      | { action: 'haggle'; message?: string; offeredPrice: number },
   ) => {
     if (!session) return;
     setBusy(true);
@@ -105,7 +142,21 @@ export default function BlackMarketPage() {
         version: session.version,
       });
       setSession(result.session);
-      if (result.notice) setNotice(result.notice);
+      if (result.notice) {
+        setNotice(result.notice);
+      } else if (input.action === 'haggle') {
+        const feedback =
+          result.outcome === 'accepted'
+            ? `摊主点头认价：${result.session.currentPrice.toLocaleString()} 灵石。`
+            : result.outcome === 'conceded' || result.outcome === 'countered'
+              ? `摊主松了口：现在要价 ${result.session.currentPrice.toLocaleString()} 灵石。`
+              : result.outcome === 'locked'
+                ? '这一下压得太狠，摊主把价彻底咬死了。'
+                : result.outcome === 'rejected'
+                  ? '摊主没有松口。'
+                  : undefined;
+        if (feedback) setNotice(feedback);
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '交谈暂时中断');
     } finally {
@@ -136,7 +187,14 @@ export default function BlackMarketPage() {
     try {
       const result = await mutate<{
         reveal: NonNullable<BlackMarketSessionView['reveal']>;
-      }>(commitBlackMarketPurchase(nodeId, session.id));
+      }>(
+        commitBlackMarketPurchase(
+          nodeId,
+          session.id,
+          session.version,
+          session.currentPrice,
+        ),
+      );
       setSession((current) =>
         current
           ? {
@@ -223,11 +281,9 @@ export default function BlackMarketPage() {
           {session ? (
             <GameSceneAsideSection title="手中线索">
               <div className="space-y-2 text-sm leading-7">
+                <p>已知线索：{session.revealedClues.length} 条</p>
                 <p>
-                  查验：{session.inspectTurnsUsed}/{session.inspectTurnsMax}
-                </p>
-                <p>
-                  议价：{session.haggleTurnsUsed}/{session.haggleTurnsMax}
+                  摊主态度：{NEGOTIATION_MOOD_LABEL[session.negotiationMood]}
                 </p>
                 <p>当前报价：{session.currentPrice.toLocaleString()} 灵石</p>
               </div>
@@ -242,6 +298,7 @@ export default function BlackMarketPage() {
         <BlackMarketRoom
           overview={overview}
           selectedNpcId={session?.npcId}
+          busy={busy}
           detail={detail}
           onSelect={(npcId) => void handleSelect(npcId)}
         />

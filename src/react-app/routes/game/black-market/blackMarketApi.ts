@@ -51,7 +51,7 @@ export async function interactWithBlackMarket(
     | { action: 'question'; message: string; version: number }
     | {
         action: 'haggle';
-        message: string;
+        message?: string;
         offeredPrice: number;
         version: number;
       },
@@ -71,10 +71,16 @@ export async function interactWithBlackMarket(
 export function commitBlackMarketPurchase(
   nodeId: string,
   sessionId: string,
+  version: number,
+  expectedPrice: number,
 ): Promise<Response> {
   return fetch(
     `/api/black-market/${encodeURIComponent(nodeId)}/sessions/${sessionId}/commit`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, expectedPrice }),
+    },
   );
 }
 

@@ -25,6 +25,9 @@ export type BlackMarketSessionPhase =
 
 export type BlackMarketNpcStatus = 'available' | 'in_progress' | 'completed';
 
+export type BlackMarketNegotiationMood =
+  'calm' | 'guarded' | 'impatient' | 'agreed' | 'closed';
+
 export type BlackMarketMessageRole = 'npc' | 'player' | 'system';
 
 export interface BlackMarketMessage {
@@ -82,6 +85,7 @@ export interface BlackMarketRevealedMaterial {
 
 export interface BlackMarketReveal {
   material: BlackMarketRevealedMaterial;
+  initialPrice?: number;
   paidPrice: number;
   anchorValue: number;
   valueRatio: number;
@@ -98,10 +102,9 @@ export interface BlackMarketSessionView {
   listing: BlackMarketListingMask;
   initialPrice: number;
   currentPrice: number;
-  inspectTurnsUsed: number;
-  inspectTurnsMax: number;
-  haggleTurnsUsed: number;
-  haggleTurnsMax: number;
+  canInspect: boolean;
+  canHaggle: boolean;
+  negotiationMood: BlackMarketNegotiationMood;
   revealedClues: BlackMarketClue[];
   messages: BlackMarketMessage[];
   version: number;

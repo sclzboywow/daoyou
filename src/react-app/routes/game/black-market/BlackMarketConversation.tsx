@@ -8,6 +8,7 @@ import {
 import { getGameConceptInfo } from '@shared/lib/gameConceptDisplay';
 import type {
   BlackMarketInspectionKind,
+  BlackMarketNegotiationMood,
   BlackMarketNpcSummary,
   BlackMarketSessionView,
 } from '@shared/types/blackMarket';
@@ -15,16 +16,32 @@ import { useMemo, useState } from 'react';
 
 const SPIRIT_STONES = getGameConceptInfo('spirit_stones');
 
-const inspectionOptions: Array<{
+type InteractionMode = 'inspect' | 'question' | 'haggle';
+
+const inspectOptions: Array<{
   kind: BlackMarketInspectionKind;
   label: string;
 }> = [
   { kind: 'appearance', label: '观察外观' },
   { kind: 'aura', label: '感知灵气' },
   { kind: 'damage', label: '检查破损' },
-  { kind: 'origin', label: '询问来历' },
-  { kind: 'sale_reason', label: '询问为何出售' },
 ];
+
+const questionOptions: Array<{
+  kind: BlackMarketInspectionKind;
+  label: string;
+}> = [
+  { kind: 'origin', label: '问问来历' },
+  { kind: 'sale_reason', label: '问为何出手' },
+];
+
+const moodCopy: Record<BlackMarketNegotiationMood, string> = {
+  calm: '神色从容',
+  guarded: '开始掂量你的来意',
+  impatient: '已经有些不耐烦',
+  agreed: '已经点头认价',
+  closed: '已经把价咬死',
+};
 
 export function BlackMarketConversation({
   npc,
@@ -45,10 +62,11 @@ export function BlackMarketConversation({
   notice?: string;
   onInspect(kind: BlackMarketInspectionKind): void;
   onQuestion(message: string): void;
-  onHaggle(message: string, offeredPrice: number): void;
+  onHaggle(message: string | undefined, offeredPrice: number): void;
   onCommit(): Promise<void>;
   onLeave(): void;
 }) {
+  const [mode, setMode] = useState<InteractionMode>('inspect');
   const [question, setQuestion] = useState('');
   const [haggleMessage, setHaggleMessage] = useState('');
   const [offeredPrice, setOfferedPrice] = useState('');
@@ -59,8 +77,8 @@ export function BlackMarketConversation({
     () => new Set(session.revealedClues.map((clue) => clue.kind)),
     [session.revealedClues],
   );
-  const inspectExhausted = session.inspectTurnsUsed >= session.inspectTurnsMax;
-  const haggleExhausted = session.haggleTurnsUsed >= session.haggleTurnsMax;
+  const inspectExhausted = !session.canInspect;
+  const dealReady = session.phase === 'deal_ready';
 
   const messages = session.messages.map((message) => ({
     id: message.id,
@@ -76,8 +94,8 @@ export function BlackMarketConversation({
 
   const confirmPurchase = () => {
     setConfirmDialog({
-      id: `black-market-buy-${session.id}`,
-      title: '暗巷成交',
+      id: `black-market-buy-${session.id}-${session.version}`,
+      title: dealReady ? '就按这个价' : '暗巷成交',
       content: (
         <div className="space-y-3 text-sm leading-7">
           <p>
@@ -91,13 +109,15 @@ export function BlackMarketConversation({
           <p className="text-ink-secondary">暗巷交易落子无悔。</p>
         </div>
       ),
-      confirmLabel: '成交开奖',
+      confirmLabel: dealReady ? '一手交钱，一手交货' : '成交揭晓',
       cancelLabel: '再想想',
       onConfirm: async () => {
         await onCommit();
       },
     });
   };
+
+  const actionDisabled = busy || dealReady;
 
   return (
     <>
@@ -106,21 +126,6 @@ export function BlackMarketConversation({
         messages={messages}
         busy={busy}
         error={error}
-        actions={
-          <>
-            {inspectionOptions.map((option) => (
-              <InkButton
-                key={option.kind}
-                onClick={() => onInspect(option.kind)}
-                disabled={
-                  busy || inspectExhausted || revealedKinds.has(option.kind)
-                }
-              >
-                {option.label}
-              </InkButton>
-            ))}
-          </>
-        }
       >
         <div className="space-y-5">
           <div className="border-ink/15 flex flex-wrap items-center justify-between gap-3 border-y py-3 text-sm">
@@ -129,115 +134,192 @@ export function BlackMarketConversation({
               当前报价：{session.currentPrice.toLocaleString()} 灵石
             </strong>
             <span className="text-ink-secondary">
-              查验 {session.inspectTurnsUsed}/{session.inspectTurnsMax} · 议价{' '}
-              {session.haggleTurnsUsed}/{session.haggleTurnsMax}
+              摊主：{moodCopy[session.negotiationMood]}
             </span>
           </div>
+
           <p className="text-ink-secondary text-sm leading-7">
             {session.listing.description}
           </p>
           {notice ? <InkNotice>{notice}</InkNotice> : null}
 
-          {!inspectExhausted ? (
-            <form
-              className="space-y-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!question.trim()) return;
-                onQuestion(question.trim());
-                setQuestion('');
-              }}
-            >
-              <label
-                className="text-ink-secondary block text-sm"
-                htmlFor="black-market-question"
-              >
-                自由提问（计一次查验）
-              </label>
-              <div className="flex gap-2">
-                <input
-                  id="black-market-question"
-                  value={question}
-                  onChange={(event) => setQuestion(event.target.value)}
-                  maxLength={240}
-                  disabled={busy}
-                  className="border-ink/20 bg-paper/40 focus:border-crimson/45 min-w-0 flex-1 border px-3 py-2 outline-none"
-                  placeholder="例如：这股寒意是伪造的吗？"
-                />
-                <InkButton type="submit" disabled={busy || !question.trim()}>
-                  询问
-                </InkButton>
-              </div>
-            </form>
-          ) : null}
-
-          {!haggleExhausted ? (
-            <form
-              className="space-y-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const price = Number(offeredPrice);
-                if (
-                  !haggleMessage.trim() ||
-                  !Number.isSafeInteger(price) ||
-                  price < 1
-                )
-                  return;
-                onHaggle(haggleMessage.trim(), price);
-                setHaggleMessage('');
-                setOfferedPrice('');
-              }}
-            >
-              <label
-                className="text-ink-secondary block text-sm"
-                htmlFor="black-market-haggle"
-              >
-                正式议价
-              </label>
-              <textarea
-                id="black-market-haggle"
-                value={haggleMessage}
-                onChange={(event) => setHaggleMessage(event.target.value)}
-                maxLength={240}
-                disabled={busy}
-                rows={2}
-                className="border-ink/20 bg-paper/40 focus:border-crimson/45 w-full resize-none border px-3 py-2 outline-none"
-                placeholder="引用查到的线索，说出你的价钱……"
-              />
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  max={2_000_000_000}
-                  value={offeredPrice}
-                  onChange={(event) => setOfferedPrice(event.target.value)}
-                  disabled={busy}
-                  className="border-ink/20 bg-paper/40 focus:border-crimson/45 min-w-0 flex-1 border px-3 py-2 outline-none"
-                  placeholder="报价灵石"
-                />
-                <InkButton
-                  type="submit"
-                  disabled={busy || !haggleMessage.trim() || !offeredPrice}
-                  variant="primary"
-                >
-                  出价
-                </InkButton>
-              </div>
-            </form>
+          {dealReady ? (
+            <InkNotice>
+              摊主已经点头认下这个价。此刻再压价只会坏了规矩。
+            </InkNotice>
           ) : (
-            <p className="text-ink-secondary text-sm">摊主已经不愿继续议价。</p>
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <InkButton
+                  onClick={() => setMode('inspect')}
+                  disabled={busy || inspectExhausted}
+                  variant={mode === 'inspect' ? 'primary' : 'secondary'}
+                >
+                  看货
+                </InkButton>
+                <InkButton
+                  onClick={() => setMode('question')}
+                  disabled={busy || inspectExhausted}
+                  variant={mode === 'question' ? 'primary' : 'secondary'}
+                >
+                  试探
+                </InkButton>
+                <InkButton
+                  onClick={() => setMode('haggle')}
+                  disabled={busy || !session.canHaggle}
+                  variant={mode === 'haggle' ? 'primary' : 'secondary'}
+                >
+                  谈价
+                </InkButton>
+              </div>
+
+              {mode === 'inspect' ? (
+                <div className="border-ink/15 bg-ink/[0.02] space-y-3 border-l-2 px-4 py-4">
+                  <p className="text-ink-secondary text-sm">
+                    先看看货，别急着信摊主的话。
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {inspectOptions.map((option) => (
+                      <InkButton
+                        key={option.kind}
+                        onClick={() => onInspect(option.kind)}
+                        disabled={
+                          actionDisabled ||
+                          inspectExhausted ||
+                          revealedKinds.has(option.kind)
+                        }
+                      >
+                        {option.label}
+                      </InkButton>
+                    ))}
+                  </div>
+                  {inspectExhausted ? (
+                    <p className="text-ink-secondary text-sm">
+                      再盯下去也看不出更多东西了。
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {mode === 'question' ? (
+                <div className="border-ink/15 bg-ink/[0.02] space-y-3 border-l-2 px-4 py-4">
+                  <div className="flex flex-wrap gap-2">
+                    {questionOptions.map((option) => (
+                      <InkButton
+                        key={option.kind}
+                        onClick={() => onInspect(option.kind)}
+                        disabled={
+                          actionDisabled ||
+                          inspectExhausted ||
+                          revealedKinds.has(option.kind)
+                        }
+                      >
+                        {option.label}
+                      </InkButton>
+                    ))}
+                  </div>
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      if (!question.trim()) return;
+                      onQuestion(question.trim());
+                      setQuestion('');
+                    }}
+                  >
+                    <div className="border-ink/20 bg-paper/40 focus-within:border-crimson/45 flex items-center border">
+                      <input
+                        value={question}
+                        onChange={(event) => setQuestion(event.target.value)}
+                        maxLength={240}
+                        disabled={actionDisabled || inspectExhausted}
+                        className="min-w-0 flex-1 bg-transparent px-3 py-2 outline-none"
+                        placeholder="跟他说点什么……"
+                        aria-label="跟摊主说点什么"
+                      />
+                      <InkButton
+                        type="submit"
+                        disabled={actionDisabled || !question.trim()}
+                      >
+                        开口
+                      </InkButton>
+                    </div>
+                  </form>
+                </div>
+              ) : null}
+
+              {mode === 'haggle' ? (
+                <div className="space-y-2">
+                  {session.canHaggle ? (
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const price = Number(offeredPrice);
+                        if (!Number.isSafeInteger(price) || price < 1) return;
+                        onHaggle(haggleMessage.trim() || undefined, price);
+                        setHaggleMessage('');
+                        setOfferedPrice('');
+                      }}
+                      className="border-ink/20 bg-paper/40 focus-within:border-crimson/45 border"
+                    >
+                      <textarea
+                        value={haggleMessage}
+                        onChange={(event) =>
+                          setHaggleMessage(event.target.value)
+                        }
+                        maxLength={240}
+                        disabled={busy}
+                        rows={2}
+                        className="w-full resize-none bg-transparent px-3 py-3 outline-none"
+                        placeholder="跟他说点什么……（也可以不说，直接开价）"
+                        aria-label="还价时对摊主说的话"
+                      />
+                      <div className="border-ink/15 flex flex-wrap items-center gap-2 border-t px-3 py-2">
+                        <span className="text-ink-secondary text-sm">
+                          我的出价
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={2_000_000_000}
+                          value={offeredPrice}
+                          onChange={(event) =>
+                            setOfferedPrice(event.target.value)
+                          }
+                          disabled={busy}
+                          className="text-ink min-w-28 flex-1 bg-transparent px-2 py-1 text-right outline-none"
+                          placeholder="输入灵石数"
+                          aria-label="我的灵石出价"
+                        />
+                        <span className="text-ink-secondary text-sm">灵石</span>
+                        <InkButton
+                          type="submit"
+                          disabled={busy || !offeredPrice}
+                          variant="primary"
+                        >
+                          开口还价
+                        </InkButton>
+                      </div>
+                    </form>
+                  ) : (
+                    <p className="text-ink-secondary text-sm leading-7">
+                      摊主已经把价咬死，再压下去只会把人谈走。
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </>
           )}
 
           <div className="flex flex-wrap justify-between gap-2 pt-2">
             <InkButton onClick={onLeave} disabled={busy} variant="secondary">
-              离开摊位
+              先离开摊位
             </InkButton>
             <InkButton
               onClick={confirmPurchase}
               disabled={busy}
               variant="primary"
             >
-              按当前价格成交
+              {dealReady ? '一手交钱，一手交货' : '按当前价格拿下'}
             </InkButton>
           </div>
         </div>

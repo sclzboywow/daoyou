@@ -8,11 +8,13 @@ import type { ReactNode } from 'react';
 export function BlackMarketRoom({
   overview,
   selectedNpcId,
+  busy,
   detail,
   onSelect,
 }: {
   overview: BlackMarketOverview;
   selectedNpcId?: BlackMarketNpcId;
+  busy: boolean;
   detail?: ReactNode;
   onSelect(npcId: BlackMarketNpcId): void;
 }) {
@@ -40,6 +42,7 @@ export function BlackMarketRoom({
                 ? 'attention'
                 : 'active',
         },
+        disabled: busy,
       }))}
       selectedId={selectedNpcId}
       onSelect={(npcId) => onSelect(npcId as BlackMarketNpcId)}

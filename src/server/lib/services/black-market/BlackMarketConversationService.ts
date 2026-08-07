@@ -37,6 +37,18 @@ export class BlackMarketConversationService {
     judgment: BlackMarketConversationJudgment;
     degraded: boolean;
   }> {
+    if (input.action === 'haggle' && !input.message?.trim()) {
+      return {
+        degraded: false,
+        judgment: {
+          intent: 'haggle',
+          strategy: 'direct_offer',
+          argumentQuality: 0,
+          referencedClueIds: [],
+          reply: '摊主掂量着你的价钱，神色没有立刻松动。',
+        },
+      };
+    }
     const payload = stableCompactStringify({
       action: input.action,
       playerMessage: truncateText(input.message ?? '', 240),
@@ -45,7 +57,6 @@ export class BlackMarketConversationService {
       npc: {
         name: input.npc.name,
         voice: input.npc.voice,
-        preferredStrategies: input.npc.preferredStrategies,
       },
       allowedClue: input.allowedClue
         ? {

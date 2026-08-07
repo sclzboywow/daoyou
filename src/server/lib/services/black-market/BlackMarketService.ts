@@ -12,7 +12,6 @@ import { mapMaterialRow } from '@server/lib/services/cultivator/CultivatorInvent
 import { addMaterialStackToInventory } from '@server/lib/services/materialInventory';
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
 import {
-  BLACK_MARKET_MAX_HAGGLES,
   BLACK_MARKET_MAX_INSPECTIONS,
   BLACK_MARKET_REFRESH_MS,
   blackMarketUnit,
@@ -31,6 +30,7 @@ import {
 } from '@shared/lib/game/marketConfig';
 import {
   type BlackMarketInteractionResult,
+  type BlackMarketNegotiationMood,
   type BlackMarketNpcId,
   type BlackMarketOverview,
   type BlackMarketReveal,
@@ -189,6 +189,16 @@ function publicSession(
   session: BlackMarketInternalSession,
 ): BlackMarketSessionView {
   const revealed = new Set(session.revealedClueIds);
+  const negotiationMood: BlackMarketNegotiationMood =
+    session.phase === 'deal_ready' || session.phase === 'completed'
+      ? 'agreed'
+      : session.pricing.patience <= 0
+        ? 'closed'
+        : session.pricing.patience === 1
+          ? 'impatient'
+          : session.pricing.patience === 2
+            ? 'guarded'
+            : 'calm';
   return {
     id: session.id,
     nodeId: session.nodeId,
@@ -202,10 +212,15 @@ function publicSession(
     },
     initialPrice: session.pricing.initialPrice,
     currentPrice: session.pricing.currentPrice,
-    inspectTurnsUsed: session.inspectTurnsUsed,
-    inspectTurnsMax: BLACK_MARKET_MAX_INSPECTIONS,
-    haggleTurnsUsed: session.haggleTurnsUsed,
-    haggleTurnsMax: BLACK_MARKET_MAX_HAGGLES,
+    canInspect:
+      session.cycle === currentCycle() &&
+      session.phase === 'talking' &&
+      session.inspectTurnsUsed < BLACK_MARKET_MAX_INSPECTIONS,
+    canHaggle:
+      session.cycle === currentCycle() &&
+      session.phase === 'talking' &&
+      session.pricing.patience > 0,
+    negotiationMood,
     revealedClues: session.clues
       .filter((clue) => revealed.has(clue.id))
       .map(({ id, kind, text }) => ({ id, kind, text })),
@@ -231,6 +246,15 @@ function assertCurrentSession(
   }
   if (session.phase === 'completed') {
     throw new BlackMarketServiceError(409, '这件货物已经成交');
+  }
+}
+
+function assertConversationOpen(session: BlackMarketInternalSession): void {
+  if (session.phase === 'deal_ready') {
+    throw new BlackMarketServiceError(
+      409,
+      '摊主已经点头，这个价只等你成交或转身离开',
+    );
   }
 }
 
@@ -474,11 +498,7 @@ export async function getBlackMarketOverview(input: {
         ),
         blackMarketSessionRepository.find(identity.sessionId),
       ]);
-      return purchase
-        ? 'completed'
-        : session && session.phase !== 'abandoned'
-          ? 'in_progress'
-          : 'available';
+      return purchase ? 'completed' : session ? 'in_progress' : 'available';
     }),
   );
   const nodeTags = getNodeRegionTags(input.nodeId);
@@ -524,6 +544,7 @@ export async function interactWithBlackMarket(input: {
     throw new BlackMarketServiceError(404, '没有找到这场黑市交易');
   }
   assertCurrentSession(snapshot, input.actor);
+  assertConversationOpen(snapshot);
   if (snapshot.version !== input.command.version) {
     throw new BlackMarketServiceError(409, '摊前情形已经变化，请刷新后再试');
   }
@@ -541,7 +562,7 @@ export async function interactWithBlackMarket(input: {
       throw new BlackMarketServiceError(409, '三次查验机会已经用尽');
     }
     selectedClue = selectClue(snapshot, input.command);
-  } else if (snapshot.haggleTurnsUsed >= BLACK_MARKET_MAX_HAGGLES) {
+  } else if (snapshot.pricing.patience <= 0) {
     throw new BlackMarketServiceError(409, '摊主已经不愿继续议价');
   }
 
@@ -574,6 +595,7 @@ export async function interactWithBlackMarket(input: {
       const session = await blackMarketSessionRepository.find(input.sessionId);
       if (!session) throw new BlackMarketServiceError(404, '黑市会话已经失效');
       assertCurrentSession(session, input.actor);
+      assertConversationOpen(session);
       if (session.version !== input.command.version) {
         throw new BlackMarketServiceError(
           409,
@@ -583,7 +605,11 @@ export async function interactWithBlackMarket(input: {
       const now = Date.now();
       const playerBody =
         input.command.message?.trim() ||
-        (selectedClue ? `查验：${selectedClue.kind}` : '再次出价');
+        (selectedClue
+          ? `查验：${selectedClue.kind}`
+          : input.command.action === 'haggle' && input.command.offeredPrice
+            ? `我出${input.command.offeredPrice.toLocaleString()}灵石。`
+            : '再次出价');
       let outcome: BlackMarketInteractionResult['outcome'];
       let npcReply = judged.judgment.reply;
 
@@ -614,6 +640,7 @@ export async function interactWithBlackMarket(input: {
           judged.judgment.referencedClueIds.filter((id) => knownIds.has(id)),
         ).size;
         const decision = evaluateBlackMarketHaggle({
+          seed: session.seed,
           npcId: session.npcId,
           currentPrice: session.pricing.currentPrice,
           floorPrice: session.pricing.floorPrice,
@@ -626,7 +653,6 @@ export async function interactWithBlackMarket(input: {
             session.seed,
             `haggle:${session.haggleTurnsUsed}:${offeredPrice}`,
           ),
-          isFinalTurn: session.haggleTurnsUsed + 1 >= BLACK_MARKET_MAX_HAGGLES,
         });
         session.haggleTurnsUsed += 1;
         session.pricing.currentPrice = decision.nextPrice;
@@ -720,6 +746,7 @@ async function preparePurchase(
       description: session.hiddenItem.description,
       quantity: 1,
     },
+    initialPrice: session.pricing.initialPrice,
     paidPrice: price,
     anchorValue: session.pricing.anchorValue,
     valueRatio: assessment.valueRatio,
@@ -737,6 +764,8 @@ export async function commitBlackMarketPurchase(input: {
   actor: Actor;
   nodeId: string;
   sessionId: string;
+  version: number;
+  expectedPrice: number;
 }) {
   await assertAccess(input.actor, input.nodeId);
   const snapshot = await blackMarketSessionRepository.find(input.sessionId);
@@ -770,6 +799,16 @@ export async function commitBlackMarketPurchase(input: {
       }
       if (session.cycle !== currentCycle()) {
         throw new BlackMarketServiceError(410, '这批黑市货物已经收摊');
+      }
+      if (
+        session.phase !== 'completed' &&
+        (session.version !== input.version ||
+          session.pricing.currentPrice !== input.expectedPrice)
+      ) {
+        throw new BlackMarketServiceError(
+          409,
+          '摊主的报价已经变化，请按最新价格重新确认',
+        );
       }
       const committed = await playerCommandExecutor.execute({
         coordination: { mode: 'redis', lease },
@@ -853,7 +892,8 @@ export async function leaveBlackMarketSession(input: {
           '摊前情形已经变化，请刷新后再试',
         );
       }
-      session.phase = 'abandoned';
+      // Leaving only closes the local conversation view. The same stall keeps
+      // its clues, price and agreed-deal state until this market cycle ends.
       session.version += 1;
       await blackMarketSessionRepository.save(session);
       return publicSession(session);
