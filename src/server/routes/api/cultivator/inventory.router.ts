@@ -13,11 +13,9 @@ import {
   QiInsufficientError,
   QiServiceError,
 } from '@server/lib/services/QiService';
-import { readResourceWithMeta } from '@server/lib/services/ResourceReadService';
 import { toPlayerStateMutationResponse } from '@server/lib/services/ResourceMutationResponse';
-import {
-  getPaginatedInventoryByType,
-} from '@server/lib/services/cultivator/CultivatorInventoryRepository';
+import { readResourceWithMeta } from '@server/lib/services/ResourceReadService';
+import { getPaginatedInventoryByType } from '@server/lib/services/cultivator/CultivatorInventoryRepository';
 import {
   ELEMENT_VALUES,
   MATERIAL_TYPE_VALUES,
@@ -41,7 +39,10 @@ function parseList<T extends string>(
   label: string,
 ): T[] | undefined {
   if (!raw) return undefined;
-  const parsed = raw.split(',').map((value) => value.trim()).filter(Boolean) as T[];
+  const parsed = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean) as T[];
   if (parsed.length === 0) return undefined;
   const allowed = new Set(values);
   if (parsed.some((value) => !allowed.has(value))) {
@@ -79,10 +80,7 @@ inventoryRouter.get('/', requireActiveCultivatorRef(), async (c) => {
   }
   const type = c.req.query('type');
   if (!type) {
-    return c.json(
-      { success: false, error: '必须指定背包类型和分页参数' },
-      400,
-    );
+    return c.json({ success: false, error: '必须指定背包类型和分页参数' }, 400);
   }
   if (!['artifacts', 'materials', 'consumables'].includes(type)) {
     return c.json(
@@ -99,6 +97,10 @@ inventoryRouter.get('/', requireActiveCultivatorRef(), async (c) => {
     100,
     Math.max(1, parseInt(c.req.query('pageSize') || '20', 10)),
   );
+  const consumableKind = c.req.query('consumableKind');
+  if (consumableKind && consumableKind !== 'pill') {
+    return c.json({ success: false, error: '无效的消耗品分类' }, 400);
+  }
   let materialTypes: MaterialType[] | undefined;
   let excludeMaterialTypes: MaterialType[] | undefined;
   let materialRanks: Quality[] | undefined;
@@ -181,6 +183,7 @@ inventoryRouter.get('/', requireActiveCultivatorRef(), async (c) => {
     materialElements,
     materialSortBy: materialSortBy as (typeof validSortBy)[number] | undefined,
     materialSortOrder: materialSortOrder as 'asc' | 'desc' | undefined,
+    consumableKind: consumableKind as 'pill' | undefined,
   };
   const scope = { kind: 'cultivator' as const, id: ref.cultivatorId };
   if (type === 'artifacts') {

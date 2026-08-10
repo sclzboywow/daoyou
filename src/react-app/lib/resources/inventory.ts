@@ -25,34 +25,24 @@ export function useMaterialInventoryResource(
   const setPage = useCallback(
     (next: SetStateAction<number>) => {
       setPaginationState((current) => {
-        const currentPage =
-          current.filterKey === filterKey ? current.page : 1;
+        const currentPage = current.filterKey === filterKey ? current.page : 1;
         return {
           filterKey,
-          page:
-            typeof next === 'function' ? next(currentPage) : next,
+          page: typeof next === 'function' ? next(currentPage) : next,
         };
       });
     },
     [filterKey],
   );
   const normalizedFilters = useMemo(
-    () =>
-      JSON.parse(filterKey) as Omit<
-        InventoryPageParams,
-        'page'
-      >,
+    () => JSON.parse(filterKey) as Omit<InventoryPageParams, 'page'>,
     [filterKey],
   );
   const params = useMemo(
     () => ({ ...normalizedFilters, page }) satisfies InventoryPageParams,
     [normalizedFilters, page],
   );
-  const query = useResource(
-    inventoryMaterialsResource,
-    params,
-    enabled,
-  );
+  const query = useResource(inventoryMaterialsResource, params, enabled);
   return {
     ...query,
     items: query.data?.items,
@@ -75,11 +65,7 @@ export function useArtifactInventoryResource(options: {
   const { pageSize, enabled = true } = options;
   const [page, setPage] = useState(1);
   const params = useMemo(() => ({ page, pageSize }), [page, pageSize]);
-  const query = useResource(
-    inventoryArtifactsResource,
-    params,
-    enabled,
-  );
+  const query = useResource(inventoryArtifactsResource, params, enabled);
   return {
     ...query,
     items: query.data?.items,
@@ -98,15 +84,15 @@ export function useArtifactInventoryResource(options: {
 export function useConsumableInventoryResource(options: {
   pageSize: number;
   enabled?: boolean;
+  consumableKind?: 'pill';
 }) {
-  const { pageSize, enabled = true } = options;
+  const { pageSize, enabled = true, consumableKind } = options;
   const [page, setPage] = useState(1);
-  const params = useMemo(() => ({ page, pageSize }), [page, pageSize]);
-  const query = useResource(
-    inventoryConsumablesResource,
-    params,
-    enabled,
+  const params = useMemo(
+    () => ({ page, pageSize, consumableKind }),
+    [consumableKind, page, pageSize],
   );
+  const query = useResource(inventoryConsumablesResource, params, enabled);
   return {
     ...query,
     items: query.data?.items,

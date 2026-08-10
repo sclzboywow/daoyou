@@ -1410,7 +1410,9 @@ export const auctionListings = pgTable(
     itemSnapshot: jsonb('item_snapshot').notNull(),
 
     // 价格与状态
-    price: integer('price').notNull(), // 一口价（灵石）
+    price: integer('price').notNull(), // 单件一口价（灵石）
+    initialQuantity: integer('initial_quantity').notNull().default(1),
+    remainingQuantity: integer('remaining_quantity').notNull().default(1),
     status: varchar('status', { length: 20 }).notNull().default('active'), // active | sold | expired | cancelled
     visibility: varchar('visibility', { length: 20 })
       .notNull()

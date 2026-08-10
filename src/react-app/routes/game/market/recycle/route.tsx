@@ -1,3 +1,4 @@
+import { ConsumableListCard } from '@app/components/feature/consumables';
 import { ArtifactListCard } from '@app/components/feature/products';
 import {
   GameLoadingState,
@@ -9,6 +10,7 @@ import {
   InkBadge,
   InkButton,
   InkDialog,
+  InkInput,
   InkList,
   InkListItem,
   InkNotice,
@@ -16,6 +18,7 @@ import {
 import { TypewriterText } from '@app/components/ui/TypewriterText';
 import {
   useArtifactInventoryResource,
+  useConsumableInventoryResource,
   useMaterialInventoryResource,
 } from '@app/lib/resources/inventory';
 import { useResourceMutation } from '@app/lib/resources/mutations';
@@ -24,9 +27,10 @@ import {
   usePlayerLoadout,
   usePlayerSession,
 } from '@app/lib/resources/player';
+import { isPillConsumable } from '@shared/lib/consumables';
 import { getMaterialTypeInfo } from '@shared/lib/gameConceptDisplay';
 import { QUALITY_ORDER } from '@shared/types/constants';
-import type { Artifact, Material } from '@shared/types/cultivator';
+import type { Artifact, Consumable, Material } from '@shared/types/cultivator';
 import type {
   HighTierAppraisal,
   SellConfirmResponse,
@@ -50,7 +54,7 @@ interface RecycleDialogState {
   onConfirm?: () => void | Promise<void>;
 }
 
-type RecycleTab = 'materials' | 'artifacts';
+type RecycleTab = 'materials' | 'artifacts' | 'consumables';
 
 function isMysteryMaterial(item: Pick<Material, 'details'>): boolean {
   const details = item.details;
@@ -60,6 +64,7 @@ function isMysteryMaterial(item: Pick<Material, 'details'>): boolean {
 async function requestSellPreview(
   itemType: SellItemType,
   itemIds: string[],
+  quantity = 1,
 ): Promise<SellPreviewResponse> {
   const response = await fetch('/api/market/sell', {
     method: 'POST',
@@ -67,7 +72,9 @@ async function requestSellPreview(
     body: JSON.stringify({
       phase: 'preview',
       itemType,
-      itemIds,
+      ...(itemType === 'consumable'
+        ? { items: itemIds.map((id) => ({ id, quantity })) }
+        : { itemIds }),
     }),
   });
   const payload = (await response.json()) as SellPreviewResponse & SellApiError;
@@ -124,6 +131,9 @@ export default function MarketRecyclePage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
+  const [consumableQuantities, setConsumableQuantities] = useState<
+    Record<string, string>
+  >({});
 
   const equippedIds = useMemo(
     () =>
@@ -144,6 +154,11 @@ export default function MarketRecyclePage() {
   const artifactInventory = useArtifactInventoryResource({
     enabled: Boolean(cultivatorId),
     pageSize: 20,
+  });
+  const consumableInventory = useConsumableInventoryResource({
+    enabled: Boolean(cultivatorId),
+    pageSize: 20,
+    consumableKind: 'pill',
   });
   const materials = materialInventory.items ?? [];
   const materialPagination = materialInventory.pagination ?? {
@@ -175,6 +190,23 @@ export default function MarketRecyclePage() {
   const refreshArtifactPage = artifactInventory.reload;
   const goPrevArtifactPage = artifactInventory.goPrevPage;
   const goNextArtifactPage = artifactInventory.goNextPage;
+  const consumableItems = (consumableInventory.items ?? []).filter(
+    isPillConsumable,
+  );
+  const consumablePagination = consumableInventory.pagination ?? {
+    page: consumableInventory.page,
+    pageSize: 20,
+    total: 0,
+    totalPages: 0,
+    hasMore: false,
+  };
+  const consumableLoading = consumableInventory.loading;
+  const consumableRefreshing = consumableInventory.isRefreshing;
+  const consumableInitialized = consumableInventory.data !== undefined;
+  const consumableError = consumableInventory.error;
+  const refreshConsumablePage = consumableInventory.reload;
+  const goPrevConsumablePage = consumableInventory.goPrevPage;
+  const goNextConsumablePage = consumableInventory.goNextPage;
 
   const closeDialog = useCallback(() => {
     if (isProcessing) return;
@@ -186,8 +218,17 @@ export default function MarketRecyclePage() {
       await refreshMaterialPage();
       return;
     }
-    await refreshArtifactPage();
-  }, [activeTab, refreshArtifactPage, refreshMaterialPage]);
+    if (activeTab === 'artifacts') {
+      await refreshArtifactPage();
+      return;
+    }
+    await refreshConsumablePage();
+  }, [
+    activeTab,
+    refreshArtifactPage,
+    refreshConsumablePage,
+    refreshMaterialPage,
+  ]);
 
   const handleSellConfirm = useCallback(
     async (preview: SellPreviewResponse) => {
@@ -244,16 +285,21 @@ export default function MarketRecyclePage() {
         0,
       );
       const isArtifact = preview.itemType === 'artifact';
+      const isConsumable = preview.itemType === 'consumable';
 
       setDialog({
         id: `sell-preview-${preview.sessionId}`,
         title: isHighTier
           ? isArtifact
             ? '法宝鉴评'
-            : '鉴宝师评估'
+            : isConsumable
+              ? '高阶丹药回收确认'
+              : '鉴宝师评估'
           : isArtifact
             ? '法宝回收确认'
-            : '废料回收确认',
+            : isConsumable
+              ? '废丹回收确认'
+              : '废料回收确认',
         content: (
           <div className="space-y-3 py-1">
             {isHighTier && appraisal ? (
@@ -287,8 +333,11 @@ export default function MarketRecyclePage() {
             ) : (
               <p className="text-center leading-7">
                 本次将清理 <span className="font-bold">{totalCount}</span>{' '}
-                {isArtifact ? '件法宝' : '份废料'}，预计获得{' '}
-                <span className="font-bold">{preview.totalSpiritStones}</span>{' '}
+                {isArtifact ? '件法宝' : isConsumable ? '枚丹药' : '份废料'}
+                ，预计获得{' '}
+                <span className="font-bold">
+                  {preview.totalSpiritStones}
+                </span>{' '}
                 灵石。
               </p>
             )}
@@ -370,6 +419,56 @@ export default function MarketRecyclePage() {
     [equippedIds, openPreviewDialog],
   );
 
+  const handleSingleConsumableRecycle = useCallback(
+    async (item: Consumable) => {
+      if (!item.id) return;
+      const quantity = Number.parseInt(consumableQuantities[item.id] || '1');
+      if (
+        !Number.isInteger(quantity) ||
+        quantity < 1 ||
+        quantity > item.quantity
+      ) {
+        setDialog({
+          id: 'consumable-quantity-error',
+          title: '数量有误',
+          content: (
+            <p className="text-crimson py-3 text-center">
+              回收数量范围为 1～{item.quantity}。
+            </p>
+          ),
+          confirmLabel: '知晓',
+          cancelLabel: '关闭',
+        });
+        return;
+      }
+
+      setPendingItemId(item.id);
+      try {
+        const preview = await requestSellPreview(
+          'consumable',
+          [item.id],
+          quantity,
+        );
+        setPendingItemId(null);
+        openPreviewDialog(preview);
+      } catch (err) {
+        setPendingItemId(null);
+        setDialog({
+          id: 'consumable-preview-error',
+          title: '估价失败',
+          content: (
+            <p className="text-crimson py-3 text-center">
+              {err instanceof Error ? err.message : '估价失败'}
+            </p>
+          ),
+          confirmLabel: '知晓',
+          cancelLabel: '关闭',
+        });
+      }
+    },
+    [consumableQuantities, openPreviewDialog],
+  );
+
   const handleBulkRecycle = useCallback(async () => {
     setBulkLoading(true);
     try {
@@ -380,7 +479,9 @@ export default function MarketRecyclePage() {
         return;
       }
 
-      const preview = await requestAllLowTierSellPreview('artifact');
+      const preview = await requestAllLowTierSellPreview(
+        activeTab === 'artifacts' ? 'artifact' : 'consumable',
+      );
       setBulkLoading(false);
       openPreviewDialog(preview);
     } catch (err) {
@@ -407,34 +508,62 @@ export default function MarketRecyclePage() {
     : null;
 
   const isMaterialTab = activeTab === 'materials';
-  const isLoading = isMaterialTab ? materialLoading : artifactLoading;
-  const isRefreshing = isMaterialTab ? materialRefreshing : artifactRefreshing;
+  const isArtifactTab = activeTab === 'artifacts';
+  const isLoading = isMaterialTab
+    ? materialLoading
+    : isArtifactTab
+      ? artifactLoading
+      : consumableLoading;
+  const isRefreshing = isMaterialTab
+    ? materialRefreshing
+    : isArtifactTab
+      ? artifactRefreshing
+      : consumableRefreshing;
   const isInitialized = isMaterialTab
     ? materialInitialized
-    : artifactInitialized;
-  const listError = isMaterialTab ? materialError : artifactError;
-  const pagination = isMaterialTab ? materialPagination : artifactPagination;
+    : isArtifactTab
+      ? artifactInitialized
+      : consumableInitialized;
+  const listError = isMaterialTab
+    ? materialError
+    : isArtifactTab
+      ? artifactError
+      : consumableError;
+  const pagination = isMaterialTab
+    ? materialPagination
+    : isArtifactTab
+      ? artifactPagination
+      : consumablePagination;
 
   const hasItems = isMaterialTab
     ? isInitialized && materials.length > 0
-    : isInitialized && artifacts.length > 0;
+    : isArtifactTab
+      ? isInitialized && artifacts.length > 0
+      : isInitialized && consumableItems.length > 0;
 
   return (
     <GameSceneFrame
       variant="workflow"
       title="【坊市鉴宝司】"
-      description="材料与法宝的回收流统一并入交易场景。主区保留货单与鉴评弹窗，旁栏只汇总当前资源、页签和批量处理规则。"
+      description="鉴宝司按品相估价材料、法宝与丹药，确认货单后当场结算灵石。"
       aside={
         <>
           <GameSceneAsideSection title="鉴宝摘要">
             <div className="space-y-2 text-sm leading-7">
               <p>灵石余额：{currency.data?.spiritStones ?? '读取中'}</p>
-              <p>当前页签：{isMaterialTab ? '材料回收' : '法宝回收'}</p>
+              <p>
+                当前页签：
+                {isMaterialTab
+                  ? '材料回收'
+                  : isArtifactTab
+                    ? '法宝回收'
+                    : '丹药回收'}
+              </p>
               <p>
                 当前页次：{pagination.page} /{' '}
                 {Math.max(pagination.totalPages, 1)}
               </p>
-              {!isMaterialTab ? <p>已装备法宝：{equippedIds.size} 件</p> : null}
+              {isArtifactTab ? <p>已装备法宝：{equippedIds.size} 件</p> : null}
             </div>
           </GameSceneAsideSection>
           <GameSceneAsideSection
@@ -451,10 +580,15 @@ export default function MarketRecyclePage() {
                       </p>
                       <p>预览过期后需重新鉴定，确认前不会真正成交。</p>
                     </>
-                  ) : (
+                  ) : isArtifactTab ? (
                     <>
                       <p>已装备法宝不可回收；高阶法宝仅支持单件鉴评。</p>
                       <p>凡、灵、玄品法宝可直接纳入批量清理。</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>仅回收有效丹药，符箓等其他消耗品不纳入。</p>
+                      <p>可选择单组数量；凡、灵、玄品丹药可批量清理。</p>
                     </>
                   )}
                 </div>
@@ -470,6 +604,7 @@ export default function MarketRecyclePage() {
         items={[
           { label: '材料回收', value: 'materials' },
           { label: '法宝回收', value: 'artifacts' },
+          { label: '丹药回收', value: 'consumables' },
         ]}
       />
 
@@ -479,10 +614,14 @@ export default function MarketRecyclePage() {
             真品及以上需先行鉴定再成交；凡、灵、玄品可批量清理。鉴定结果当场生效，
             过时需重新鉴定。
           </p>
-        ) : (
+        ) : isArtifactTab ? (
           <p className="text-ink-secondary text-sm leading-7">
             真品及以上法宝仅支持单件鉴评回收；凡、灵、玄品可批量清理。
             已装备法宝不可回收，需先卸下。
+          </p>
+        ) : (
+          <p className="text-ink-secondary text-sm leading-7">
+            丹药按品质、品相、评分和实际功效保守估价；可先选数量，再确认回收。
           </p>
         )}
 
@@ -494,7 +633,11 @@ export default function MarketRecyclePage() {
             pending={bulkLoading}
             pendingLabel="清点中……"
           >
-            {isMaterialTab ? '一键出售低阶材料' : '一键出售低阶法宝'}
+            {isMaterialTab
+              ? '一键出售低阶材料'
+              : isArtifactTab
+                ? '一键出售低阶法宝'
+                : '一键回收低阶丹药'}
           </InkButton>
           <InkButton
             variant="secondary"
@@ -503,7 +646,11 @@ export default function MarketRecyclePage() {
             pending={isRefreshing}
             pendingLabel="刷新中……"
           >
-            {isMaterialTab ? '刷新材料' : '刷新法宝'}
+            {isMaterialTab
+              ? '刷新材料'
+              : isArtifactTab
+                ? '刷新法宝'
+                : '刷新丹药'}
           </InkButton>
         </div>
       </div>
@@ -517,7 +664,9 @@ export default function MarketRecyclePage() {
             message={
               isMaterialTab
                 ? '鉴宝师正在清点货架，请稍候……'
-                : '鉴宝师正在核对法宝名录，请稍候……'
+                : isArtifactTab
+                  ? '鉴宝师正在核对法宝名录，请稍候……'
+                  : '药师正在核对丹药名录，请稍候……'
             }
             variant="inline"
           />
@@ -527,7 +676,9 @@ export default function MarketRecyclePage() {
           <InkNotice>
             {isMaterialTab
               ? '储物袋暂无材料，先去历练再来坊市吧。'
-              : '储物袋暂无法宝，先去炼器或探险再来坊市吧。'}
+              : isArtifactTab
+                ? '储物袋暂无法宝，先去炼器或探险再来坊市吧。'
+                : '储物袋暂无可回收丹药。'}
           </InkNotice>
         ) : isMaterialTab ? (
           <InkList>
@@ -572,7 +723,7 @@ export default function MarketRecyclePage() {
               );
             })}
           </InkList>
-        ) : (
+        ) : isArtifactTab ? (
           <InkList>
             {artifacts.map((item) => {
               const quality = item.quality || '凡品';
@@ -598,6 +749,63 @@ export default function MarketRecyclePage() {
               );
             })}
           </InkList>
+        ) : (
+          <InkList>
+            {consumableItems.map((item) => (
+              <ConsumableListCard
+                key={item.id}
+                consumable={item}
+                contextMeta={
+                  <span className="text-ink-secondary text-xs">
+                    可用 x{item.quantity} · 评分 {item.score || '—'}
+                  </span>
+                }
+                actions={
+                  <div className="flex items-start justify-end gap-2">
+                    <div className="flex items-start gap-1">
+                      <div className="w-24">
+                        <InkInput
+                          type="number"
+                          size="sm"
+                          value={consumableQuantities[item.id!] || '1'}
+                          onChange={(value) =>
+                            setConsumableQuantities((current) => ({
+                              ...current,
+                              [item.id!]: value,
+                            }))
+                          }
+                          hint={`最多 ${item.quantity}`}
+                          disabled={isProcessing || bulkLoading}
+                        />
+                      </div>
+                      <InkButton
+                        type="button"
+                        variant="secondary"
+                        onClick={() =>
+                          setConsumableQuantities((current) => ({
+                            ...current,
+                            [item.id!]: String(item.quantity),
+                          }))
+                        }
+                        disabled={isProcessing || bulkLoading}
+                      >
+                        全部
+                      </InkButton>
+                    </div>
+                    <InkButton
+                      variant="primary"
+                      onClick={() => void handleSingleConsumableRecycle(item)}
+                      disabled={isProcessing || bulkLoading}
+                      pending={pendingItemId === item.id}
+                      pendingLabel="估价中……"
+                    >
+                      回收
+                    </InkButton>
+                  </div>
+                }
+              />
+            ))}
+          </InkList>
         )}
 
         {pagination.totalPages > 1 && (
@@ -607,7 +815,9 @@ export default function MarketRecyclePage() {
               onClick={() =>
                 void (isMaterialTab
                   ? goPrevMaterialPage()
-                  : goPrevArtifactPage())
+                  : isArtifactTab
+                    ? goPrevArtifactPage()
+                    : goPrevConsumablePage())
               }
             >
               上一页
@@ -624,7 +834,9 @@ export default function MarketRecyclePage() {
               onClick={() =>
                 void (isMaterialTab
                   ? goNextMaterialPage()
-                  : goNextArtifactPage())
+                  : isArtifactTab
+                    ? goNextArtifactPage()
+                    : goNextConsumablePage())
               }
             >
               下一页

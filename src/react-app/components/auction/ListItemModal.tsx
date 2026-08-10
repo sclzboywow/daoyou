@@ -1,13 +1,9 @@
-import { InkModal } from '@app/components/layout/InkModal';
 import {
   ConsumableListCard,
   getConsumableListSummary,
 } from '@app/components/feature/consumables';
 import { ArtifactListCard } from '@app/components/feature/products';
-import {
-  TEMP_DISABLED_MESSAGES,
-  temporaryRestrictions,
-} from '@shared/config/temporaryRestrictions';
+import { InkModal } from '@app/components/layout/InkModal';
 import {
   InkBadge,
   InkButton,
@@ -19,14 +15,30 @@ import {
   inkFieldVariants,
 } from '@app/components/ui';
 import { ItemCard } from '@app/components/ui/ItemCard';
-import { useResourceMutation } from '@app/lib/resources/mutations';
 import {
   useArtifactInventoryResource,
   useConsumableInventoryResource,
   useMaterialInventoryResource,
 } from '@app/lib/resources/inventory';
+import { useResourceMutation } from '@app/lib/resources/mutations';
+import {
+  AUCTION_MIN_QUALITY,
+  calculateAuctionSettlement,
+  getAuctionUnitPriceCap,
+  isAuctionListableQuality as isAuctionListableQualityValue,
+} from '@shared/config/auctionConfig';
+import {
+  TEMP_DISABLED_MESSAGES,
+  temporaryRestrictions,
+} from '@shared/config/temporaryRestrictions';
 import { cn } from '@shared/lib/cn';
 import { isPillConsumable } from '@shared/lib/consumables';
+import {
+  CONSUMABLE_TYPE_DISPLAY_MAP,
+  getEquipmentSlotInfo,
+  getMaterialTypeInfo,
+  getResourceTypeLabel,
+} from '@shared/lib/gameConceptDisplay';
 import {
   CONSUMABLE_TYPE_VALUES,
   ELEMENT_VALUES,
@@ -41,23 +53,15 @@ import {
 import type {
   Artifact,
   Consumable,
+  Cultivator,
   Material,
 } from '@shared/types/cultivator';
-import type { Cultivator } from '@shared/types/cultivator';
-import {
-  CONSUMABLE_TYPE_DISPLAY_MAP,
-  getEquipmentSlotInfo,
-  getMaterialTypeInfo,
-  getResourceTypeLabel,
-} from '@shared/lib/gameConceptDisplay';
 import { useEffect, useMemo, useState } from 'react';
 
 interface ListItemModalProps {
   onClose: () => void;
   onSuccess: () => void;
-  cultivator:
-    | Pick<Cultivator, 'id' | 'realm' | 'condition'>
-    | null;
+  cultivator: Pick<Cultivator, 'id' | 'realm' | 'condition'> | null;
 }
 
 type ItemType = 'material' | 'artifact' | 'consumable';
@@ -98,21 +102,6 @@ interface ConsumableListFilters {
 }
 
 const PAGE_SIZE = 20;
-const AUCTION_MIN_QUALITY: Quality = '玄品';
-const AUCTION_MAX_PRICE = 9_999_999;
-
-/** 各品质寄售价格上限（与后端 AuctionService 保持一致） */
-const QUALITY_PRICE_CAPS: Partial<Record<Quality, number>> = {
-  凡品: 5_000,
-  灵品: 10_000,
-  玄品: 100_000,
-  真品: 200_000,
-  地品: 400_000,
-  天品: 800_000,
-  仙品: 1_600_000,
-  // 神品: 无品质上限，仅受 AUCTION_MAX_PRICE 全局上限约束
-};
-
 const AUCTION_ALLOWED_QUALITIES = QUALITY_VALUES.filter(
   (q) => QUALITY_ORDER[q] >= QUALITY_ORDER[AUCTION_MIN_QUALITY],
 );
@@ -157,8 +146,7 @@ function getItemQuality(item: SelectableItem): Quality {
 
 /** 获取物品品质对应的价格上限，神品返回全局上限 */
 function getMaxPriceForItem(item: SelectableItem): number {
-  const quality = getItemQuality(item);
-  return QUALITY_PRICE_CAPS[quality] ?? AUCTION_MAX_PRICE;
+  return getAuctionUnitPriceCap(getItemQuality(item));
 }
 
 function getAuctionUnsupportedReason(item: SelectableItem): string | null {
@@ -175,7 +163,7 @@ function isAuctionListableItem(item: SelectableItem): boolean {
   }
 
   const quality = getItemQuality(item);
-  return QUALITY_ORDER[quality] >= QUALITY_ORDER[AUCTION_MIN_QUALITY];
+  return isAuctionListableQualityValue(quality);
 }
 
 export function ListItemModal({
@@ -226,6 +214,7 @@ export function ListItemModal({
   const consumableInventory = useConsumableInventoryResource({
     pageSize: PAGE_SIZE,
     enabled: Boolean(cultivator?.id) && activeType === 'consumable',
+    consumableKind: 'pill',
   });
   const activeInventory =
     activeType === 'material'
@@ -233,6 +222,14 @@ export function ListItemModal({
       : activeType === 'artifact'
         ? artifactInventory
         : consumableInventory;
+  const selectedQuantity =
+    selectedItem && isStackableItem(selectedItem)
+      ? Math.max(1, Number.parseInt(quantity) || 1)
+      : 1;
+  const settlementPreview =
+    selectedItem && Number.parseInt(price) >= 1
+      ? calculateAuctionSettlement(Number.parseInt(price), selectedQuantity)
+      : null;
   const isItemsLoading = activeInventory.loading;
   const itemsByType = useMemo<Record<ItemType, SelectableItem[]>>(
     () => ({
@@ -358,7 +355,7 @@ export function ListItemModal({
     const maxPrice = getMaxPriceForItem(selectedItem);
     if (priceNum > maxPrice) {
       const quality = getItemQuality(selectedItem);
-      setError(`${quality}物品价格不得超过 ${maxPrice.toLocaleString()} 灵石`);
+      setError(`${quality}物品单价不得超过 ${maxPrice.toLocaleString()} 灵石`);
       return;
     }
 
@@ -484,7 +481,10 @@ export function ListItemModal({
     if (selectedItem.itemType === 'artifact') {
       return (
         <div className="bg-ink/5 border-ink/20 border border-dashed p-4">
-          <ArtifactListCard artifact={selectedItem as Artifact} actions={null} />
+          <ArtifactListCard
+            artifact={selectedItem as Artifact}
+            actions={null}
+          />
         </div>
       );
     }
@@ -501,8 +501,7 @@ export function ListItemModal({
           {displayProps.description}
         </p>
         <p className="text-ink-secondary mt-2 text-sm">
-          当前拥有: x
-          {isStackableItem(selectedItem) ? selectedItem.quantity : 1}
+          当前拥有: x{isStackableItem(selectedItem) ? selectedItem.quantity : 1}
         </p>
       </div>
     );
@@ -517,7 +516,9 @@ export function ListItemModal({
   };
   const inventoryError = activeInventory.error ?? listError;
   const hasAnyLoadedItems = itemsByType[activeType].length > 0;
-  const hasAnyAuctionItems = itemsByType[activeType].some(isAuctionListableItem);
+  const hasAnyAuctionItems = itemsByType[activeType].some(
+    isAuctionListableItem,
+  );
 
   const currentItems = useMemo(() => {
     const baseItems = itemsByType[activeType].filter(isAuctionListableItem);
@@ -658,7 +659,7 @@ export function ListItemModal({
             </div>
           )}
 
-          <div className="px-2 py-1 mt-4 bg-ink/5">
+          <div className="bg-ink/5 mt-4 px-2 py-1">
             <div className="flex items-center justify-between">
               <span className="text-ink-secondary text-sm leading-6">
                 筛选与排序
@@ -731,8 +732,7 @@ export function ListItemModal({
                             setMaterialFilters((prev) => ({
                               ...prev,
                               element: event.target.value as
-                                | ElementType
-                                | 'all',
+                                ElementType | 'all',
                             }))
                           }
                           disabled={isItemsLoading}
@@ -881,8 +881,7 @@ export function ListItemModal({
                             setConsumableFilters((prev) => ({
                               ...prev,
                               type: event.target.value as
-                                | ConsumableType
-                                | 'all',
+                                ConsumableType | 'all',
                             }))
                           }
                           disabled={isItemsLoading}
@@ -984,7 +983,9 @@ export function ListItemModal({
                         artifact={item as Artifact}
                         contextMeta={
                           <div className="text-ink-secondary mt-1 space-y-1 text-xs">
-                            <div>数量: x{isStackableItem(item) ? item.quantity : 1}</div>
+                            <div>
+                              数量: x{isStackableItem(item) ? item.quantity : 1}
+                            </div>
                           </div>
                         }
                         actions={
@@ -1009,7 +1010,9 @@ export function ListItemModal({
                       {...displayProps}
                       meta={
                         <div className="text-ink-secondary mt-1 space-y-1 text-xs">
-                          <div>数量: x{isStackableItem(item) ? item.quantity : 1}</div>
+                          <div>
+                            数量: x{isStackableItem(item) ? item.quantity : 1}
+                          </div>
                         </div>
                       }
                       actions={
@@ -1073,41 +1076,67 @@ export function ListItemModal({
           {selectedItem?.itemType !== 'artifact' && (
             <div>
               <label className="mb-2 block text-sm font-medium">上架数量</label>
-              <InkInput
-                value={quantity}
-                onChange={(v) => setQuantity(v)}
-                placeholder={`请输入数量（最多 ${
-                  selectedItem && isStackableItem(selectedItem)
-                    ? selectedItem.quantity
-                    : 0
-                }）`}
-              />
+              <div className="flex gap-2">
+                <InkInput
+                  value={quantity}
+                  onChange={(v) => setQuantity(v)}
+                  placeholder={`请输入数量（最多 ${
+                    selectedItem && isStackableItem(selectedItem)
+                      ? selectedItem.quantity
+                      : 0
+                  }）`}
+                />
+                <InkButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    if (selectedItem && isStackableItem(selectedItem)) {
+                      setQuantity(String(selectedItem.quantity));
+                    }
+                  }}
+                >
+                  全部
+                </InkButton>
+              </div>
             </div>
           )}
 
           <div>
             <label className="mb-2 block text-sm font-medium">
-              设置价格（灵石）
+              设置单件价格（灵石）
             </label>
             <InkInput
               value={price}
               onChange={(v) => setPrice(v)}
-              placeholder="请输入价格"
+              placeholder="请输入每件价格"
             />
-            {selectedItem && (() => {
-              const maxP = getMaxPriceForItem(selectedItem);
-              const q = getItemQuality(selectedItem);
-              return (
-                <p className="text-ink-secondary mt-1 text-xs">
-                  {q}价格上限: {maxP.toLocaleString()} 灵石
+            {selectedItem &&
+              (() => {
+                const maxP = getMaxPriceForItem(selectedItem);
+                const q = getItemQuality(selectedItem);
+                return (
+                  <p className="text-ink-secondary mt-1 text-xs">
+                    {q}单件上限：{maxP.toLocaleString()} 灵石
+                  </p>
+                );
+              })()}
+            {settlementPreview ? (
+              <div className="text-ink-secondary mt-2 space-y-1 text-sm">
+                <p>
+                  总价：{settlementPreview.unitPrice.toLocaleString()} ×{' '}
+                  {settlementPreview.quantity} ={' '}
+                  {settlementPreview.grossAmount.toLocaleString()} 灵石
                 </p>
-              );
-            })()}
-            {price && !isNaN(parseInt(price)) && parseInt(price) >= 1 && (
-              <p className="text-ink-secondary mt-2 text-sm">
-                预计收入: {Math.floor(parseInt(price) * 0.9)} 灵石 (10%手续费)
-              </p>
-            )}
+                <p>
+                  阶梯税：{settlementPreview.feeAmount.toLocaleString()} 灵石
+                  （当前边际税率 {settlementPreview.marginalRatePercent}%）
+                </p>
+                <p>
+                  全部售出预计到手：
+                  {settlementPreview.sellerAmount.toLocaleString()} 灵石
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <div
@@ -1141,7 +1170,8 @@ export function ListItemModal({
                 </option>
                 {friends.map((friend) => (
                   <option key={friend.id} value={friend.id}>
-                    {friend.name} · {friend.realm}{friend.realmStage}
+                    {friend.name} · {friend.realm}
+                    {friend.realmStage}
                   </option>
                 ))}
               </InkSelect>
@@ -1154,8 +1184,11 @@ export function ListItemModal({
             <p>· 仅玄品及以上物品可寄售</p>
             <p>· 寄售后物品将从储物袋中扣除</p>
             <p>· 寄售时限为 48 小时</p>
-            <p>· 交易成功后扣除 10% 手续费</p>
-            <p>· 专属交易只向指定好友展示，并额外消耗拍卖行贵宾符，可在天骄宝阁购买</p>
+            <p>· 成交后按单件价格适用 3%～15% 超额累进税率</p>
+            <p>
+              ·
+              专属交易只向指定好友展示，并额外消耗拍卖行贵宾符，可在天骄宝阁购买
+            </p>
             <p>· 未售出的物品将通过邮件返还</p>
           </div>
         </div>

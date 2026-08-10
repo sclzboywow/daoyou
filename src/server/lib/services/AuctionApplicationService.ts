@@ -15,6 +15,7 @@ import { readCultivatorName } from './cultivator/CultivatorFactsReader';
 
 export async function executeAuctionBuyCommand(args: {
   listingId: string;
+  quantity: number;
   buyerCultivatorId: string;
   buyerCultivatorName: string;
   tx: DbTransaction;
@@ -22,6 +23,7 @@ export async function executeAuctionBuyCommand(args: {
   await buyItem(
     {
       listingId: args.listingId,
+      quantity: args.quantity,
       buyerCultivatorId: args.buyerCultivatorId,
       buyerCultivatorName: args.buyerCultivatorName,
     },
@@ -105,6 +107,8 @@ type AuctionActor = {
 export async function buyAuctionListing(args: {
   actor: AuctionActor;
   listingId: string;
+  quantity: number;
+  requestId: string;
 }) {
   const committed = await withRedisLock(
     {
@@ -123,8 +127,8 @@ export async function buyAuctionListing(args: {
         cultivatorId: args.actor.cultivatorId,
         source: 'auction_buy',
         idempotency: {
-          key: `auction-buy:${args.listingId}`,
-          fingerprint: `${args.actor.cultivatorId}:${args.listingId}`,
+          key: `auction-buy:${args.listingId}:${args.requestId}`,
+          fingerprint: `${args.actor.cultivatorId}:${args.listingId}:${args.quantity}`,
         },
         command: async (tx) => {
           const { name } = await readCultivatorName(
@@ -133,6 +137,7 @@ export async function buyAuctionListing(args: {
           );
           return executeAuctionBuyCommand({
             listingId: args.listingId,
+            quantity: args.quantity,
             buyerCultivatorId: args.actor.cultivatorId,
             buyerCultivatorName: name,
             tx,
