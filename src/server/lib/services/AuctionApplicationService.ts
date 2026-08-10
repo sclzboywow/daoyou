@@ -1,6 +1,7 @@
 import type { DbTransaction } from '@server/lib/drizzle/db';
 import { cultivators, mails } from '@server/lib/drizzle/schema';
 import { redisLockKeys, withRedisLock } from '@server/lib/redis/lock';
+import { getPlayerLoadoutByCultivatorId } from '@server/lib/services/cultivator/CultivatorLoadoutReader';
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
 import { and, eq, sql } from 'drizzle-orm';
 import {
@@ -10,13 +11,11 @@ import {
   listItem,
 } from './AuctionService';
 import { playerCommandExecutor } from './CommandExecutors';
-import {
-  getPlayerLoadoutByCultivatorId,
-} from '@server/lib/services/cultivator/CultivatorLoadoutReader';
 import { readCultivatorName } from './cultivator/CultivatorFactsReader';
 
 export async function executeAuctionBuyCommand(args: {
   listingId: string;
+  quantity: number;
   buyerCultivatorId: string;
   buyerCultivatorName: string;
   tx: DbTransaction;
@@ -24,6 +23,7 @@ export async function executeAuctionBuyCommand(args: {
   await buyItem(
     {
       listingId: args.listingId,
+      quantity: args.quantity,
       buyerCultivatorId: args.buyerCultivatorId,
       buyerCultivatorName: args.buyerCultivatorName,
     },
@@ -112,10 +112,7 @@ export async function executeAuctionCancelCommand(args: {
     .select({ unreadCount: sql<number>`count(*)::int` })
     .from(mails)
     .where(
-      and(
-        eq(mails.cultivatorId, args.cultivatorId),
-        eq(mails.isRead, false),
-      ),
+      and(eq(mails.cultivatorId, args.cultivatorId), eq(mails.isRead, false)),
     );
   return {
     result: { message: '物品已下架，将通过邮件返还' },
@@ -138,6 +135,8 @@ type AuctionActor = {
 export async function buyAuctionListing(args: {
   actor: AuctionActor;
   listingId: string;
+  quantity: number;
+  requestId: string;
 }) {
   const committed = await withRedisLock(
     {
@@ -156,8 +155,8 @@ export async function buyAuctionListing(args: {
         cultivatorId: args.actor.cultivatorId,
         source: 'auction_buy',
         idempotency: {
-          key: `auction-buy:${args.listingId}`,
-          fingerprint: `${args.actor.cultivatorId}:${args.listingId}`,
+          key: `auction-buy:${args.listingId}:${args.requestId}`,
+          fingerprint: `${args.actor.cultivatorId}:${args.listingId}:${args.quantity}`,
         },
         command: async (tx) => {
           const { name } = await readCultivatorName(
@@ -166,6 +165,7 @@ export async function buyAuctionListing(args: {
           );
           return executeAuctionBuyCommand({
             listingId: args.listingId,
+            quantity: args.quantity,
             buyerCultivatorId: args.actor.cultivatorId,
             buyerCultivatorName: name,
             tx,
@@ -195,10 +195,7 @@ export async function listAuctionItem(args: {
       timeoutMs: 10_000,
     },
     command: async (tx) => {
-      const { name } = await readCultivatorName(
-        args.actor.cultivatorId,
-        tx,
-      );
+      const { name } = await readCultivatorName(args.actor.cultivatorId, tx);
       return executeAuctionListCommand({
         userId: args.actor.userId,
         cultivatorId: args.actor.cultivatorId,

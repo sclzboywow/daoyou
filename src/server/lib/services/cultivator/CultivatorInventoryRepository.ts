@@ -1,26 +1,26 @@
 import * as creationProductRepository from '@server/lib/repositories/creationProductRepository';
 import {
-calculateSingleArtifactScore,
-calculateSingleElixirScore,
+  calculateSingleArtifactScore,
+  calculateSingleElixirScore,
 } from '@server/utils/rankingUtils';
 import {
-rehydrateStoredProductModel,
-serializeProductModel,
+  rehydrateStoredProductModel,
+  serializeProductModel,
 } from '@shared/engine/creation-v2/persistence/ProductPersistenceMapper';
 import {
-ELEMENT_VALUES,
-ElementType,
-EquipmentSlot,
-MaterialType,
-Quality,
-QUALITY_ORDER
+  ELEMENT_VALUES,
+  ElementType,
+  EquipmentSlot,
+  MaterialType,
+  Quality,
+  QUALITY_ORDER,
 } from '@shared/types/constants';
 import type {
-Artifact,
-Consumable,
-Cultivator,
-EquippedItems,
-Material
+  Artifact,
+  Consumable,
+  Cultivator,
+  EquippedItems,
+  Material,
 } from '@shared/types/cultivator';
 import {
   and,
@@ -33,18 +33,15 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import {
-getExecutor,
-type DbExecutor,
-type DbTransaction
+  getExecutor,
+  type DbExecutor,
+  type DbTransaction,
 } from '../../drizzle/db';
 import * as schema from '../../drizzle/schema';
-import {
-mapConsumableRow,
-} from '../consumablePersistence';
+import { mapConsumableRow } from '../consumablePersistence';
 import { toArtifactFromProduct } from '../creationProductArtifactSupport';
 import { sanitizeMaterialDetails } from '../materialDetailsPrivacy';
 import { addMaterialStackToInventory } from '../materialInventory';
-
 
 import { assertCultivatorOwnership } from './CultivatorStateRepository';
 type InventoryType = 'artifacts' | 'consumables' | 'materials';
@@ -147,6 +144,7 @@ export async function getPaginatedInventoryByType<T extends InventoryType>(
     materialElements?: ElementType[];
     materialSortBy?: MaterialInventorySortBy;
     materialSortOrder?: MaterialInventorySortOrder;
+    consumableKind?: 'pill';
   },
   q: DbExecutor | DbTransaction = getExecutor(),
 ): Promise<PaginatedInventoryResult<T>> {
@@ -200,16 +198,23 @@ export async function getPaginatedInventoryByType<T extends InventoryType>(
   }
 
   if (options.type === 'consumables') {
+    const consumableWhere =
+      options.consumableKind === 'pill'
+        ? and(
+            eq(schema.consumables.cultivatorId, cultivatorId),
+            sql`${schema.consumables.spec}->>'kind' = 'pill'`,
+          )
+        : eq(schema.consumables.cultivatorId, cultivatorId);
     const countResult = await q
       .select({ count: sql<number>`count(*)` })
       .from(schema.consumables)
-      .where(eq(schema.consumables.cultivatorId, cultivatorId));
+      .where(consumableWhere);
     const total = Number(countResult[0]?.count || 0);
 
     const rows = await q
       .select()
       .from(schema.consumables)
-      .where(eq(schema.consumables.cultivatorId, cultivatorId))
+      .where(consumableWhere)
       .orderBy(desc(schema.consumables.createdAt), desc(schema.consumables.id))
       .limit(pageSize)
       .offset(offset);
@@ -393,11 +398,7 @@ export async function addMaterialToInventory(
   await assertCultivatorOwnership(userId, cultivatorId, q);
   if (!tx) {
     return getExecutor().transaction((transaction) =>
-      addMaterialToInventoryInTransaction(
-        cultivatorId,
-        material,
-        transaction,
-      ),
+      addMaterialToInventoryInTransaction(cultivatorId, material, transaction),
     );
   }
   return addMaterialToInventoryInTransaction(cultivatorId, material, tx);
@@ -491,8 +492,7 @@ export async function consumeMaterialById(
   quantity: number,
   tx?: DbTransaction,
 ): Promise<
-  | { operation: 'upsert'; item: Material }
-  | { operation: 'remove'; id: string }
+  { operation: 'upsert'; item: Material } | { operation: 'remove'; id: string }
 > {
   const dbInstance = getExecutor(tx);
   await assertCultivatorOwnership(userId, cultivatorId, dbInstance);
@@ -567,11 +567,7 @@ export async function addArtifactToInventory(
   await assertCultivatorOwnership(userId, cultivatorId, dbInstance);
   if (!tx) {
     return getExecutor().transaction((transaction) =>
-      addArtifactToInventoryInTransaction(
-        cultivatorId,
-        artifact,
-        transaction,
-      ),
+      addArtifactToInventoryInTransaction(cultivatorId, artifact, transaction),
     );
   }
   return addArtifactToInventoryInTransaction(cultivatorId, artifact, tx);
@@ -695,7 +691,6 @@ export async function addConsumableToInventoryInTransaction(
     return mapConsumableRow(inserted);
   }
 }
-
 
 export async function consumeConsumableById(
   userId: string,

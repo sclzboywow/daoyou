@@ -12,6 +12,10 @@ import {
 } from '@server/lib/services/AuctionApplicationService';
 import { AuctionServiceError } from '@server/lib/services/AuctionService';
 import { toPlayerStateMutationResponse } from '@server/lib/services/ResourceMutationResponse';
+import {
+  AUCTION_MAX_PURCHASE_QUANTITY,
+  AUCTION_MAX_UNIT_PRICE,
+} from '@shared/config/auctionConfig';
 import { QUALITY_VALUES } from '@shared/types/constants';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -32,13 +36,25 @@ const ListingsSchema = z.object({
 
 const BuySchema = z.object({
   listingId: z.string().uuid(),
+  quantity: z
+    .number()
+    .int()
+    .min(1)
+    .max(AUCTION_MAX_PURCHASE_QUANTITY)
+    .default(1),
+  requestId: z.string().uuid().optional(),
 });
 
 const ListSchema = z.object({
   itemType: z.enum(['material', 'artifact', 'consumable']),
   itemId: z.string().uuid(),
-  price: z.number().int().min(1).max(9_999_999),
-  quantity: z.number().int().min(1).default(1),
+  price: z.number().int().min(1).max(AUCTION_MAX_UNIT_PRICE),
+  quantity: z
+    .number()
+    .int()
+    .min(1)
+    .max(AUCTION_MAX_PURCHASE_QUANTITY)
+    .default(1),
   visibility: z.enum(['public', 'private']).default('public'),
   targetCultivatorId: z.string().uuid().optional(),
 });
@@ -130,7 +146,9 @@ router.post('/buy', requireActiveCultivatorRef(), async (c) => {
   }
 
   try {
-    const { listingId } = BuySchema.parse(await c.req.json());
+    const { listingId, quantity, requestId } = BuySchema.parse(
+      await c.req.json(),
+    );
 
     const committed = await buyAuctionListing({
       actor: {
@@ -138,6 +156,8 @@ router.post('/buy', requireActiveCultivatorRef(), async (c) => {
         cultivatorId: cultivator.cultivatorId,
       },
       listingId,
+      quantity,
+      requestId: requestId ?? crypto.randomUUID(),
     });
     return c.json(toPlayerStateMutationResponse(committed));
   } catch (error) {

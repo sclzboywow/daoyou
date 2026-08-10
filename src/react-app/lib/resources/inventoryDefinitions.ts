@@ -2,11 +2,12 @@ import {
   reduceInventoryResourcePage,
   type ResourceTopic,
 } from '@shared/contracts/resources';
-import type { ElementType, MaterialType, Quality } from '@shared/types/constants';
-import {
-  loadResourceEndpoint,
-  resolveTopicScope,
-} from './definitionCore';
+import type {
+  ElementType,
+  MaterialType,
+  Quality,
+} from '@shared/types/constants';
+import { loadResourceEndpoint, resolveTopicScope } from './definitionCore';
 import type { ResourceDefinition } from './store';
 
 export interface InventoryPageParams {
@@ -17,13 +18,9 @@ export interface InventoryPageParams {
   materialRanks?: Quality[];
   materialElements?: ElementType[];
   materialSortBy?:
-    | 'createdAt'
-    | 'rank'
-    | 'type'
-    | 'element'
-    | 'quantity'
-    | 'name';
+    'createdAt' | 'rank' | 'type' | 'element' | 'quantity' | 'name';
   materialSortOrder?: 'asc' | 'desc';
+  consumableKind?: 'pill';
 }
 
 const normalizedStrings = <T extends string>(
@@ -47,19 +44,16 @@ export function normalizeInventoryPageParams(
     ...(excludeMaterialTypes ? { excludeMaterialTypes } : {}),
     ...(materialRanks ? { materialRanks } : {}),
     ...(materialElements ? { materialElements } : {}),
-    ...(params.materialSortBy
-      ? { materialSortBy: params.materialSortBy }
-      : {}),
+    ...(params.materialSortBy ? { materialSortBy: params.materialSortBy } : {}),
     ...(params.materialSortOrder
       ? { materialSortOrder: params.materialSortOrder }
       : {}),
+    ...(params.consumableKind ? { consumableKind: params.consumableKind } : {}),
   };
 }
 
 type InventoryTopic =
-  | 'inventory.artifacts'
-  | 'inventory.materials'
-  | 'inventory.consumables';
+  'inventory.artifacts' | 'inventory.materials' | 'inventory.consumables';
 
 function inventoryPageResource<TTopic extends InventoryTopic>(
   topic: TTopic,
@@ -86,6 +80,8 @@ function inventoryPageResource<TTopic extends InventoryTopic>(
         if (params.materialSortOrder) {
           query.set('materialSortOrder', params.materialSortOrder);
         }
+      } else if (tab === 'consumables' && params.consumableKind) {
+        query.set('consumableKind', params.consumableKind);
       }
       return loadResourceEndpoint(
         topic,

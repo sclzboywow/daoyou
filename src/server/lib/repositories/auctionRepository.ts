@@ -1,5 +1,9 @@
 import { and, asc, desc, eq, gte, lte, or, sql, type SQL } from 'drizzle-orm';
-import { getExecutor, type DbExecutor, type DbTransaction } from '../drizzle/db';
+import {
+  getExecutor,
+  type DbExecutor,
+  type DbTransaction,
+} from '../drizzle/db';
 import * as schema from '../drizzle/schema';
 
 /**
@@ -20,6 +24,8 @@ export async function createListing(data: {
   itemCategory: string;
   itemSnapshot: unknown;
   price: number;
+  initialQuantity: number;
+  remainingQuantity: number;
   visibility?: 'public' | 'private';
   targetCultivatorId?: string;
   targetCultivatorName?: string;
@@ -39,6 +45,8 @@ export async function createListing(data: {
       itemCategory: data.itemCategory,
       itemSnapshot: data.itemSnapshot,
       price: data.price,
+      initialQuantity: data.initialQuantity,
+      remainingQuantity: data.remainingQuantity,
       visibility: data.visibility ?? 'public',
       targetCultivatorId: data.targetCultivatorId,
       targetCultivatorName: data.targetCultivatorName,
@@ -243,6 +251,30 @@ export async function transitionStatus(
       ...(options.soldAt ? { soldAt: options.soldAt } : {}),
     })
     .where(and(...conditions))
+    .returning();
+  return listing ?? null;
+}
+
+export async function consumeListingQuantity(
+  tx: DbTransaction,
+  id: string,
+  quantity: number,
+): Promise<AuctionListing | null> {
+  const [listing] = await tx
+    .update(schema.auctionListings)
+    .set({
+      remainingQuantity: sql`${schema.auctionListings.remainingQuantity} - ${quantity}`,
+      status: sql`case when ${schema.auctionListings.remainingQuantity} = ${quantity} then 'sold' else 'active' end`,
+      soldAt: sql`case when ${schema.auctionListings.remainingQuantity} = ${quantity} then now() else null end`,
+    })
+    .where(
+      and(
+        eq(schema.auctionListings.id, id),
+        eq(schema.auctionListings.status, 'active'),
+        gte(schema.auctionListings.expiresAt, new Date()),
+        gte(schema.auctionListings.remainingQuantity, quantity),
+      ),
+    )
     .returning();
   return listing ?? null;
 }

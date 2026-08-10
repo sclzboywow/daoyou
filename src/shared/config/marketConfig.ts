@@ -9,13 +9,15 @@ export const PRODUCE_PRICE_FACTOR_MIN = 0.8;
 export const PRODUCE_PRICE_FACTOR_MAX = 1.2;
 // 回收价封顶：低于普通市场安全价下限 0.95 经最强命格折扣 0.65 后的价格
 export const RECYCLE_PRICE_FACTOR_CAP = 0.6;
+export const PILL_RECYCLE_SCORE_FACTOR = 0.25;
 
 // 低品回收锚定系数（乘以 anchorPrice）
-export const LOW_TIER_ANCHOR_FACTOR: Record<'凡品' | '灵品' | '玄品', number> = {
-  凡品: 0.26,
-  灵品: 0.33,
-  玄品: 0.42,
-};
+export const LOW_TIER_ANCHOR_FACTOR: Record<'凡品' | '灵品' | '玄品', number> =
+  {
+    凡品: 0.26,
+    灵品: 0.33,
+    玄品: 0.42,
+  };
 
 // 高品回收基础锚定系数（按品质）
 export const HIGH_TIER_BASE_FACTOR: Record<
@@ -30,7 +32,10 @@ export const HIGH_TIER_BASE_FACTOR: Record<
 };
 
 // 鉴定评级倍率（高品专用）
-export const APPRAISAL_RATING_MULTIPLIER: Record<'S' | 'A' | 'B' | 'C', number> = {
+export const APPRAISAL_RATING_MULTIPLIER: Record<
+  'S' | 'A' | 'B' | 'C',
+  number
+> = {
   S: 1.25,
   A: 1.15,
   B: 1.08,
@@ -66,7 +71,10 @@ export const ARTIFACT_MATERIAL_ANCHOR_FACTOR: Record<Quality, number> = {
   神品: 0.46,
 };
 
-export const ARTIFACT_SLOT_FACTOR: Record<'weapon' | 'armor' | 'accessory', number> = {
+export const ARTIFACT_SLOT_FACTOR: Record<
+  'weapon' | 'armor' | 'accessory',
+  number
+> = {
   weapon: 1.05,
   armor: 1,
   accessory: 0.98,
