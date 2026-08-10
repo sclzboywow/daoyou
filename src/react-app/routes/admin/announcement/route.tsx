@@ -14,7 +14,7 @@ function AdminContentTabs({ active }: { active: 'announcement' | 'website' }) {
   return (
     <div className="border-ink/15 bg-bgpaper/90 flex flex-wrap gap-2 border border-dashed p-3">
       <Link
-        href="/admin/announcement"
+        href="/admin/announcement?tab=announcement"
         className={`border px-3 py-2 text-sm no-underline ${active === 'announcement' ? 'border-crimson/50 text-crimson' : 'border-ink/15 text-ink-secondary'}`}
       >
         游戏公告
