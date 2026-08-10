@@ -5,6 +5,7 @@ import type {
   Quality,
   RealmType,
 } from './constants';
+import type { PillAppearanceGrade } from './consumable';
 import type { Material } from './cultivator';
 
 export type MarketLayer = 'common' | 'treasure' | 'heaven' | 'black';
@@ -23,10 +24,10 @@ export const MARKET_LIBRARY_REQUIRED_LAYERS: MarketLayer[] = [
 
 /** 刷新周期（毫秒） */
 export const MARKET_REFRESH_MS: Record<MarketLayer, number> = {
-  common: 15 * 60 * 1000,    // 15 分钟
-  treasure: 15 * 60 * 1000,  // 15 分钟
+  common: 15 * 60 * 1000, // 15 分钟
+  treasure: 15 * 60 * 1000, // 15 分钟
   heaven: 2 * 60 * 60 * 1000, // 2 小时
-  black: 2 * 60 * 60 * 1000,  // 2 小时
+  black: 2 * 60 * 60 * 1000, // 2 小时
 };
 
 /** 每层商品数量 */
@@ -124,7 +125,7 @@ export interface MysteryRevealContext {
 
 export type SellPhase = 'preview' | 'confirm';
 export type SellMode = 'low_bulk' | 'high_single';
-export type SellItemType = 'material' | 'artifact';
+export type SellItemType = 'material' | 'artifact' | 'consumable';
 
 export interface HighTierAppraisal {
   rating: 'S' | 'A' | 'B' | 'C';
@@ -136,7 +137,8 @@ export interface SellPreviewItem {
   id: string;
   name: string;
   rank?: Quality; // material
-  quality?: Quality; // artifact
+  quality?: Quality; // artifact | consumable
+  appearance?: PillAppearanceGrade;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -160,7 +162,8 @@ export interface SellConfirmSoldItem {
   id: string;
   name: string;
   rank?: Quality; // material
-  quality?: Quality; // artifact
+  quality?: Quality; // artifact | consumable
+  appearance?: PillAppearanceGrade;
   quantity: number;
   price: number;
   slot?: EquipmentSlot;

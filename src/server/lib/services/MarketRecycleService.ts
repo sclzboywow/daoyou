@@ -3,11 +3,16 @@ import {
   type DbExecutor,
   type DbTransaction,
 } from '@server/lib/drizzle/db';
-import { cultivators, materials } from '@server/lib/drizzle/schema';
+import {
+  consumables,
+  cultivators,
+  materials,
+} from '@server/lib/drizzle/schema';
 import { redis } from '@server/lib/redis';
 import { parseRedisJson } from '@server/lib/redis/json';
 import type { CreationProductRecord } from '@server/lib/repositories/creationProductRepository';
 import * as creationProductRepository from '@server/lib/repositories/creationProductRepository';
+import { calculateSingleElixirScore } from '@server/utils/rankingUtils';
 import {
   APPRAISAL_KEYWORD_BONUS_MAX,
   APPRAISAL_KEYWORD_BONUS_MIN,
@@ -19,6 +24,7 @@ import {
   HIGH_TIER_BASE_FACTOR,
   HIGH_TIER_MIN,
   LOW_TIER_ANCHOR_FACTOR,
+  PILL_RECYCLE_SCORE_FACTOR,
   PRODUCE_PRICE_FACTOR_MIN,
   RECYCLE_LOW_TIER_MAX,
   RECYCLE_PRICE_FACTOR_CAP,
@@ -27,9 +33,10 @@ import {
   BASE_PRICES,
   TYPE_MULTIPLIERS,
 } from '@shared/engine/material/creation/config';
+import { isPillConsumable } from '@shared/lib/consumables';
 import { getMaterialTypeLabel } from '@shared/lib/gameConceptDisplay';
 import { QUALITY_ORDER, type Quality } from '@shared/types/constants';
-import type { Artifact, Material } from '@shared/types/cultivator';
+import type { Artifact, Consumable, Material } from '@shared/types/cultivator';
 import type {
   HighTierAppraisal,
   SellConfirmResponse,
@@ -39,6 +46,7 @@ import type {
   SellPreviewResponse,
 } from '@shared/types/market';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { mapConsumableRow } from './consumablePersistence';
 import {
   getArtifactQualityFromProduct,
   getArtifactStateHash,
@@ -69,7 +77,17 @@ const HIGH_TIER_MATERIAL_BASE_RATING = {
 type HighTierMaterialRank = keyof typeof HIGH_TIER_MATERIAL_BASE_RATING;
 type SellConfirmResult = SellConfirmResponse & {
   afterCommit?: () => Promise<unknown>;
+  inventoryChanges?: MarketRecycleInventoryChange[];
 };
+
+export type MarketRecycleInventoryChange =
+  | { operation: 'remove'; id: string }
+  | { operation: 'upsert'; item: Consumable };
+
+export interface ConsumableSellSelection {
+  id: string;
+  quantity: number;
+}
 
 function isLowTier(quality: Quality): boolean {
   return (
@@ -95,6 +113,14 @@ interface MaterialSnapshot {
   quantity: number;
 }
 
+interface ConsumableSnapshot {
+  id: string;
+  quality: Quality;
+  quantity: number;
+  score: number;
+  specHash: string;
+}
+
 interface RecycleSession {
   sessionId: string;
   cultivatorId: string;
@@ -104,7 +130,10 @@ interface RecycleSession {
   quotedItems: SellPreviewItem[];
   quotedTotal: number;
   appraisal?: HighTierAppraisal;
-  snapshot: Record<string, ArtifactSnapshot | MaterialSnapshot>;
+  snapshot: Record<
+    string,
+    ArtifactSnapshot | MaterialSnapshot | ConsumableSnapshot
+  >;
   createdAt: number;
   expiresAt: number;
 }
@@ -114,7 +143,10 @@ type SessionStore = Omit<SellPreviewResponse, 'success'> & {
   itemIds: string[];
   quotedItems: SellPreviewItem[];
   quotedTotal: number;
-  snapshot: Record<string, ArtifactSnapshot | MaterialSnapshot>;
+  snapshot: Record<
+    string,
+    ArtifactSnapshot | MaterialSnapshot | ConsumableSnapshot
+  >;
   createdAt: number;
 };
 
@@ -233,6 +265,24 @@ export function calculateArtifactUnitPrice(
   const cap = Math.floor(materialAnchorPrice * RECYCLE_PRICE_FACTOR_CAP);
 
   return Math.max(1, Math.min(raw, cap));
+}
+
+export function calculatePillRecycleUnitPrice(
+  consumable: Pick<Consumable, 'quality' | 'score' | 'spec'>,
+): number {
+  const score = calculateSingleElixirScore(consumable as Consumable);
+  return Math.max(1, Math.floor(score * PILL_RECYCLE_SCORE_FACTOR));
+}
+
+function getConsumableQuality(
+  consumable: Pick<Consumable, 'quality'>,
+): Quality {
+  const value = consumable.quality || '凡品';
+  return value in QUALITY_ORDER ? value : '凡品';
+}
+
+function getConsumableSpecHash(consumable: Pick<Consumable, 'spec'>): string {
+  return JSON.stringify(consumable.spec);
 }
 
 function getArtifactAppraisalRating(
@@ -420,6 +470,33 @@ function normalizeItemIds(itemIds: string[]): string[] {
   return deduped;
 }
 
+function normalizeConsumableSelections(
+  selections: ConsumableSellSelection[],
+): ConsumableSellSelection[] {
+  const normalized = selections.map((selection) => ({
+    id: selection.id?.trim(),
+    quantity: selection.quantity,
+  }));
+  if (
+    normalized.length === 0 ||
+    normalized.some(
+      (selection) =>
+        !selection.id ||
+        !Number.isSafeInteger(selection.quantity) ||
+        selection.quantity < 1,
+    )
+  ) {
+    throw new MarketRecycleError(400, '请选择有效的丹药和回收数量');
+  }
+  if (
+    new Set(normalized.map((selection) => selection.id)).size !==
+    normalized.length
+  ) {
+    throw new MarketRecycleError(400, '同一丹药不可重复选择');
+  }
+  return normalized;
+}
+
 function ensureNoMysteryMaterials(items: Material[]): void {
   const reason = getMysteryMaterialBlockingReason(items);
   if (reason) {
@@ -474,6 +551,34 @@ async function loadOwnedArtifacts(
   };
 }
 
+async function loadOwnedConsumables(
+  cultivatorId: string,
+  consumableIds: string[],
+  q: DbExecutor | DbTransaction = getExecutor(),
+): Promise<Consumable[]> {
+  const rows = await q
+    .select()
+    .from(consumables)
+    .where(
+      and(
+        eq(consumables.cultivatorId, cultivatorId),
+        inArray(consumables.id, consumableIds),
+      ),
+    );
+
+  if (rows.length !== consumableIds.length) {
+    throw new MarketRecycleError(400, '部分丹药不存在或不属于当前角色');
+  }
+
+  const order = new Map(consumableIds.map((id, index) => [id, index]));
+  rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  const items = rows.map(mapConsumableRow);
+  if (items.some((item) => !isPillConsumable(item))) {
+    throw new MarketRecycleError(400, '丹药回收不支持符箓或无效消耗品');
+  }
+  return items;
+}
+
 function ensureArtifactsNotEquipped(
   artifacts: CreationProductRecord[],
   message: string,
@@ -512,6 +617,23 @@ function buildArtifactSessionSnapshot(
       score: item.score || 0,
       slot: item.slot,
       effectsHash: rawRecord ? getArtifactStateHash(rawRecord) : '[]',
+    };
+  }
+  return snapshot;
+}
+
+function buildConsumableSessionSnapshot(
+  items: Consumable[],
+): Record<string, ConsumableSnapshot> {
+  const snapshot: Record<string, ConsumableSnapshot> = {};
+  for (const item of items) {
+    if (!item.id) continue;
+    snapshot[item.id] = {
+      id: item.id,
+      quality: getConsumableQuality(item),
+      quantity: item.quantity,
+      score: item.score || 0,
+      specHash: getConsumableSpecHash(item),
     };
   }
   return snapshot;
@@ -717,11 +839,107 @@ async function previewArtifactSell(
   };
 }
 
+async function previewConsumableSell(
+  cultivator: { id: string },
+  rawSelections: ConsumableSellSelection[],
+): Promise<SellPreviewResponse> {
+  const selections = normalizeConsumableSelections(rawSelections);
+  const ids = selections.map((selection) => selection.id);
+  const ownedConsumables = await loadOwnedConsumables(cultivator.id, ids);
+  const selectionById = new Map(
+    selections.map((selection) => [selection.id, selection.quantity]),
+  );
+
+  const lowTier = ownedConsumables.filter((item) =>
+    isLowTier(getConsumableQuality(item)),
+  );
+  const highTier = ownedConsumables.filter((item) =>
+    isHighTier(getConsumableQuality(item)),
+  );
+  if (lowTier.length > 0 && highTier.length > 0) {
+    throw new MarketRecycleError(400, '不可混合回收低品与高品丹药');
+  }
+  if (highTier.length > 1) {
+    throw new MarketRecycleError(400, '真品及以上丹药仅支持单组回收');
+  }
+
+  const mode: SellMode = highTier.length === 1 ? 'high_single' : 'low_bulk';
+  const items: SellPreviewItem[] = ownedConsumables.map((item) => {
+    const quantity = selectionById.get(item.id!) ?? 0;
+    if (quantity < 1 || quantity > item.quantity) {
+      throw new MarketRecycleError(
+        400,
+        `「${item.name}」回收数量范围为 1～${item.quantity}`,
+      );
+    }
+    const unitPrice = calculatePillRecycleUnitPrice(item);
+    return {
+      id: item.id!,
+      name: item.name,
+      quality: getConsumableQuality(item),
+      appearance:
+        item.spec.kind === 'pill'
+          ? item.spec.alchemyMeta.appearance
+          : undefined,
+      quantity,
+      unitPrice,
+      totalPrice: unitPrice * quantity,
+      score: item.score || calculateSingleElixirScore(item),
+    };
+  });
+
+  const totalSpiritStones = items.reduce(
+    (sum, item) => sum + item.totalPrice,
+    0,
+  );
+  const sessionId = crypto.randomUUID();
+  const createdAt = Date.now();
+  const expiresAt = createdAt + APPRAISAL_SESSION_TTL_SEC * 1000;
+  const session: SessionStore = {
+    itemType: 'consumable',
+    sessionId,
+    mode,
+    items,
+    totalSpiritStones,
+    expiresAt,
+    cultivatorId: cultivator.id,
+    itemIds: ids,
+    quotedItems: items,
+    quotedTotal: totalSpiritStones,
+    snapshot: buildConsumableSessionSnapshot(ownedConsumables),
+    createdAt,
+  };
+
+  await redis.set(
+    buildSessionKey(sessionId),
+    JSON.stringify(session),
+    'EX',
+    APPRAISAL_SESSION_TTL_SEC,
+  );
+
+  return {
+    success: true,
+    itemType: 'consumable',
+    sessionId,
+    mode,
+    items,
+    totalSpiritStones,
+    expiresAt,
+  };
+}
+
 export async function previewSell(
   cultivator: { id: string },
   itemIds: string[],
   itemType: SellItemType = 'material',
+  consumableSelections?: ConsumableSellSelection[],
 ): Promise<SellPreviewResponse> {
+  if (itemType === 'consumable') {
+    return previewConsumableSell(
+      cultivator,
+      consumableSelections ?? itemIds.map((id) => ({ id, quantity: 1 })),
+    );
+  }
   if (itemType === 'artifact') {
     return previewArtifactSell(cultivator, itemIds);
   }
@@ -735,6 +953,26 @@ export async function previewAllLowTierSell(
   const lowTierQualities = (Object.keys(QUALITY_ORDER) as Quality[]).filter(
     isLowTier,
   );
+  if (itemType === 'consumable') {
+    const rows = await getExecutor()
+      .select()
+      .from(consumables)
+      .where(
+        and(
+          eq(consumables.cultivatorId, cultivator.id),
+          inArray(consumables.quality, lowTierQualities),
+          sql`${consumables.spec}->>'kind' = 'pill'`,
+        ),
+      )
+      .orderBy(desc(consumables.createdAt), desc(consumables.id));
+    if (rows.length === 0) {
+      throw new MarketRecycleError(400, '未找到可回收丹药');
+    }
+    return previewConsumableSell(
+      cultivator,
+      rows.map((row) => ({ id: row.id, quantity: row.quantity })),
+    );
+  }
   if (itemType === 'artifact') {
     const ids =
       await creationProductRepository.findUnequippedArtifactIdsByQualities(
@@ -958,6 +1196,106 @@ async function confirmArtifactSell(
   };
 }
 
+async function confirmConsumableSell(
+  cultivatorId: string,
+  session: RecycleSession,
+  tx: DbTransaction,
+): Promise<SellConfirmResult> {
+  const ownedConsumables = await loadOwnedConsumables(
+    cultivatorId,
+    session.itemIds,
+    tx,
+  );
+  const currentById = new Map(ownedConsumables.map((item) => [item.id, item]));
+
+  for (const quoted of session.quotedItems) {
+    const current = currentById.get(quoted.id);
+    const expected = session.snapshot[quoted.id] as
+      ConsumableSnapshot | undefined;
+    if (
+      !current ||
+      !expected ||
+      current.quantity !== expected.quantity ||
+      getConsumableQuality(current) !== expected.quality ||
+      (current.score || 0) !== expected.score ||
+      getConsumableSpecHash(current) !== expected.specHash ||
+      quoted.quantity > current.quantity
+    ) {
+      throw new MarketRecycleError(409, '丹药已发生变化，请重新预览');
+    }
+  }
+
+  const inventoryChanges: MarketRecycleInventoryChange[] = [];
+  for (const quoted of session.quotedItems) {
+    const current = currentById.get(quoted.id)!;
+    if (quoted.quantity === current.quantity) {
+      const deleted = await tx
+        .delete(consumables)
+        .where(
+          and(
+            eq(consumables.id, quoted.id),
+            eq(consumables.cultivatorId, cultivatorId),
+            eq(consumables.quantity, current.quantity),
+          ),
+        )
+        .returning({ id: consumables.id });
+      if (deleted.length !== 1) {
+        throw new MarketRecycleError(409, '丹药已发生变化，请重新预览');
+      }
+      inventoryChanges.push({ operation: 'remove', id: quoted.id });
+      continue;
+    }
+
+    const [updated] = await tx
+      .update(consumables)
+      .set({ quantity: current.quantity - quoted.quantity })
+      .where(
+        and(
+          eq(consumables.id, quoted.id),
+          eq(consumables.cultivatorId, cultivatorId),
+          eq(consumables.quantity, current.quantity),
+        ),
+      )
+      .returning();
+    if (!updated) {
+      throw new MarketRecycleError(409, '丹药已发生变化，请重新预览');
+    }
+    inventoryChanges.push({
+      operation: 'upsert',
+      item: mapConsumableRow(updated),
+    });
+  }
+
+  const [updatedCultivator] = await tx
+    .update(cultivators)
+    .set({
+      spirit_stones: sql`${cultivators.spirit_stones} + ${session.quotedTotal}`,
+    })
+    .where(eq(cultivators.id, cultivatorId))
+    .returning({ spiritStones: cultivators.spirit_stones });
+  if (!updatedCultivator) {
+    throw new MarketRecycleError(404, '角色不存在或已失效');
+  }
+
+  return {
+    success: true,
+    itemType: 'consumable',
+    gainedSpiritStones: session.quotedTotal,
+    soldItems: session.quotedItems.map((item) => ({
+      id: item.id,
+      name: item.name,
+      quality: item.quality,
+      appearance: item.appearance,
+      quantity: item.quantity,
+      price: item.totalPrice,
+      score: item.score,
+    })),
+    remainingSpiritStones: updatedCultivator.spiritStones,
+    inventoryChanges,
+    afterCommit: () => redis.del(buildSessionKey(session.sessionId)),
+  };
+}
+
 export async function prepareSellConfirmation(
   cultivatorId: string,
   sessionId: string,
@@ -976,6 +1314,9 @@ export async function prepareSellConfirmation(
 
   return {
     commit(tx: DbTransaction) {
+      if (session.itemType === 'consumable') {
+        return confirmConsumableSell(cultivatorId, session, tx);
+      }
       if (session.itemType === 'artifact') {
         return confirmArtifactSell(cultivatorId, session, tx);
       }

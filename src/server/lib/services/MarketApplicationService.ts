@@ -1,24 +1,20 @@
 import type { DbTransaction } from '@server/lib/drizzle/db';
 import { cultivators } from '@server/lib/drizzle/schema';
 import { redisLockKeys, withRedisLock } from '@server/lib/redis/lock';
+import { getPlayerLoadoutByCultivatorId } from '@server/lib/services/cultivator/CultivatorLoadoutReader';
+import { getPlayerPreHeavenFates } from '@server/lib/services/cultivator/CultivatorProfileRepository';
 import type { ResourceChangeDescriptor } from '@shared/contracts/resources';
-import type { PreHeavenFate } from '@shared/types/cultivator';
-import type { Material } from '@shared/types/cultivator';
+import type { Material, PreHeavenFate } from '@shared/types/cultivator';
 import type { SellConfirmResponse } from '@shared/types/market';
 import { eq } from 'drizzle-orm';
 import { playerCommandExecutor } from './CommandExecutors';
+import { readCultivatorRealm } from './cultivator/CultivatorFactsReader';
+import type { MarketRecycleInventoryChange } from './MarketRecycleService';
+import { prepareSellConfirmation } from './MarketRecycleService';
 import {
   prepareBatchMarketPurchase,
   prepareMarketItemPurchase,
 } from './MarketService';
-import { prepareSellConfirmation } from './MarketRecycleService';
-import {
-  getPlayerPreHeavenFates,
-} from '@server/lib/services/cultivator/CultivatorProfileRepository';
-import {
-  getPlayerLoadoutByCultivatorId,
-} from '@server/lib/services/cultivator/CultivatorLoadoutReader';
-import { readCultivatorRealm } from './cultivator/CultivatorFactsReader';
 
 type PreparedPurchaseCommand<T> = {
   commit(tx: DbTransaction): Promise<{
@@ -73,10 +69,11 @@ export async function executeMarketPurchaseCommand<T>(
 
 export async function executeMarketSellCommand(
   prepared: {
-    commit(
-      tx: DbTransaction,
-    ): Promise<
-      SellConfirmResponse & { afterCommit?: () => Promise<unknown> }
+    commit(tx: DbTransaction): Promise<
+      SellConfirmResponse & {
+        afterCommit?: () => Promise<unknown>;
+        inventoryChanges?: MarketRecycleInventoryChange[];
+      }
     >;
   },
   tx: DbTransaction,
@@ -86,7 +83,11 @@ export async function executeMarketSellCommand(
   resourceChanges: ResourceChangeDescriptor[];
   afterCommit?: () => Promise<void>;
 }> {
-  const { afterCommit, ...result } = await prepared.commit(tx);
+  const {
+    afterCommit,
+    inventoryChanges = [],
+    ...result
+  } = await prepared.commit(tx);
   const resourceChanges: ResourceChangeDescriptor[] = [
     {
       resourceTopic: 'player.currency',
@@ -94,7 +95,32 @@ export async function executeMarketSellCommand(
       payload: { spiritStones: result.remainingSpiritStones },
       operation: 'merge',
     },
-    {
+  ];
+  if (result.itemType === 'consumable') {
+    const removedIds = inventoryChanges
+      .filter((change) => change.operation === 'remove')
+      .map((change) => change.id);
+    const upsertedItems = inventoryChanges
+      .filter((change) => change.operation === 'upsert')
+      .map((change) => change.item);
+    if (removedIds.length > 0) {
+      resourceChanges.push({
+        resourceTopic: 'inventory.consumables',
+        eventType: 'inventory.market.sold',
+        operation: 'remove-items',
+        payload: { idKey: 'id', ids: removedIds },
+      });
+    }
+    if (upsertedItems.length > 0) {
+      resourceChanges.push({
+        resourceTopic: 'inventory.consumables',
+        eventType: 'inventory.market.sold',
+        operation: 'upsert-items',
+        payload: { idKey: 'id', items: upsertedItems },
+      });
+    }
+  } else {
+    resourceChanges.push({
       resourceTopic:
         result.itemType === 'artifact'
           ? 'inventory.artifacts'
@@ -105,13 +131,10 @@ export async function executeMarketSellCommand(
         idKey: 'id',
         ids: result.soldItems.map((item) => item.id),
       },
-    },
-  ];
+    });
+  }
   if (result.itemType === 'artifact') {
-    const loadout = await getPlayerLoadoutByCultivatorId(
-      cultivatorId,
-      tx,
-    );
+    const loadout = await getPlayerLoadoutByCultivatorId(cultivatorId, tx);
     resourceChanges.push({
       resourceTopic: 'player.loadout',
       eventType: 'loadout.market.sold',

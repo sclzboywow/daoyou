@@ -1,6 +1,13 @@
 import { redis } from '@server/lib/redis';
 import * as auctionRepository from '@server/lib/repositories/auctionRepository';
 import * as creationProductRepository from '@server/lib/repositories/creationProductRepository';
+import {
+  AUCTION_MAX_TRANSACTION_TOTAL,
+  AUCTION_MAX_UNIT_PRICE,
+  calculateAuctionSettlement,
+  getAuctionUnitPriceCap,
+  isAuctionListableQuality,
+} from '@shared/config/auctionConfig';
 import { AUCTION_PRIVATE_LISTING_TALISMAN_SCENARIO } from '@shared/config/socialConfig';
 import {
   TEMP_DISABLED_MESSAGES,
@@ -38,21 +45,6 @@ const AUCTION_CACHE_PREFIX = 'auction:';
 
 const MAX_ACTIVE_LISTINGS_PER_SELLER = 5;
 const LISTING_DURATION_HOURS = 48;
-const FEE_RATE = 0.1; // 10% 手续费
-const AUCTION_MIN_QUALITY: Quality = '玄品';
-const AUCTION_MAX_PRICE = 9_999_999; // 全局单笔最高 9999999 灵石
-
-/** 各品质寄售价格上限（神品无上限，受全局 AUCTION_MAX_PRICE 约束） */
-const QUALITY_PRICE_CAPS: Partial<Record<Quality, number>> = {
-  凡品: 5_000,
-  灵品: 10_000,
-  玄品: 100_000,
-  真品: 200_000,
-  地品: 400_000,
-  天品: 800_000,
-  仙品: 1_600_000,
-  // 神品: 无品质上限，仅受 AUCTION_MAX_PRICE 全局上限约束
-};
 
 // ============================================================================
 // Error Codes
@@ -133,6 +125,7 @@ export type AuctionInventoryChange =
 
 export interface BuyItemInput {
   listingId: string;
+  quantity: number;
   buyerCultivatorId: string;
   buyerCultivatorName: string;
 }
@@ -249,10 +242,6 @@ export function getAuctionItemCategory(
   }
 }
 
-export function isAuctionListableQuality(quality: Quality): boolean {
-  return QUALITY_ORDER[quality] >= QUALITY_ORDER[AUCTION_MIN_QUALITY];
-}
-
 export function assertAuctionListableItem(
   itemType: AuctionItemType,
   itemSnapshot: Material | Artifact | Consumable,
@@ -337,10 +326,10 @@ export async function listItem(
       '价格必须至少为 1 灵石',
     );
   }
-  if (price > AUCTION_MAX_PRICE) {
+  if (price > AUCTION_MAX_UNIT_PRICE) {
     throw new AuctionServiceError(
       AuctionError.INVALID_PRICE,
-      `价格不得超过 ${AUCTION_MAX_PRICE.toLocaleString()} 灵石`,
+      `单价不得超过 ${AUCTION_MAX_UNIT_PRICE.toLocaleString()} 灵石`,
     );
   }
 
@@ -435,11 +424,11 @@ export async function listItem(
   const itemQuality = normalizeAuctionItemQuality(itemType, itemSnapshot);
 
   // 按品质校验价格上限
-  const qualityCap = QUALITY_PRICE_CAPS[itemQuality];
-  if (qualityCap !== undefined && price > qualityCap) {
+  const qualityCap = getAuctionUnitPriceCap(itemQuality);
+  if (price > qualityCap) {
     throw new AuctionServiceError(
       AuctionError.INVALID_PRICE,
-      `${itemQuality}物品价格不得超过 ${qualityCap.toLocaleString()} 灵石`,
+      `${itemQuality}物品单价不得超过 ${qualityCap.toLocaleString()} 灵石`,
     );
   }
 
@@ -643,6 +632,8 @@ export async function listItem(
       itemCategory: getAuctionItemCategory(itemType, listingSnapshot),
       itemSnapshot: listingSnapshot,
       price,
+      initialQuantity: quantity,
+      remainingQuantity: quantity,
       visibility,
       targetCultivatorId:
         visibility === 'private' ? targetCultivatorId : undefined,
@@ -680,7 +671,13 @@ export async function buyItem(
   options: AuctionMutationOptions = {},
 ): Promise<void> {
   const q = getExecutor(options.tx);
-  const { listingId, buyerCultivatorId } = input;
+  const { listingId, quantity, buyerCultivatorId } = input;
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    throw new AuctionServiceError(
+      AuctionError.INVALID_QUANTITY,
+      '购买数量必须至少为 1',
+    );
+  }
 
   // 分布式锁由 API/Application 层统一获取。
   // 2. 查询拍卖记录
@@ -702,6 +699,12 @@ export async function buyItem(
   if (new Date() > listing.expiresAt) {
     throw new AuctionServiceError(AuctionError.LISTING_EXPIRED, '此拍卖已过期');
   }
+  if (quantity > listing.remainingQuantity) {
+    throw new AuctionServiceError(
+      AuctionError.INVALID_QUANTITY,
+      `购买数量不足，当前仅剩 ${listing.remainingQuantity}`,
+    );
+  }
 
   // 4. 不能购买自己的物品
   if (listing.sellerId === buyerCultivatorId) {
@@ -720,9 +723,15 @@ export async function buyItem(
     );
   }
 
-  const price = listing.price;
-  const feeAmount = Math.floor(price * FEE_RATE);
-  const sellerAmount = price - feeAmount;
+  const settlement = calculateAuctionSettlement(listing.price, quantity);
+  if (settlement.grossAmount > AUCTION_MAX_TRANSACTION_TOTAL) {
+    throw new AuctionServiceError(
+      AuctionError.INVALID_PRICE,
+      `单次购买总价不得超过 ${AUCTION_MAX_TRANSACTION_TOTAL.toLocaleString()} 灵石`,
+    );
+  }
+  const price = settlement.grossAmount;
+  const { feeAmount, sellerAmount } = settlement;
 
   // 5. 事务：扣除买家灵石 + 更新拍卖状态 + 发送邮件
   const persistPurchase = async (tx: DbTransaction) => {
@@ -776,13 +785,11 @@ export async function buyItem(
       );
     }
 
-    // 5.2 只有 active -> sold 的唯一竞争者可以继续创建交易邮件。
-    const sold = await auctionRepository.transitionStatus(
+    // 5.2 原子扣减货单数量，仅成功扣减的请求可以继续创建交易邮件。
+    const sold = await auctionRepository.consumeListingQuantity(
       tx,
       listingId,
-      'active',
-      'sold',
-      { soldAt: new Date() },
+      quantity,
     );
     if (!sold) {
       throw new AuctionServiceError(
@@ -794,8 +801,10 @@ export async function buyItem(
     // 5.3 发送邮件给买家（物品）
     const itemSnapshot = listing.itemSnapshot as
       Material | Artifact | Consumable;
-    const itemQuantity =
-      'quantity' in itemSnapshot ? itemSnapshot.quantity || 1 : 1;
+    const purchasedSnapshot =
+      listing.itemType === 'artifact'
+        ? itemSnapshot
+        : { ...itemSnapshot, quantity };
     await MailService.sendMail(
       buyerCultivatorId,
       '拍卖行交易成功',
@@ -804,8 +813,8 @@ export async function buyItem(
         {
           type: listing.itemType as 'material' | 'artifact' | 'consumable',
           name: itemSnapshot.name,
-          quantity: itemQuantity,
-          data: itemSnapshot,
+          quantity,
+          data: purchasedSnapshot,
         },
       ],
       'reward',
@@ -816,7 +825,7 @@ export async function buyItem(
     await MailService.sendMail(
       listing.sellerId,
       '拍卖行物品售出',
-      `道友寄售的【${itemSnapshot.name}】已售出，扣除${FEE_RATE * 100}%手续费后获得 ${sellerAmount} 灵石，请收取附件。`,
+      `道友寄售的【${itemSnapshot.name}】成交 ${quantity} 件，成交额 ${price} 灵石，按阶梯税扣除 ${feeAmount} 灵石后获得 ${sellerAmount} 灵石，请收取附件。`,
       [
         {
           type: 'spirit_stones',
@@ -888,8 +897,11 @@ export async function cancelListing(
     // 发送邮件返还物品
     const itemSnapshot = cancelled.itemSnapshot as
       Material | Artifact | Consumable;
-    const itemQuantity =
-      'quantity' in itemSnapshot ? itemSnapshot.quantity || 1 : 1;
+    const itemQuantity = cancelled.remainingQuantity;
+    const returnedSnapshot =
+      cancelled.itemType === 'artifact'
+        ? itemSnapshot
+        : { ...itemSnapshot, quantity: itemQuantity };
     await MailService.sendMail(
       cultivatorId,
       '拍卖行物品返还',
@@ -899,7 +911,7 @@ export async function cancelListing(
           type: cancelled.itemType as 'material' | 'artifact' | 'consumable',
           name: itemSnapshot.name,
           quantity: itemQuantity,
-          data: itemSnapshot,
+          data: returnedSnapshot,
         },
       ],
       'reward',
@@ -937,8 +949,11 @@ export async function expireListings(): Promise<number> {
     for (const listing of expiredListings) {
       const itemSnapshot = listing.itemSnapshot as
         Material | Artifact | Consumable;
-      const itemQuantity =
-        'quantity' in itemSnapshot ? itemSnapshot.quantity || 1 : 1;
+      const itemQuantity = listing.remainingQuantity;
+      const returnedSnapshot =
+        listing.itemType === 'artifact'
+          ? itemSnapshot
+          : { ...itemSnapshot, quantity: itemQuantity };
       await MailService.sendMail(
         listing.sellerId,
         '拍卖行物品过期',
@@ -948,7 +963,7 @@ export async function expireListings(): Promise<number> {
             type: listing.itemType as 'material' | 'artifact' | 'consumable',
             name: itemSnapshot.name,
             quantity: itemQuantity,
-            data: itemSnapshot,
+            data: returnedSnapshot,
           },
         ],
         'reward',
