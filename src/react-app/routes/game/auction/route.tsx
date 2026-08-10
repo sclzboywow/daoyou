@@ -548,7 +548,10 @@ export default function AuctionPage() {
         }),
       );
       pushToast({ message: result.message, tone: 'success' });
-      await fetchListings('my', pagination.my.page);
+      await fetchListings(activeTab, pagination[activeTab].page);
+      if (activeTab === 'browse') {
+        await fetchListings('my', pagination.my.page);
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : '下架失败';
       pushToast({ message, tone: 'danger' });
@@ -611,10 +614,11 @@ export default function AuctionPage() {
     }
   };
 
-  const renderListing = (listing: AuctionListing, isMyListing: boolean) => {
+  const renderListing = (listing: AuctionListing) => {
     const displayProps = getItemDisplayProps(listing);
     const timeLeft = formatTime(listing.expiresAt);
     const listedQuantity = Math.max(1, listing.remainingQuantity || 1);
+    const isOwner = listing.sellerId === cultivator?.id;
     const remainingQuote = calculateAuctionSettlement(
       listing.price,
       listedQuantity,
@@ -643,7 +647,7 @@ export default function AuctionPage() {
           </div>
           <span className="whitespace-nowrap">剩余: {timeLeft}</span>
         </div>
-        {isMyListing && (
+        {isOwner && (
           <div className="flex justify-end">
             <span className="text-ink-secondary text-[0.75rem] opacity-75">
               剩余全部售出预计到手：
@@ -654,7 +658,7 @@ export default function AuctionPage() {
       </div>
     );
     const actions = (
-      <div className="flex w-full justify-end gap-2">
+      <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
         <InkButton
           variant="secondary"
           onClick={() =>
@@ -665,7 +669,7 @@ export default function AuctionPage() {
         >
           详情
         </InkButton>
-        {isMyListing ? (
+        {isOwner ? (
           <InkButton
             onClick={() => handleCancel(listing)}
             disabled={!!cancellingId && cancellingId !== listing.id}
@@ -678,8 +682,9 @@ export default function AuctionPage() {
         ) : (
           <>
             {listing.itemType !== 'artifact' && listedQuantity > 1 ? (
-              <div className="flex items-start gap-1">
-                <div className="w-24">
+              <div className="flex items-center gap-1 whitespace-nowrap">
+                <span className="text-ink-secondary text-sm">数量</span>
+                <div className="w-20 shrink-0">
                   <InkInput
                     type="number"
                     size="sm"
@@ -690,10 +695,12 @@ export default function AuctionPage() {
                         [listing.id]: value,
                       }))
                     }
-                    hint={`最多 ${listedQuantity}`}
                     disabled={buyingId === listing.id}
                   />
                 </div>
+                <span className="text-ink-secondary text-sm">
+                  / {listedQuantity}
+                </span>
                 <InkButton
                   type="button"
                   variant="secondary"
@@ -705,21 +712,18 @@ export default function AuctionPage() {
                   }
                   disabled={buyingId === listing.id}
                 >
-                  全部
+                  买全部
                 </InkButton>
               </div>
             ) : null}
             <InkButton
               onClick={() => handleBuy(listing)}
-              disabled={
-                (!!buyingId && buyingId !== listing.id) ||
-                listing.sellerId === cultivator?.id
-              }
+              disabled={!!buyingId && buyingId !== listing.id}
               pending={buyingId === listing.id}
               pendingLabel="交易中……"
               variant="primary"
             >
-              {listing.sellerId === cultivator?.id ? '自己的' : '购买'}
+              购买
             </InkButton>
           </>
         )}
@@ -1014,9 +1018,7 @@ export default function AuctionPage() {
       ) : activeListings.length > 0 ? (
         <>
           <InkList>
-            {activeListings.map((listing) =>
-              renderListing(listing, activeTab === 'my'),
-            )}
+            {activeListings.map((listing) => renderListing(listing))}
           </InkList>
           {renderPagination(activeTab)}
         </>
