@@ -619,46 +619,34 @@ export default function AuctionPage() {
     const timeLeft = formatTime(listing.expiresAt);
     const listedQuantity = Math.max(1, listing.remainingQuantity || 1);
     const isOwner = listing.sellerId === cultivator?.id;
-    const remainingQuote = calculateAuctionSettlement(
-      listing.price,
-      listedQuantity,
-    );
     const listingMeta = (
-      <div className="text-ink-secondary mt-1 space-y-2 text-xs">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>
-              卖家: {listing.sellerName}
-              {listing.sellerId === cultivator?.id ? ' (我)' : ''}
+      <div className="text-ink-secondary mt-1 text-xs">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>
+            卖家: {listing.sellerName}
+            {listing.sellerId === cultivator?.id ? ' (我)' : ''}
+          </span>
+          <span>剩余：x{listedQuantity}</span>
+          {listing.visibility === 'private' && (
+            <span className="text-crimson">
+              专属：
+              {listing.targetCultivatorId === cultivator?.id
+                ? '指定给我'
+                : listing.targetCultivatorName || '指定道友'}
             </span>
-            <span>剩余：x{listedQuantity}</span>
-            {listing.visibility === 'private' && (
-              <span className="text-crimson">
-                专属：
-                {listing.targetCultivatorId === cultivator?.id
-                  ? '指定给我'
-                  : listing.targetCultivatorName || '指定道友'}
-              </span>
-            )}
-            <span className="text-gold text-sm font-semibold">
-              {SPIRIT_STONES_INFO.icon} {listing.price.toLocaleString()}{' '}
-              {SPIRIT_STONES_INFO.label}/件
-            </span>
-          </div>
-          <span className="whitespace-nowrap">剩余: {timeLeft}</span>
+          )}
+          <span className="text-gold text-sm font-semibold">
+            {SPIRIT_STONES_INFO.icon} {listing.price.toLocaleString()}{' '}
+            {SPIRIT_STONES_INFO.label}/件
+          </span>
         </div>
-        {isOwner && (
-          <div className="flex justify-end">
-            <span className="text-ink-secondary text-[0.75rem] opacity-75">
-              剩余全部售出预计到手：
-              {remainingQuote.sellerAmount.toLocaleString()} 灵石
-            </span>
-          </div>
-        )}
       </div>
     );
     const actions = (
       <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
+        <span className="text-ink-secondary text-xs whitespace-nowrap">
+          剩余：{timeLeft}
+        </span>
         <InkButton
           variant="secondary"
           onClick={() =>
