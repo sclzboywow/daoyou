@@ -38,7 +38,7 @@ export const adminNavItems: AdminNavItem[] = [
   {
     title: '游戏公告',
     description: '认证页横幅公告配置',
-    href: '/admin/announcement',
+    href: '/admin/announcement?tab=announcement',
   },
   {
     title: '道具库',
