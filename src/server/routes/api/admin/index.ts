@@ -20,6 +20,7 @@ import reputationShopRouter from '@server/routes/api/admin/reputation-shop.route
 import sectShopRouter from '@server/routes/api/admin/sect-shop.router';
 import templatesRouter from '@server/routes/api/admin/templates.router';
 import towerEnemySetsRouter from '@server/routes/api/admin/tower-enemy-sets.router';
+import websiteContentRouter from '@server/routes/api/admin/website-content.router';
 import { Hono } from 'hono';
 
 const router = new Hono<AppEnv>();
@@ -40,6 +41,7 @@ router.route('/templates', templatesRouter);
 router.route('/feedback', feedbackRouter);
 router.route('/broadcast', broadcastRouter);
 router.route('/announcement', announcementRouter);
+router.route('/website-content', websiteContentRouter);
 router.route('/activities', activitiesRouter);
 router.route('/audit', auditRouter);
 router.route('/item-library', itemLibraryRouter);

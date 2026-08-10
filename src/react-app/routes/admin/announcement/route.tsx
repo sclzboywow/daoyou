@@ -1,13 +1,35 @@
 import { useInkUI } from '@app/components/providers/InkUIProvider';
+import Link from '@app/components/router/AppLink';
 import { InkButton } from '@app/components/ui/InkButton';
 import { InkInput } from '@app/components/ui/InkInput';
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import WebsiteContentAdminPage from '../website-content/route';
 
 type LoadState = {
   announcement: string;
 };
 
-export default function AuthAnnouncementAdminPage() {
+function AdminContentTabs({ active }: { active: 'announcement' | 'website' }) {
+  return (
+    <div className="border-ink/15 bg-bgpaper/90 flex flex-wrap gap-2 border border-dashed p-3">
+      <Link
+        href="/admin/announcement"
+        className={`border px-3 py-2 text-sm no-underline ${active === 'announcement' ? 'border-crimson/50 text-crimson' : 'border-ink/15 text-ink-secondary'}`}
+      >
+        游戏公告
+      </Link>
+      <Link
+        href="/admin/announcement?tab=website"
+        className={`border px-3 py-2 text-sm no-underline ${active === 'website' ? 'border-crimson/50 text-crimson' : 'border-ink/15 text-ink-secondary'}`}
+      >
+        官网内容
+      </Link>
+    </div>
+  );
+}
+
+function AnnouncementEditor() {
   const { pushToast } = useInkUI();
   const [announcement, setAnnouncement] = useState('');
   const [loading, setLoading] = useState(true);
@@ -133,6 +155,18 @@ export default function AuthAnnouncementAdminPage() {
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+export default function AdminContentPage() {
+  const [searchParams] = useSearchParams();
+  const active = searchParams.get('tab') === 'website' ? 'website' : 'announcement';
+
+  return (
+    <div className="space-y-6">
+      <AdminContentTabs active={active} />
+      {active === 'website' ? <WebsiteContentAdminPage /> : <AnnouncementEditor />}
     </div>
   );
 }
