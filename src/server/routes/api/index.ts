@@ -33,6 +33,7 @@ import saveCharacterRouter from '@server/routes/api/save-character.router';
 import sectsRouter from '@server/routes/api/sects.router';
 import tasksRouter from '@server/routes/api/tasks.router';
 import towerRouter from '@server/routes/api/tower.router';
+import websiteContentRouter from '@server/routes/api/website-content.router';
 import worldChatRouter from '@server/routes/api/world-chat.router';
 import playerRouter from '@server/routes/player.router';
 import { Hono } from 'hono';
@@ -104,6 +105,7 @@ apiRouter.route('/tasks', tasksRouter);
 apiRouter.route('/tower', towerRouter);
 apiRouter.route('/sects', sectsRouter);
 apiRouter.route('/v2/products', productsRouter);
+apiRouter.route('/website-content', websiteContentRouter);
 apiRouter.route('/world-chat', worldChatRouter);
 
 export default apiRouter;

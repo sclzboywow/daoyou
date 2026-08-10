@@ -15,11 +15,11 @@ export function AdminShell({
   adminUserId,
   children,
 }: AdminShellProps) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const currentLocation = `${pathname}${search}`;
   const isNavItemActive = (href: string) => {
-    if (href === '/admin') {
-      return pathname === href;
-    }
+    if (href.includes('?')) return currentLocation === href;
+    if (href === '/admin') return pathname === href;
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
