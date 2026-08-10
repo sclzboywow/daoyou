@@ -183,6 +183,13 @@
       "when": 1785824804443,
       "tag": "0025_burly_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786332530251,
+      "tag": "0026_auction_tax_partial_purchases",
+      "breakpoints": true
     }
   ]
 }
