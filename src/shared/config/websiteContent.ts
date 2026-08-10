@@ -29,6 +29,42 @@ export const WebsiteFeatureSchema = z.object({
   sortOrder: z.number().int().min(0).max(999),
 });
 
+export const WebsiteUpdateSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .regex(/^[a-z0-9-]+$/, '动态标识仅支持小写字母、数字和连字符'),
+  type: z.enum(['announcement', 'update']),
+  title: z.string().trim().min(1).max(160),
+  summary: z.string().trim().min(1).max(800),
+  href: z.string().trim().max(300),
+  publishedAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, '发布日期格式应为 YYYY-MM-DD'),
+  tags: z.array(z.string().trim().min(1).max(40)).max(8),
+  pinned: z.boolean(),
+  enabled: z.boolean(),
+  sortOrder: z.number().int().min(0).max(999),
+});
+
+export const DEFAULT_WEBSITE_UPDATES = [
+  {
+    key: 'black-market-gameplay',
+    type: 'update',
+    title: '暗巷黑市玩法介绍上线',
+    summary:
+      '黑市没有统一标价。观察货物、感知灵气、检查破损、追问来历，再结合商人的身份与口吻决定如何出价。每次谈判都需要在有限线索中判断人、货与局势。',
+    href: '/login',
+    publishedAt: '2026-08-10',
+    tags: ['新玩法', '暗巷黑市', '交易谈判'],
+    pinned: true,
+    enabled: true,
+    sortOrder: 10,
+  },
+] satisfies z.input<typeof WebsiteUpdateSchema>[];
+
 export const WebsiteSeoSchema = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(300),
@@ -39,6 +75,15 @@ export const WebsiteContentSchema = z
   .object({
     hero: WebsiteHeroSchema,
     features: z.array(WebsiteFeatureSchema).max(24),
+    updates: z
+      .array(WebsiteUpdateSchema)
+      .max(30)
+      .default(() =>
+        DEFAULT_WEBSITE_UPDATES.map((update) => ({
+          ...update,
+          tags: [...update.tags],
+        })),
+      ),
     seo: WebsiteSeoSchema,
   })
   .superRefine((content, context) => {
@@ -52,6 +97,16 @@ export const WebsiteContentSchema = z
         });
       }
       keys.add(feature.key);
+    });
+    content.updates.forEach((update, index) => {
+      if (keys.has(update.key)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['updates', index, 'key'],
+          message: `动态标识 ${update.key} 重复`,
+        });
+      }
+      keys.add(update.key);
     });
   });
 
@@ -70,9 +125,8 @@ export const WebsiteContentHistorySchema = z
 
 export type WebsiteContent = z.infer<typeof WebsiteContentSchema>;
 export type WebsiteFeature = z.infer<typeof WebsiteFeatureSchema>;
-export type WebsiteContentVersion = z.infer<
-  typeof WebsiteContentVersionSchema
->;
+export type WebsiteUpdate = z.infer<typeof WebsiteUpdateSchema>;
+export type WebsiteContentVersion = z.infer<typeof WebsiteContentVersionSchema>;
 
 export const DEFAULT_WEBSITE_CONTENT: WebsiteContent = {
   hero: {
@@ -145,7 +199,11 @@ export const DEFAULT_WEBSITE_CONTENT: WebsiteContent = {
       eyebrow: '材料 · 配方 · 造物',
       summary:
         '收集材料不是终点。通过炼丹、炼器与造物系统，把资源转化为真正能进入角色成长与交易循环的成果。',
-      highlights: ['材料品质进入真实生产链', '丹药与法宝服务长期养成', '产物可继续进入其他玩法循环'],
+      highlights: [
+        '材料品质进入真实生产链',
+        '丹药与法宝服务长期养成',
+        '产物可继续进入其他玩法循环',
+      ],
       imageUrl: '',
       ctaLabel: '开炉造物',
       ctaHref: '/login',
@@ -158,7 +216,11 @@ export const DEFAULT_WEBSITE_CONTENT: WebsiteContent = {
       eyebrow: '属性 · 神通 · 战局',
       summary:
         '角色属性、装备、神通与状态最终都会在战斗中兑现。挑战天骄、蜃楼试炼与各类遭遇，让每一次养成都有检验之处。',
-      highlights: ['统一战斗模型承接角色成长', '神通与装备配置影响实际战局', '战斗记录可用于复盘与比较'],
+      highlights: [
+        '统一战斗模型承接角色成长',
+        '神通与装备配置影响实际战局',
+        '战斗记录可用于复盘与比较',
+      ],
       imageUrl: '',
       ctaLabel: '入局斗法',
       ctaHref: '/login',
@@ -166,6 +228,10 @@ export const DEFAULT_WEBSITE_CONTENT: WebsiteContent = {
       sortOrder: 50,
     },
   ],
+  updates: DEFAULT_WEBSITE_UPDATES.map((update) => ({
+    ...update,
+    tags: [...update.tags],
+  })),
   seo: {
     title: '万界道友｜东方修真文字游戏',
     description:
@@ -174,11 +240,24 @@ export const DEFAULT_WEBSITE_CONTENT: WebsiteContent = {
   },
 };
 
-export function normalizeWebsiteContent(content: WebsiteContent): WebsiteContent {
+export function normalizeWebsiteContent(
+  content: WebsiteContent,
+): WebsiteContent {
   return {
     ...content,
     features: [...content.features]
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title))
+      .sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title),
+      )
       .map((feature, index) => ({ ...feature, sortOrder: (index + 1) * 10 })),
+    updates: [...content.updates]
+      .sort(
+        (a, b) =>
+          Number(b.pinned) - Number(a.pinned) ||
+          b.publishedAt.localeCompare(a.publishedAt) ||
+          a.sortOrder - b.sortOrder ||
+          a.title.localeCompare(b.title),
+      )
+      .map((update, index) => ({ ...update, sortOrder: (index + 1) * 10 })),
   };
 }
