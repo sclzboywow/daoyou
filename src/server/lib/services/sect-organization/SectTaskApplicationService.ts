@@ -170,10 +170,16 @@ export class ExecuteSectTaskActionHandler {
         command.cultivatorId,
       );
       if (!progress) invalidSectTask('角色境界状态不存在', 500);
+      const attempt = await context.tasks.nextAttempt(
+        membership.id,
+        periodKey,
+        definition.id,
+      );
       const offer = this.offers.create({
         definition,
         membershipId: membership.id,
         periodKey,
+        attempt,
         realm: progress.realm,
         realmStage: progress.stage,
         executorKey: execution!.executorKey,
@@ -193,6 +199,7 @@ export class ExecuteSectTaskActionHandler {
         taskId: definition.id,
         kind: definition.kind,
         periodKey,
+        attempt,
         payload,
       });
       const primaryTask = toSectTaskView({
@@ -230,10 +237,16 @@ export class ExecuteSectTaskActionHandler {
         command.cultivatorId,
       );
       if (!progress) invalidSectTask('角色境界状态不存在', 500);
+      const attempt = await context.tasks.nextAttempt(
+        membership.id,
+        periodKey,
+        definition.id,
+      );
       const offer = this.offers.create({
         definition,
         membershipId: membership.id,
         periodKey,
+        attempt,
         realm: progress.realm,
         realmStage: progress.stage,
         executorKey: execution.executorKey,
@@ -253,6 +266,7 @@ export class ExecuteSectTaskActionHandler {
         taskId: definition.id,
         kind: definition.kind,
         periodKey,
+        attempt,
         payload,
       });
     } else {

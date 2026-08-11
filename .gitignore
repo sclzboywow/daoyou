@@ -142,6 +142,7 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+dist-battle
 
 # Gatsby files
 .cache/
@@ -213,5 +214,9 @@ certbot/
 # Local database backups and one-off synchronization artifacts.
 backups/
 *.bundle
+
+# SponsorKit raw API response and local cache may contain amounts/provider data.
+sponsorkit/.cache*.json
+sponsorkit/sponsors.json
 
 .venv*

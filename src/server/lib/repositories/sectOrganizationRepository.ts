@@ -15,7 +15,7 @@ import {
 } from '@server/lib/drizzle/schema';
 import type { SectDiscipleRank, SectOffice } from '@shared/engine/sect';
 import type { RealmType } from '@shared/types/constants';
-import { and, asc, count, desc, eq, gt, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, lte, ne, sql } from 'drizzle-orm';
 
 export async function ensureSectFacilities(
   sectId: string,
@@ -171,10 +171,30 @@ export async function findSectTaskRecord(
         eq(sectTaskRecords.membershipId, membershipId),
         eq(sectTaskRecords.periodKey, periodKey),
         eq(sectTaskRecords.taskId, taskId),
+        ne(sectTaskRecords.status, 'abandoned'),
       ),
     )
     .limit(1);
   return row ?? null;
+}
+
+export async function getNextSectTaskAttempt(
+  membershipId: string,
+  periodKey: string,
+  taskId: string,
+  q: DbExecutor | DbTransaction,
+) {
+  const [row] = await q
+    .select({ attempt: sql<number>`coalesce(max(${sectTaskRecords.attempt}), 0)` })
+    .from(sectTaskRecords)
+    .where(
+      and(
+        eq(sectTaskRecords.membershipId, membershipId),
+        eq(sectTaskRecords.periodKey, periodKey),
+        eq(sectTaskRecords.taskId, taskId),
+      ),
+    );
+  return Number(row?.attempt ?? 0) + 1;
 }
 
 export async function createSectTaskRecord(
@@ -183,6 +203,7 @@ export async function createSectTaskRecord(
     taskId: string;
     kind: 'daily' | 'weekly' | 'promotion';
     periodKey: string;
+    attempt?: number;
     progress?: number;
     payload: Record<string, unknown>;
   },
@@ -192,6 +213,7 @@ export async function createSectTaskRecord(
     .insert(sectTaskRecords)
     .values({
       ...input,
+      attempt: input.attempt ?? 1,
       progress: input.progress ?? 0,
       payload: input.payload,
     })
@@ -229,7 +251,8 @@ export async function abandonSectTaskRecord(
   tx: DbTransaction,
 ): Promise<boolean> {
   const [row] = await tx
-    .delete(sectTaskRecords)
+    .update(sectTaskRecords)
+    .set({ status: 'abandoned', updatedAt: new Date() })
     .where(
       and(
         eq(sectTaskRecords.id, id),
@@ -281,6 +304,7 @@ export async function upsertSectTaskProgress(
     taskId: string;
     kind: 'weekly' | 'promotion';
     periodKey: string;
+    attempt?: number;
     progress: number;
     target: number;
     completed: boolean;
@@ -295,6 +319,7 @@ export async function upsertSectTaskProgress(
       taskId: input.taskId,
       kind: input.kind,
       periodKey: input.periodKey,
+      attempt: input.attempt ?? 1,
       progress: input.progress,
       payload: input.payload,
       status: input.completed ? 'completed' : 'active',
@@ -305,6 +330,7 @@ export async function upsertSectTaskProgress(
         sectTaskRecords.membershipId,
         sectTaskRecords.periodKey,
         sectTaskRecords.taskId,
+        sectTaskRecords.attempt,
       ],
       set: {
         progress: input.progress,

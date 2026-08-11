@@ -26,12 +26,16 @@ services:
     restart: unless-stopped
     env_file:
       - /home/ubuntu/daoyou-runtime/app.env
+    environment:
+      BATTLE_SERVER_URL: http://battle:3100
     networks:
       default:
         aliases:
           - app
     depends_on:
       nats:
+        condition: service_healthy
+      battle:
         condition: service_healthy
     healthcheck:
       test:
@@ -45,6 +49,34 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  battle:
+    image: ${DAOYOU_BATTLE_IMAGE:?DAOYOU_BATTLE_IMAGE is required}
+    container_name: daoyou-battle
+    restart: unless-stopped
+    env_file:
+      - /home/ubuntu/daoyou-runtime/app.env
+    environment:
+      BATTLE_SERVER_PORT: 3100
+    networks:
+      default:
+        aliases:
+          - battle
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3100/healthz').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
 
   web:
     image: docker.m.daocloud.io/library/nginx:1.27-alpine
@@ -61,6 +93,8 @@ services:
       - /home/ubuntu/daoyou/certbot/conf:/etc/letsencrypt:ro
     depends_on:
       app:
+        condition: service_healthy
+      battle:
         condition: service_healthy
 
 networks:

@@ -150,7 +150,8 @@ export interface SectTaskRecord {
   taskId: string;
   kind: 'daily' | 'weekly' | 'promotion';
   periodKey: string;
-  status: 'active' | 'completed';
+  status: 'active' | 'completed' | 'abandoned';
+  attempt: number;
   progress: number;
   payload: SectTaskRecordPayload;
   createdAt: Date;
@@ -208,11 +209,17 @@ export interface SectTaskReadRepository {
 }
 
 export interface SectTaskRepository extends SectTaskReadRepository {
+  nextAttempt(
+    membershipId: string,
+    periodKey: string,
+    taskId: string,
+  ): Promise<number>;
   create(input: {
     membershipId: string;
     taskId: string;
     kind: 'daily' | 'weekly' | 'promotion';
     periodKey: string;
+    attempt?: number;
     progress?: number;
     payload: SectTaskRecordPayload;
   }): Promise<SectTaskRecord>;

@@ -47,7 +47,9 @@ export class GetSectTasksQueryHandler {
         const periodKey = sectTaskPeriodKey(definition, context);
         const persisted = records.find(
           (record) =>
-            record.taskId === definition.id && record.periodKey === periodKey,
+            record.taskId === definition.id &&
+            record.periodKey === periodKey &&
+            record.status !== 'abandoned',
         );
         if (!persisted && definition.enrollment === 'manual') {
           const capability = definition.requiredCapability;

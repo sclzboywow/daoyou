@@ -22,6 +22,7 @@ WEB_STAGE="/home/ubuntu/daoyou/dist-web.next-$RELEASE_ID"
 WEB_BACKUP="/home/ubuntu/daoyou/dist-web.pre-$RELEASE_ID"
 BACKUP_FILE="$RUNTIME_DIR/backups/pre-$RELEASE_ID.dump"
 PREFLIGHT_CONTAINER="daoyou-preflight-$RELEASE_ID"
+BATTLE_PREFLIGHT_CONTAINER="daoyou-battle-preflight-$RELEASE_ID"
 DEPLOY_BACKUP_RETENTION_COUNT="${DAOYOU_DEPLOY_BACKUP_RETENTION_COUNT:-3}"
 
 if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -41,6 +42,7 @@ test -f "$RELEASE_DIR/web/version.json"
 test -f "$RELEASE_DIR/web/icons/icon-192.png"
 test ! -f "$RELEASE_DIR/web/index.js"
 test -f "$RELEASE_DIR/server/index.js"
+test -f "$RELEASE_DIR/battle/battle-server.js"
 test -f "$SITE_ROOT/index.html"
 test -f "$APP_ENV"
 test -f "$RUNTIME_DIR/nats/nats.conf"
@@ -58,6 +60,10 @@ IMAGE_TAG="$(
   MANIFEST="$RELEASE_DIR/release.json" \
     bun -e 'const manifest = await Bun.file(process.env.MANIFEST).json(); process.stdout.write(manifest.image)'
 )"
+BATTLE_IMAGE_TAG="$(
+  MANIFEST="$RELEASE_DIR/release.json" \
+    bun -e 'const manifest = await Bun.file(process.env.MANIFEST).json(); process.stdout.write(manifest.battleImage)'
+)"
 RELEASE_COMMIT="$(
   MANIFEST="$RELEASE_DIR/release.json" \
     bun -e 'const manifest = await Bun.file(process.env.MANIFEST).json(); process.stdout.write(manifest.commit)'
@@ -65,9 +71,12 @@ RELEASE_COMMIT="$(
 
 test "$RELEASE_COMMIT" = "$(git rev-parse HEAD)"
 docker image inspect "$IMAGE_TAG" >/dev/null
+docker image inspect "$BATTLE_IMAGE_TAG" >/dev/null
 
 CURRENT_IMAGE="$(docker inspect --format '{{.Config.Image}}' daoyou-hono)"
-DAOYOU_APP_IMAGE="$CURRENT_IMAGE" docker compose \
+CURRENT_BATTLE_IMAGE="$(docker inspect --format '{{.Config.Image}}' daoyou-battle 2>/dev/null || printf '%s' "$BATTLE_IMAGE_TAG")"
+DAOYOU_APP_IMAGE="$CURRENT_IMAGE" \
+DAOYOU_BATTLE_IMAGE="$CURRENT_BATTLE_IMAGE" docker compose \
   -f deploy/production/docker-compose.yml up -d nats
 
 for _ in $(seq 1 30); do
@@ -93,6 +102,30 @@ HOST_DB_URL="$(
 )"
 
 DATABASE_URL="$HOST_DB_URL" bunx drizzle-kit migrate --config drizzle.config.ts
+
+test -z "$(docker ps -aq --filter name="^${BATTLE_PREFLIGHT_CONTAINER}$")"
+docker run --rm -d \
+  --name "$BATTLE_PREFLIGHT_CONTAINER" \
+  --env-file "$APP_ENV" \
+  --network daoyou_default \
+  "$BATTLE_IMAGE_TAG" >/dev/null
+
+stop_battle_preflight() {
+  docker stop "$BATTLE_PREFLIGHT_CONTAINER" >/dev/null 2>&1 || true
+}
+trap stop_battle_preflight EXIT
+
+for _ in $(seq 1 30); do
+  if docker exec "$BATTLE_PREFLIGHT_CONTAINER" node -e \
+    "fetch('http://127.0.0.1:3100/healthz').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+    break
+  fi
+  sleep 1
+done
+docker exec "$BATTLE_PREFLIGHT_CONTAINER" node -e \
+  "fetch('http://127.0.0.1:3100/healthz').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+stop_battle_preflight
+trap - EXIT
 
 test -z "$(docker ps -aq --filter name="^${PREFLIGHT_CONTAINER}$")"
 docker run --rm -d \
@@ -130,7 +163,9 @@ fi
 
 if [ ! -f "$RELEASE_ENV" ]; then
   CURRENT_IMAGE="$(docker inspect --format '{{.Config.Image}}' daoyou-hono)"
-  printf 'DAOYOU_APP_IMAGE=%s\n' "$CURRENT_IMAGE" > "$RELEASE_ENV"
+  CURRENT_BATTLE_IMAGE="$(docker inspect --format '{{.Config.Image}}' daoyou-battle 2>/dev/null || printf '%s' "$BATTLE_IMAGE_TAG")"
+  printf 'DAOYOU_APP_IMAGE=%s\nDAOYOU_BATTLE_IMAGE=%s\n' \
+    "$CURRENT_IMAGE" "$CURRENT_BATTLE_IMAGE" > "$RELEASE_ENV"
 fi
 
 cp -a "$COMPOSE" "$COMPOSE.pre-$RELEASE_ID"
@@ -148,29 +183,32 @@ rollback() {
   cp -a "$NGINX.pre-$RELEASE_ID" "$NGINX"
   cp -a "$RELEASE_ENV.pre-$RELEASE_ID" "$RELEASE_ENV"
   docker compose --env-file "$RELEASE_ENV" -f "$COMPOSE" \
-    up -d --force-recreate nats app web || true
+    up -d --force-recreate --remove-orphans || true
 }
 trap rollback ERR
 
 cp -a deploy/production/docker-compose.yml "$COMPOSE"
 cp -a deploy/production/nginx.conf "$NGINX"
-printf 'DAOYOU_APP_IMAGE=%s\n' "$IMAGE_TAG" > "$RELEASE_ENV"
+printf 'DAOYOU_APP_IMAGE=%s\nDAOYOU_BATTLE_IMAGE=%s\n' \
+  "$IMAGE_TAG" "$BATTLE_IMAGE_TAG" > "$RELEASE_ENV"
 
 mv "$WEB_ROOT" "$WEB_BACKUP"
 mv "$WEB_STAGE" "$WEB_ROOT"
 
 docker compose --env-file "$RELEASE_ENV" -f "$COMPOSE" config >/dev/null
 docker compose --env-file "$RELEASE_ENV" -f "$COMPOSE" \
-  up -d --force-recreate nats app web
+  up -d --force-recreate nats battle app web
 
 for _ in $(seq 1 30); do
-  if [ "$(docker inspect --format '{{.State.Health.Status}}' daoyou-hono 2>/dev/null || true)" = healthy ]; then
+  if [ "$(docker inspect --format '{{.State.Health.Status}}' daoyou-hono 2>/dev/null || true)" = healthy ] && \
+    [ "$(docker inspect --format '{{.State.Health.Status}}' daoyou-battle 2>/dev/null || true)" = healthy ]; then
     break
   fi
   sleep 2
 done
 
 test "$(docker inspect --format '{{.State.Health.Status}}' daoyou-hono)" = healthy
+test "$(docker inspect --format '{{.State.Health.Status}}' daoyou-battle)" = healthy
 docker exec daoyou-web nginx -t
 docker exec daoyou-web test -f /usr/share/nginx/html/index.html
 docker exec daoyou-web test -f /usr/share/nginx/site/index.html
@@ -180,6 +218,7 @@ curl -fsS -o /dev/null https://yzdoc.cn/login
 curl -fsS -o /dev/null https://yzdoc.cn/game
 curl -fsS -o /dev/null https://yzdoc.cn/icons/icon-192.png
 curl -fsS -o /dev/null https://yzdoc.cn/api/health-check
+curl -fsS 'https://yzdoc.cn/socket.io/?EIO=4&transport=polling' | grep -q '^0'
 
 cp -a "$RELEASE_DIR/release.json" "$RUNTIME_DIR/current-release.json"
 trap - ERR
@@ -207,4 +246,5 @@ done
 echo "==> Production release deployed"
 echo "release=$RELEASE_ID"
 echo "image=$IMAGE_TAG"
+echo "battle_image=$BATTLE_IMAGE_TAG"
 echo "backup=$BACKUP_FILE"

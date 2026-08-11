@@ -13,8 +13,9 @@ bash scripts/build-production-release.sh <release-id>
 1. 按 `bun.lock` 安装依赖并执行 ESLint。
 2. 从 `src/react-app` 构建前端，立即封存到独立的 `web` 目录。
 3. 从 `src/index.ts` 构建后端，封存到独立的 `server` 目录。
-4. 强制检查 `web/index.html`、PWA 图标和 `server/index.js`。
-5. 生成校验和、发布清单与本地后端镜像。
+4. 构建独立的实时战斗服务，封存到 `battle` 目录。
+5. 强制检查前端、后端及战斗服务产物。
+6. 生成校验和、发布清单与两个运行时镜像。
 
 默认输出到：
 
@@ -22,6 +23,7 @@ bash scripts/build-production-release.sh <release-id>
 /home/ubuntu/daoyou-runtime/releases/<release-id>/
 ├── web/
 ├── server/
+├── battle/
 ├── release.json
 └── SHA256SUMS
 ```
@@ -32,7 +34,7 @@ bash scripts/build-production-release.sh <release-id>
 bash scripts/deploy-production-release.sh <release-id>
 ```
 
-发布脚本会在切换前备份数据库、执行迁移并启动独立预检容器。随后原子切换游戏前端，使用本目录内受版本控制的 Compose 和 Nginx 配置重建服务，并检查首页、游戏、登录、图标和健康接口。
+发布脚本会在切换前备份数据库、执行迁移并启动独立预检容器。随后原子切换游戏前端，使用本目录内受版本控制的 Compose 和 Nginx 配置重建主应用、实时战斗服务与网站，并检查首页、游戏、登录、图标、Socket.IO 和健康接口。
 
 切换时会保留当前版本的哈希静态资源，避免已经打开游戏的用户在更新后加载旧懒加载模块时遇到 404 或白屏；同名新文件不会被旧文件覆盖。
 

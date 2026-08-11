@@ -272,6 +272,7 @@ class StandardSectDomainEventDispatcherFactory implements SectDomainEventDispatc
                     definition,
                     membershipId: membership.id,
                     periodKey: key,
+                    attempt: 1,
                     realm: progressFacts.realm,
                     realmStage: progressFacts.stage,
                     executorKey: execution.executorKey,

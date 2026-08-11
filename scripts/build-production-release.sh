@@ -11,6 +11,7 @@ STAGE_DIR="$RELEASES_DIR/.staging-$RELEASE_ID"
 RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
 BUILD_ENV_FILE="${BUILD_ENV_FILE:-$RUNTIME_DIR/app.env}"
 IMAGE_TAG="${IMAGE_TAG:-daoyou-hono:source-$RELEASE_ID}"
+BATTLE_IMAGE_TAG="${BATTLE_IMAGE_TAG:-daoyou-battle:source-$RELEASE_ID}"
 
 if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "Invalid release id: $RELEASE_ID" >&2
@@ -20,7 +21,7 @@ fi
 test -f "$BUILD_ENV_FILE"
 test ! -e "$STAGE_DIR"
 test ! -e "$RELEASE_DIR"
-mkdir -p "$STAGE_DIR/web" "$STAGE_DIR/server"
+mkdir -p "$STAGE_DIR/web" "$STAGE_DIR/server" "$STAGE_DIR/battle"
 
 read_build_env() {
   local key="$1"
@@ -54,9 +55,15 @@ test -f dist/index.html
 test -f dist/version.json
 cp -a dist/. "$STAGE_DIR/server/"
 
+echo "==> Building battle service"
+bun run build:battle
+test -f dist-battle/battle-server.js
+cp -a dist-battle/. "$STAGE_DIR/battle/"
+
 test -f "$STAGE_DIR/web/index.html"
 test ! -f "$STAGE_DIR/web/index.js"
 test -f "$STAGE_DIR/server/index.js"
+test -f "$STAGE_DIR/battle/battle-server.js"
 
 echo "==> Building runtime image: $IMAGE_TAG"
 docker build \
@@ -64,15 +71,23 @@ docker build \
   -t "$IMAGE_TAG" \
   "$STAGE_DIR/server"
 
+echo "==> Building battle runtime image: $BATTLE_IMAGE_TAG"
+docker build \
+  -f docker/Dockerfile.battle \
+  -t "$BATTLE_IMAGE_TAG" \
+  .
+
 COMMIT_SHA="$(git rev-parse HEAD)" \
 RELEASE_ID="$RELEASE_ID" \
 IMAGE_TAG="$IMAGE_TAG" \
+BATTLE_IMAGE_TAG="$BATTLE_IMAGE_TAG" \
 MANIFEST_FILE="$STAGE_DIR/release.json" \
   bun -e '
     const manifest = {
       releaseId: process.env.RELEASE_ID,
       commit: process.env.COMMIT_SHA,
       image: process.env.IMAGE_TAG,
+      battleImage: process.env.BATTLE_IMAGE_TAG,
       builtAt: new Date().toISOString(),
     };
     await Bun.write(process.env.MANIFEST_FILE, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -80,7 +95,7 @@ MANIFEST_FILE="$STAGE_DIR/release.json" \
 
 (
   cd "$STAGE_DIR"
-  sha256sum web/index.html server/index.js > SHA256SUMS
+  sha256sum web/index.html server/index.js battle/battle-server.js > SHA256SUMS
 )
 
 mv "$STAGE_DIR" "$RELEASE_DIR"
@@ -88,4 +103,5 @@ mv "$STAGE_DIR" "$RELEASE_DIR"
 echo "==> Source release ready"
 echo "release=$RELEASE_ID"
 echo "image=$IMAGE_TAG"
+echo "battle_image=$BATTLE_IMAGE_TAG"
 echo "path=$RELEASE_DIR"

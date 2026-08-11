@@ -190,6 +190,20 @@
       "when": 1786332530251,
       "tag": "0026_auction_tax_partial_purchases",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1786032000000,
+      "tag": "0027_sect_task_attempts",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786428072305,
+      "tag": "0028_magical_exodus",
+      "breakpoints": true
     }
   ]
 }

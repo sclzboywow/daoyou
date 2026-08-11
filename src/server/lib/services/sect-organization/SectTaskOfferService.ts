@@ -36,6 +36,7 @@ export class SectTaskOfferService {
     definition: SectTaskDefinition;
     membershipId: string;
     periodKey: string;
+    attempt: number;
     realm: RealmType;
     realmStage: RealmStage;
     executorKey: string;
@@ -66,6 +67,7 @@ export class SectTaskOfferService {
               membershipId: input.membershipId,
               taskId: input.definition.id,
               periodKey: input.periodKey,
+              attempt: input.attempt,
               realm: input.realm,
               realmStage: input.realmStage,
               rulesVersion,

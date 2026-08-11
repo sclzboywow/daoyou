@@ -81,6 +81,7 @@ function mapTask(row: {
   taskId: string;
   kind: string;
   periodKey: string;
+  attempt: number;
   status: string;
   progress: number;
   payload: unknown;
@@ -94,6 +95,7 @@ function mapTask(row: {
     taskId: row.taskId,
     kind: row.kind as SectTaskRecord['kind'],
     periodKey: row.periodKey,
+    attempt: row.attempt,
     status: row.status as SectTaskRecord['status'],
     progress: row.progress,
     payload: SectTaskRecordPayloadSchema.parse(row.payload),
@@ -897,6 +899,8 @@ export function createPostgresSectCommandContext(args: {
         );
         return row ? mapTask(row) : null;
       },
+      nextAttempt: (membershipId, periodKey, taskId) =>
+        organization.getNextSectTaskAttempt(membershipId, periodKey, taskId, tx),
       create: async (input) =>
         mapTask(
           await organization.createSectTaskRecord(

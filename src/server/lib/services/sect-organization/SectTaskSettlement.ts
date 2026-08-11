@@ -20,6 +20,7 @@ export interface SectTaskOfferPolicyContext {
   membershipId: string;
   taskId: string;
   periodKey: string;
+  attempt: number;
   realm: RealmType;
   realmStage: RealmStage;
   rulesVersion: number;
@@ -100,6 +101,7 @@ export class DeliverySectTaskOfferPolicy implements SectTaskOfferPolicy<
         context.membershipId,
         context.taskId,
         context.periodKey,
+        context.attempt,
         context.rulesVersion,
       ].join(':'),
     });

@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-07",
+  "sponsorUrl": "https://afdian.com/u/baef2b20501311f09da252540025c377",
+  "tiers": [
+    {
+      "id": "kindling",
+      "name": "一盏微光",
+      "description": "微光落在道途上，也照亮万界继续生长的前路。",
+      "order": 10
+    },
+    {
+      "id": "companion",
+      "name": "山水同程",
+      "description": "山高水长，感谢你与万界并肩走过这一程。",
+      "order": 20
+    },
+    {
+      "id": "guardian",
+      "name": "长夜护道",
+      "description": "长夜未尽，感谢你守护这个世界持续运转与更新。",
+      "order": 30
+    },
+    {
+      "id": "co-builder",
+      "name": "共证长生",
+      "description": "愿与你共筑万界，也共同见证它走向更远的未来。",
+      "order": 40
+    }
+  ],
+  "sponsors": [
+    {
+      "id": "sd-xingchen",
+      "name": "SD星辰",
+      "kind": "person",
+      "tier": "kindling",
+      "since": "2026-08",
+      "endedAt": null,
+      "blessing": "愿星辰照道，仙途长明。",
+      "url": null,
+      "avatar": "https://page-r2.daoyou.org/avatar/b_08902713c8f91ca4b2330a16ec13cfaf.jpg"
+    },
+    {
+      "id": "demu",
+      "name": "得木",
+      "kind": "person",
+      "tier": "kindling",
+      "since": "2026-08",
+      "endedAt": null,
+      "blessing": "愿得木逢春，道途常青。",
+      "url": null,
+      "avatar": "https://page-r2.daoyou.org/avatar/b_0527b511bfd3f97f35117f45f5d1fa88.jpg"
+    },
+    {
+      "id": "nongchangzhu",
+      "name": "农场主",
+      "kind": "person",
+      "tier": "companion",
+      "since": "2026-08",
+      "endedAt": null,
+      "blessing": "愿灵田常丰，修行有成。",
+      "url": null,
+      "avatar": "https://page-r2.daoyou.org/avatar/b_9479836bae3ffbdb0fbc356b3f68f010.jpg"
+    }
+  ],
+  "anonymous": {
+    "activeCount": 0
+  }
+}
