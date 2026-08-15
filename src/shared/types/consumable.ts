@@ -40,8 +40,7 @@ export const PILL_APPEARANCE_GRADE_VALUES = [
   'perfect',
 ] as const;
 
-export type PillAppearanceGrade =
-  (typeof PILL_APPEARANCE_GRADE_VALUES)[number];
+export type PillAppearanceGrade = (typeof PILL_APPEARANCE_GRADE_VALUES)[number];
 
 export const ALCHEMY_PROPERTY_KEY_VALUES = [
   'restore_hp',
@@ -76,8 +75,7 @@ export type LegacyAlchemyPropertyKey =
   (typeof LEGACY_ALCHEMY_PROPERTY_KEY_VALUES)[number];
 
 export type CompatibleAlchemyPropertyKey =
-  | AlchemyPropertyKey
-  | LegacyAlchemyPropertyKey;
+  AlchemyPropertyKey | LegacyAlchemyPropertyKey;
 
 export interface WeightedAlchemyProperty {
   key: AlchemyPropertyKey;
@@ -102,8 +100,7 @@ export const ALCHEMY_COMPOUND_TIER_VALUES = [
   'conflict',
 ] as const;
 
-export type AlchemyCompoundTier =
-  (typeof ALCHEMY_COMPOUND_TIER_VALUES)[number];
+export type AlchemyCompoundTier = (typeof ALCHEMY_COMPOUND_TIER_VALUES)[number];
 
 export interface AlchemyBatchProfile {
   yieldQuantity: number;
@@ -134,11 +131,7 @@ export const FORMULA_MATERIAL_VERDICT_VALUES = [
 export type FormulaMaterialVerdict =
   (typeof FORMULA_MATERIAL_VERDICT_VALUES)[number];
 
-export const FORMULA_FIT_BAND_VALUES = [
-  'aligned',
-  'degraded',
-  'poor',
-] as const;
+export const FORMULA_FIT_BAND_VALUES = ['aligned', 'degraded', 'poor'] as const;
 
 export type FormulaFitBand = (typeof FORMULA_FIT_BAND_VALUES)[number];
 
@@ -294,7 +287,19 @@ export interface TalismanSpec {
   notes?: string;
 }
 
-export type ConsumableSpec = PillSpec | TalismanSpec;
+export interface SpiritFruitSpec {
+  kind: 'spirit_fruit';
+  family: PillFamily;
+  operations: ConditionOperation[];
+  consumeRules: PillConsumeRules;
+  cultivationMeta: {
+    source: 'herb_garden';
+    element?: ElementType;
+    tags: string[];
+  };
+}
+
+export type ConsumableSpec = PillSpec | TalismanSpec | SpiritFruitSpec;
 
 export interface AlchemyFormulaBlueprint {
   operations: ConditionOperation[];

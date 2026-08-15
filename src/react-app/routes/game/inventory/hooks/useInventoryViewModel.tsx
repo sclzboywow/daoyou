@@ -20,6 +20,7 @@ import { isAttributeResetTalismanScenario } from '@shared/config/attributeResetT
 import { isQiRestoreTalismanScenario } from '@shared/config/qiSystem';
 import {
   isPillConsumable,
+  isSpiritFruitSpec,
   isTalismanConsumable,
 } from '@shared/lib/consumables';
 import type { CultivatorCondition } from '@shared/types/condition';
@@ -461,7 +462,10 @@ export function useInventoryViewModel(): UseInventoryViewModelReturn {
         return;
       }
 
-      if (!isPillConsumable(usableItem)) {
+      if (
+        !isPillConsumable(usableItem) &&
+        !isSpiritFruitSpec(usableItem.spec)
+      ) {
         pushToast({
           message: '该消耗品缺少有效丹药数据，暂时无法服用。',
           tone: 'warning',

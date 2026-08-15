@@ -1,4 +1,4 @@
-import type { MailAttachment } from '@shared/types/mail';
+import { createSpiritSeedDetails } from '@shared/contracts/herbGarden';
 import type { ResourceOperation } from '@shared/engine/resource/types';
 import { getGameConceptLabel } from '@shared/lib/gameConceptDisplay';
 import {
@@ -17,6 +17,7 @@ import {
   PILL_QUOTA_CATEGORY_VALUES,
   TALISMAN_SESSION_MODE_VALUES,
 } from '@shared/types/consumable';
+import type { MailAttachment } from '@shared/types/mail';
 import { z } from 'zod';
 
 const ConditionStatusDurationSchema = z.union([
@@ -115,9 +116,25 @@ const TalismanSpecSchema = z.object({
   notes: z.string().optional(),
 });
 
+const SpiritFruitSpecSchema = z.object({
+  kind: z.literal('spirit_fruit'),
+  family: z.enum(PILL_FAMILY_VALUES),
+  operations: z.array(ConditionOperationSchema),
+  consumeRules: z.object({
+    scene: z.literal('out_of_battle_only'),
+    quotaCategory: z.enum(PILL_QUOTA_CATEGORY_VALUES),
+  }),
+  cultivationMeta: z.object({
+    source: z.literal('herb_garden'),
+    element: z.enum(ELEMENT_VALUES).optional(),
+    tags: z.array(z.string()),
+  }),
+});
+
 const ConsumableSpecSchema = z.discriminatedUnion('kind', [
   PillSpecSchema,
   TalismanSpecSchema,
+  SpiritFruitSpecSchema,
 ]);
 
 export const ItemLibraryItemIdSchema = z
@@ -291,11 +308,7 @@ export const ItemLibraryListQuerySchema = z.object({
   materialType: z.enum(MATERIAL_TYPE_VALUES).optional(),
   quality: z.enum(QUALITY_VALUES).optional(),
   q: z.string().trim().max(100).optional(),
-  itemIds: z
-    .string()
-    .trim()
-    .max(4000)
-    .optional(),
+  itemIds: z.string().trim().max(4000).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
@@ -334,8 +347,7 @@ export type ItemLibraryPayload =
   | z.infer<typeof ItemLibraryConsumablePayloadSchema>
   | z.infer<typeof ItemLibraryArtifactPayloadSchema>;
 export type ItemLibraryEditorConfig =
-  | Record<string, unknown>
-  | z.infer<typeof ArtifactEditorConfigSchema>;
+  Record<string, unknown> | z.infer<typeof ArtifactEditorConfigSchema>;
 export type CreateItemLibraryEntry = z.infer<
   typeof CreateItemLibraryEntrySchema
 >;
@@ -388,6 +400,14 @@ export function buildAttachmentFromItemLibraryEntry(
         quantity,
         data: {
           ...clonePlainData(entry.payload),
+          ...(entry.payload.type === 'seed'
+            ? {
+                details: createSpiritSeedDetails(
+                  `sect-treasury:${entry.itemId}:${Date.now()}:${Math.random()}`,
+                  'sect_treasury',
+                ),
+              }
+            : {}),
           quantity,
         } as MailAttachment['data'],
       };
@@ -443,7 +463,9 @@ export function resolveItemLibrarySelections(
 
     const item = itemMap.get(selection.itemId);
     if (!item) {
-      throw new ItemLibraryResolveError(`道具库道具不存在：${selection.itemId}`);
+      throw new ItemLibraryResolveError(
+        `道具库道具不存在：${selection.itemId}`,
+      );
     }
 
     return buildAttachmentFromItemLibraryEntry(item, selection.quantity);

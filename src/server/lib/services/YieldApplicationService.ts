@@ -16,6 +16,7 @@ import { getExecutor } from '../drizzle/db';
 import { playerCommandExecutor } from './CommandExecutors';
 import { MailService, type MailAttachment } from './MailService';
 import { readPlayerMailSummary } from './PlayerResourceReaderService';
+import { normalizeGeneratedSeed } from './SpiritSeedService';
 
 export class YieldCommandError extends Error {
   constructor(
@@ -226,9 +227,13 @@ async function generateAndSendYieldMaterials(args: {
 }): Promise<void> {
   let materials: GeneratedMaterial[];
   try {
-    materials = await MaterialGenerator.generateRandom(args.materialCount, {
-      qualityChanceMap: YieldCalculator.getMaterialQualityChanceMap(args.realm),
-    });
+    materials = (
+      await MaterialGenerator.generateRandom(args.materialCount, {
+        qualityChanceMap: YieldCalculator.getMaterialQualityChanceMap(
+          args.realm,
+        ),
+      })
+    ).map((material) => normalizeGeneratedSeed(material, 'daily_yield'));
   } catch (error) {
     console.error('[Yield] 材料生成异常:', error);
     materials = [];

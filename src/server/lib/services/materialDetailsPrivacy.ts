@@ -1,6 +1,7 @@
 import type { Material } from '@shared/types/cultivator';
 
 export const HIDDEN_MYSTERY_REVEAL_KEY = '__serverHiddenMysteryReveal';
+export const HIDDEN_SPIRIT_SEED_KEY = '__serverHiddenSpiritSeed';
 
 export type HiddenMysteryReveal = Pick<
   Material,
@@ -18,6 +19,7 @@ export function sanitizeMaterialDetails(
   }
   const next = { ...(details as Record<string, unknown>) };
   delete next[HIDDEN_MYSTERY_REVEAL_KEY];
+  delete next[HIDDEN_SPIRIT_SEED_KEY];
   return Object.keys(next).length > 0 ? next : undefined;
 }
 

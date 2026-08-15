@@ -1,4 +1,5 @@
 import { generateAiArray } from '@server/utils/aiClient';
+import { createSpiritSeedDetails } from '@shared/contracts/herbGarden';
 import {
   MATERIAL_TYPE_VALUES,
   QUALITY_VALUES,
@@ -88,13 +89,24 @@ export class MaterialGenerator {
         // 计算价格
         const price = this.calculatePrice(skeleton.rank, skeleton.type);
 
+        const name =
+          skeleton.type === 'seed' && !/[种籽核]$/.test(aiData.name)
+            ? `${aiData.name}灵种`
+            : aiData.name;
         return {
-          name: aiData.name,
+          name,
           type: skeleton.type,
           rank: skeleton.rank,
           element: finalElement,
           description: aiData.description,
-          quantity: skeleton.quantity,
+          ...(skeleton.type === 'seed'
+            ? {
+                details: createSpiritSeedDetails(
+                  `${name}:${skeleton.rank}:${finalElement}:${Date.now()}:${index}`,
+                ),
+              }
+            : {}),
+          quantity: skeleton.type === 'seed' ? 1 : skeleton.quantity,
           price,
         };
       });
@@ -111,13 +123,21 @@ export class MaterialGenerator {
     return skeletons.map((skeleton) => {
       const preset = getFallbackMaterialPreset(skeleton.type, skeleton.rank);
       const finalElement = skeleton.forcedElement || preset.element;
+      const name = skeleton.type === 'seed' ? preset.name : preset.name;
       return {
-        name: preset.name,
+        name,
         type: skeleton.type,
         rank: skeleton.rank,
         element: finalElement,
         description: preset.description,
-        quantity: skeleton.quantity,
+        ...(skeleton.type === 'seed'
+          ? {
+              details: createSpiritSeedDetails(
+                `${name}:${skeleton.rank}:${finalElement}:${Date.now()}:${Math.random()}`,
+              ),
+            }
+          : {}),
+        quantity: skeleton.type === 'seed' ? 1 : skeleton.quantity,
         price: this.calculatePrice(skeleton.rank, skeleton.type),
       };
     });

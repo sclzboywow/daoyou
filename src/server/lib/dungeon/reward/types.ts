@@ -16,10 +16,7 @@ import type { ElementType } from '@shared/types/constants';
  * AI 只需要生成 material 类型，其他类型由程序自动计算
  */
 export type RewardType =
-  | 'spirit_stones'
-  | 'material'
-  | 'cultivation_exp'
-  | 'comprehension_insight';
+  'spirit_stones' | 'material' | 'cultivation_exp' | 'comprehension_insight';
 
 /**
  * AI生成的奖励蓝图 - 只包含创意内容，不包含数值
@@ -45,7 +42,8 @@ export interface RewardBlueprint {
     | 'tcdb'
     | 'aux'
     | 'gongfa_manual'
-    | 'skill_manual';
+    | 'skill_manual'
+    | 'seed';
 }
 
 /**

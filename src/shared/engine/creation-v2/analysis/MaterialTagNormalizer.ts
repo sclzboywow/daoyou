@@ -2,12 +2,12 @@
  * MaterialTagNormalizer: 材料标签规范化工具。
  * 责任：从原始 Material 文本与元数据中提取 explicit/semantic/recipe 标签，并计算能量值与稀有度权重。
  */
+import { CreationTags } from '@shared/engine/shared/tag-domain';
 import { QUALITY_ORDER } from '@shared/types/constants';
 import { Material } from '@shared/types/cultivator';
 import { CREATION_MATERIAL_ENERGY } from '../config/CreationBalance';
 import { getAllowedMaterialTypesForProduct } from '../config/CreationCraftPolicy';
 import { ELEMENT_TO_MATERIAL_TAG } from '../config/CreationMappings';
-import { CreationTags } from '@shared/engine/shared/tag-domain';
 import { CreationProductType } from '../types';
 import { extractSemanticTagsFromText } from './SemanticTagAllowlist';
 
@@ -17,6 +17,7 @@ const TYPE_TAGS: Record<Material['type'], string> = {
   monster: CreationTags.MATERIAL.TYPE_MONSTER,
   tcdb: CreationTags.MATERIAL.TYPE_SPECIAL,
   aux: CreationTags.MATERIAL.TYPE_AUXILIARY,
+  seed: CreationTags.MATERIAL.TYPE_HERB,
   gongfa_manual: CreationTags.MATERIAL.TYPE_GONGFA_MANUAL,
   skill_manual: CreationTags.MATERIAL.TYPE_SKILL_MANUAL,
 };
@@ -55,10 +56,14 @@ export class MaterialTagNormalizer {
   normalizeRecipeTags(material: Material): string[] {
     const tags = new Set<string>();
 
-    (Object.entries(RECIPE_BIAS_TAG_BY_PRODUCT) as Array<
-      [CreationProductType, string]
-    >).forEach(([productType, recipeBiasTag]) => {
-      if (getAllowedMaterialTypesForProduct(productType).includes(material.type)) {
+    (
+      Object.entries(RECIPE_BIAS_TAG_BY_PRODUCT) as Array<
+        [CreationProductType, string]
+      >
+    ).forEach(([productType, recipeBiasTag]) => {
+      if (
+        getAllowedMaterialTypesForProduct(productType).includes(material.type)
+      ) {
         tags.add(recipeBiasTag);
       }
     });

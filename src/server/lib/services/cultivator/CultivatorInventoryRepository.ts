@@ -1,26 +1,26 @@
 import * as creationProductRepository from '@server/lib/repositories/creationProductRepository';
 import {
-calculateSingleArtifactScore,
-calculateSingleElixirScore,
+  calculateSingleArtifactScore,
+  calculateSingleElixirScore,
 } from '@server/utils/rankingUtils';
 import {
-rehydrateStoredProductModel,
-serializeProductModel,
+  rehydrateStoredProductModel,
+  serializeProductModel,
 } from '@shared/engine/creation-v2/persistence/ProductPersistenceMapper';
 import {
-ELEMENT_VALUES,
-ElementType,
-EquipmentSlot,
-MaterialType,
-Quality,
-QUALITY_ORDER
+  ELEMENT_VALUES,
+  ElementType,
+  EquipmentSlot,
+  MaterialType,
+  Quality,
+  QUALITY_ORDER,
 } from '@shared/types/constants';
 import type {
-Artifact,
-Consumable,
-Cultivator,
-EquippedItems,
-Material
+  Artifact,
+  Consumable,
+  Cultivator,
+  EquippedItems,
+  Material,
 } from '@shared/types/cultivator';
 import {
   and,
@@ -33,18 +33,15 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import {
-getExecutor,
-type DbExecutor,
-type DbTransaction
+  getExecutor,
+  type DbExecutor,
+  type DbTransaction,
 } from '../../drizzle/db';
 import * as schema from '../../drizzle/schema';
-import {
-mapConsumableRow,
-} from '../consumablePersistence';
+import { mapConsumableRow } from '../consumablePersistence';
 import { toArtifactFromProduct } from '../creationProductArtifactSupport';
 import { sanitizeMaterialDetails } from '../materialDetailsPrivacy';
 import { addMaterialStackToInventory } from '../materialInventory';
-
 
 import { assertCultivatorOwnership } from './CultivatorStateRepository';
 type InventoryType = 'artifacts' | 'consumables' | 'materials';
@@ -93,6 +90,18 @@ export function mapMaterialRow(
     description: m.description || '',
     details: sanitizeMaterialDetails(m.details),
     quantity: m.quantity,
+  };
+}
+
+export function mapMaterialRowInternal(
+  m: typeof schema.materials.$inferSelect,
+): Cultivator['inventory']['materials'][number] {
+  return {
+    ...mapMaterialRow(m),
+    details:
+      m.details && typeof m.details === 'object'
+        ? { ...(m.details as Record<string, unknown>) }
+        : undefined,
   };
 }
 
@@ -393,11 +402,7 @@ export async function addMaterialToInventory(
   await assertCultivatorOwnership(userId, cultivatorId, q);
   if (!tx) {
     return getExecutor().transaction((transaction) =>
-      addMaterialToInventoryInTransaction(
-        cultivatorId,
-        material,
-        transaction,
-      ),
+      addMaterialToInventoryInTransaction(cultivatorId, material, transaction),
     );
   }
   return addMaterialToInventoryInTransaction(cultivatorId, material, tx);
@@ -491,8 +496,7 @@ export async function consumeMaterialById(
   quantity: number,
   tx?: DbTransaction,
 ): Promise<
-  | { operation: 'upsert'; item: Material }
-  | { operation: 'remove'; id: string }
+  { operation: 'upsert'; item: Material } | { operation: 'remove'; id: string }
 > {
   const dbInstance = getExecutor(tx);
   await assertCultivatorOwnership(userId, cultivatorId, dbInstance);
@@ -567,11 +571,7 @@ export async function addArtifactToInventory(
   await assertCultivatorOwnership(userId, cultivatorId, dbInstance);
   if (!tx) {
     return getExecutor().transaction((transaction) =>
-      addArtifactToInventoryInTransaction(
-        cultivatorId,
-        artifact,
-        transaction,
-      ),
+      addArtifactToInventoryInTransaction(cultivatorId, artifact, transaction),
     );
   }
   return addArtifactToInventoryInTransaction(cultivatorId, artifact, tx);
@@ -695,7 +695,6 @@ export async function addConsumableToInventoryInTransaction(
     return mapConsumableRow(inserted);
   }
 }
-
 
 export async function consumeConsumableById(
   userId: string,
