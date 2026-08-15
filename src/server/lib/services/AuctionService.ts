@@ -18,13 +18,14 @@ import {
 import * as schema from '../drizzle/schema';
 import { mapConsumableRow } from './consumablePersistence';
 import { toArtifactFromProduct } from './creationProductArtifactSupport';
-import { mapMaterialRow } from './cultivator/CultivatorInventoryRepository';
+import { mapMaterialRowInternal } from './cultivator/CultivatorInventoryRepository';
 import {
   assertFriend,
   FriendServiceError,
   getInviteTarget,
 } from './FriendService';
 import { MailService } from './MailService';
+import { sanitizeMaterialForClient } from './materialDetailsPrivacy';
 import {
   consumeFirstTalismanByScenario,
   TalismanScenarioError,
@@ -182,7 +183,7 @@ export async function getAuctionItemSnapshot(
           ),
         )
         .limit(1);
-      return material ? mapMaterialRow(material) : null;
+      return material ? mapMaterialRowInternal(material) : null;
     }
     case 'artifact': {
       const artifact = await getArtifactProductSnapshot(
@@ -588,7 +589,10 @@ export async function listItem(
         inventoryChanges.push({
           kind: 'materials',
           operation: 'upsert',
-          item: { ...current, quantity: current.quantity - quantity },
+          item: sanitizeMaterialForClient({
+            ...current,
+            quantity: current.quantity - quantity,
+          }),
         });
       }
     } else {

@@ -180,9 +180,18 @@ export const GAME_CONCEPT_DISPLAY_MAP = {
     icon: '📜',
     description: '符箓消耗品',
   },
+  consumable_spirit_fruit: {
+    label: '灵果',
+    icon: '🍑',
+    description: '灵田凝华所得的可服用灵果',
+  },
   material_herb: {
     label: '灵药',
     icon: '🌿',
+  },
+  material_seed: {
+    label: '灵种',
+    icon: '🌱',
   },
   material_ore: {
     label: '矿石',
@@ -842,6 +851,7 @@ export const CONSUMABLE_TYPE_DISPLAY_MAP: Record<
 > = {
   丹药: getConceptInfo('consumable_pill'),
   符箓: getConceptInfo('consumable_talisman'),
+  灵果: getConceptInfo('consumable_spirit_fruit'),
 };
 
 export function getConsumableTypeLabel(type: ConsumableType): string {
@@ -862,6 +872,7 @@ export const MATERIAL_TYPE_DISPLAY_MAP: Record<
   monster: getConceptInfo('material_monster'),
   tcdb: getConceptInfo('material_tcdb'),
   aux: getConceptInfo('material_aux'),
+  seed: getConceptInfo('material_seed'),
   gongfa_manual: getConceptInfo('material_gongfa_manual'),
   skill_manual: getConceptInfo('material_skill_manual'),
 };

@@ -27,16 +27,30 @@ export async function addMaterialStackToInventory(
   assertMaterialQuantity(material.quantity);
 
   const q = getExecutor(tx);
+  const fingerprint =
+    material.type === 'seed' &&
+    material.details &&
+    typeof material.details === 'object'
+      ? (material.details as Record<string, unknown>).fingerprint
+      : undefined;
+  const stackCondition = and(
+    eq(materials.cultivatorId, cultivatorId),
+    eq(materials.name, material.name),
+    eq(materials.rank, material.rank),
+    ...(material.type === 'seed'
+      ? [
+          eq(materials.type, 'seed'),
+          typeof fingerprint === 'string'
+            ? sql`${materials.details}->>'fingerprint' = ${fingerprint}`
+            : sql`false`,
+        ]
+      : []),
+  );
+
   const [existing] = await q
     .select({ id: materials.id })
     .from(materials)
-    .where(
-      and(
-        eq(materials.cultivatorId, cultivatorId),
-        eq(materials.name, material.name),
-        eq(materials.rank, material.rank),
-      ),
-    )
+    .where(stackCondition)
     .orderBy(asc(materials.createdAt), asc(materials.id))
     .limit(1);
 

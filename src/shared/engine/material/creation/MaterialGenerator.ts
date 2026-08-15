@@ -1,4 +1,5 @@
 import { generateAiArray } from '@server/utils/aiClient';
+import { createSpiritSeedDetails } from '@shared/contracts/herbGarden';
 import {
   MATERIAL_TYPE_VALUES,
   QUALITY_VALUES,
@@ -15,6 +16,7 @@ import {
   TYPE_MULTIPLIERS,
 } from './config';
 import { getFallbackMaterialPreset } from './fallbackPresets';
+import { SpiritSeedGenerator } from './SpiritSeedGenerator';
 import {
   getMaterialGenerationPrompt,
   getMaterialGenerationUserPrompt,
@@ -62,6 +64,44 @@ export class MaterialGenerator {
     skeletons: MaterialSkeleton[],
   ): Promise<GeneratedMaterial[]> {
     if (skeletons.length === 0) return [];
+    const seedEntries = skeletons.flatMap((skeleton, index) =>
+      skeleton.type === 'seed' ? [{ skeleton, index }] : [],
+    );
+    const ordinaryEntries = skeletons.flatMap((skeleton, index) =>
+      skeleton.type === 'seed' ? [] : [{ skeleton, index }],
+    );
+    const [seedCopies, ordinaryMaterials] = await Promise.all([
+      SpiritSeedGenerator.generateFromSkeletons(
+        seedEntries.map((entry) => entry.skeleton),
+      ),
+      this.fillGenericMaterialDetails(
+        ordinaryEntries.map((entry) => entry.skeleton),
+      ),
+    ]);
+    const result: GeneratedMaterial[] = [];
+    seedEntries.forEach((entry, seedIndex) => {
+      const copy = seedCopies[seedIndex];
+      result[entry.index] = {
+        name: copy.name,
+        type: 'seed',
+        rank: entry.skeleton.rank,
+        element: copy.element,
+        description: copy.description,
+        details: copy.details,
+        quantity: 1,
+        price: this.calculatePrice(entry.skeleton.rank, 'seed'),
+      };
+    });
+    ordinaryEntries.forEach((entry, ordinaryIndex) => {
+      result[entry.index] = ordinaryMaterials[ordinaryIndex];
+    });
+    return result;
+  }
+
+  private static async fillGenericMaterialDetails(
+    skeletons: MaterialSkeleton[],
+  ): Promise<GeneratedMaterial[]> {
+    if (skeletons.length === 0) return [];
 
     const prompt = getMaterialGenerationPrompt();
     const userPrompt = getMaterialGenerationUserPrompt(skeletons);
@@ -88,13 +128,24 @@ export class MaterialGenerator {
         // 计算价格
         const price = this.calculatePrice(skeleton.rank, skeleton.type);
 
+        const name =
+          skeleton.type === 'seed' && !/[种籽核]$/.test(aiData.name)
+            ? `${aiData.name}灵种`
+            : aiData.name;
         return {
-          name: aiData.name,
+          name,
           type: skeleton.type,
           rank: skeleton.rank,
           element: finalElement,
           description: aiData.description,
-          quantity: skeleton.quantity,
+          ...(skeleton.type === 'seed'
+            ? {
+                details: createSpiritSeedDetails(
+                  `${name}:${skeleton.rank}:${finalElement}:${Date.now()}:${index}`,
+                ),
+              }
+            : {}),
+          quantity: skeleton.type === 'seed' ? 1 : skeleton.quantity,
           price,
         };
       });
@@ -111,13 +162,21 @@ export class MaterialGenerator {
     return skeletons.map((skeleton) => {
       const preset = getFallbackMaterialPreset(skeleton.type, skeleton.rank);
       const finalElement = skeleton.forcedElement || preset.element;
+      const name = skeleton.type === 'seed' ? preset.name : preset.name;
       return {
-        name: preset.name,
+        name,
         type: skeleton.type,
         rank: skeleton.rank,
         element: finalElement,
         description: preset.description,
-        quantity: skeleton.quantity,
+        ...(skeleton.type === 'seed'
+          ? {
+              details: createSpiritSeedDetails(
+                `${name}:${skeleton.rank}:${finalElement}:${Date.now()}:${Math.random()}`,
+              ),
+            }
+          : {}),
+        quantity: skeleton.type === 'seed' ? 1 : skeleton.quantity,
         price: this.calculatePrice(skeleton.rank, skeleton.type),
       };
     });

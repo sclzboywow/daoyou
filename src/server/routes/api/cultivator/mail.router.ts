@@ -1,4 +1,8 @@
-import { getExecutor, type DbExecutor, type DbTransaction } from '@server/lib/drizzle/db';
+import {
+  getExecutor,
+  type DbExecutor,
+  type DbTransaction,
+} from '@server/lib/drizzle/db';
 import { mails } from '@server/lib/drizzle/schema';
 import {
   redisLockErrorResponse,
@@ -6,6 +10,7 @@ import {
 } from '@server/lib/hono/middleware';
 import { jsonWithStatus } from '@server/lib/hono/response';
 import type { AppEnv } from '@server/lib/hono/types';
+import { sanitizeMaterialForClient } from '@server/lib/services/materialDetailsPrivacy';
 import {
   claimAllCultivatorMail,
   claimCultivatorMail,
@@ -46,6 +51,27 @@ async function countUnreadMail(
 
 const mailRouter = new Hono<AppEnv>();
 
+function sanitizeMailForClient<T extends { attachments: unknown }>(mail: T): T {
+  if (!Array.isArray(mail.attachments)) return mail;
+  return {
+    ...mail,
+    attachments: mail.attachments.map((attachment) => {
+      if (!attachment || typeof attachment !== 'object') return attachment;
+      const value = attachment as { type?: unknown; data?: unknown };
+      return value.type === 'material' &&
+        value.data &&
+        typeof value.data === 'object'
+        ? {
+            ...value,
+            data: sanitizeMaterialForClient(
+              value.data as { details?: unknown },
+            ),
+          }
+        : attachment;
+    }),
+  } as T;
+}
+
 mailRouter.get('/', requireActiveCultivatorRef(), async (c) => {
   const ref = c.get('activeCultivatorRef');
   if (!ref) return c.json({ error: '当前没有活跃角色' }, 404);
@@ -63,7 +89,9 @@ mailRouter.get('/', requireActiveCultivatorRef(), async (c) => {
   });
   const hasMore = userMails.length > pageSize;
   return c.json({
-    mails: hasMore ? userMails.slice(0, pageSize) : userMails,
+    mails: (hasMore ? userMails.slice(0, pageSize) : userMails).map(
+      sanitizeMailForClient,
+    ),
     pagination: { page, pageSize, hasMore },
   });
 });

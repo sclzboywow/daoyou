@@ -245,6 +245,7 @@ export async function generateMaterialLibraryEntries(input: {
         rank: material.rank,
         element: material.element,
         description: material.description,
+        details: material.details,
       },
       editorConfig: {
         source: 'llm_batch',
@@ -314,6 +315,7 @@ export async function generateRandomMaterialLibraryEntries(input: {
         rank: material.rank,
         element: material.element,
         description: material.description,
+        details: material.details,
       },
       editorConfig: {
         source: input.source,

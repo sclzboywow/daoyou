@@ -1,4 +1,3 @@
-import type { Consumable } from '@shared/types/cultivator';
 import type {
   AddStatusOperation,
   AdvanceTrackOperation,
@@ -10,14 +9,18 @@ import type {
   PillSpec,
   RemoveStatusOperation,
   RestoreResourceOperation,
+  SpiritFruitSpec,
   TalismanSpec,
 } from '@shared/types/consumable';
+import type { Consumable } from '@shared/types/cultivator';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function isPillSpec(spec: ConsumableSpec | null | undefined): spec is PillSpec {
+export function isPillSpec(
+  spec: ConsumableSpec | null | undefined,
+): spec is PillSpec {
   return !!spec && spec.kind === 'pill';
 }
 
@@ -25,6 +28,12 @@ export function isTalismanSpec(
   spec: ConsumableSpec | null | undefined,
 ): spec is TalismanSpec {
   return !!spec && spec.kind === 'talisman';
+}
+
+export function isSpiritFruitSpec(
+  spec: ConsumableSpec | null | undefined,
+): spec is SpiritFruitSpec {
+  return !!spec && spec.kind === 'spirit_fruit';
 }
 
 export function isPillConsumable(
@@ -81,11 +90,11 @@ export function isIncreaseLifespanOperation(
   return operation.type === 'increase_lifespan';
 }
 
-export function assertConsumableSpec(
-  value: unknown,
-): ConsumableSpec {
+export function assertConsumableSpec(value: unknown): ConsumableSpec {
   if (!isRecord(value) || typeof value.kind !== 'string') {
-    throw new Error('消耗品数据缺少有效 spec，请清理旧 consumables 数据后重试。');
+    throw new Error(
+      '消耗品数据缺少有效 spec，请清理旧 consumables 数据后重试。',
+    );
   }
 
   if (value.kind === 'pill') {
@@ -93,6 +102,10 @@ export function assertConsumableSpec(
   }
 
   if (value.kind === 'talisman') {
+    return value as unknown as ConsumableSpec;
+  }
+
+  if (value.kind === 'spirit_fruit') {
     return value as unknown as ConsumableSpec;
   }
 

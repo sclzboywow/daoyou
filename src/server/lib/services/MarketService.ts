@@ -9,12 +9,19 @@ import {
 } from '@server/lib/redis/lock';
 import { createMessage } from '@server/lib/repositories/worldChatRepository';
 import {
+  createSpiritSeedDetails,
+  readSpiritSeedDetails,
+  withSpiritSeedSource,
+} from '@shared/contracts/herbGarden';
+import {
   BASE_PRICES,
   QUALITY_CHANCE_MAP,
   TYPE_CHANCE_MAP,
   TYPE_MULTIPLIERS,
 } from '@shared/engine/material/creation/config';
+import { getFallbackMaterialPreset } from '@shared/engine/material/creation/fallbackPresets';
 import { MARKET_PRESET_POOL } from '@shared/engine/material/creation/marketPresets';
+import { SpiritSeedGenerator } from '@shared/engine/material/creation/SpiritSeedGenerator';
 import {
   evaluateFateContext,
   getMarketPurchasePriceMultiplier,
@@ -233,6 +240,7 @@ function weightedPickType(profile: RegionProfile): MaterialType {
     'aux',
     'gongfa_manual',
     'skill_manual',
+    'seed',
   ];
 
   const entries = allTypes.map((t) => ({
@@ -380,6 +388,10 @@ function buildMysteryMask(type: MaterialType) {
     },
     gongfa_manual: manualMaskPool,
     skill_manual: manualMaskPool,
+    seed: {
+      names: ['蒙尘种匣', '无名灵籽', '封蜡种囊'],
+      descriptions: ['种性被禁制遮掩，须带回灵田方可判断。'],
+    },
   };
 
   const pool = poolByType[type] || poolByType.aux;
@@ -396,6 +408,7 @@ function applyMysteryLayer(
   layerConfig: ResolvedLayerConfig,
 ): InternalMarketListing[] {
   return listings.map((item) => {
+    if (item.type === 'seed') return item;
     if (Math.random() > mysteryChance) return item;
 
     const mask = buildMysteryMask(item.type);
@@ -628,22 +641,23 @@ function applyMarketPurchaseDiscount(
 /**
  * 低层市场的材料库兜底池。仅 common / treasure 可用。
  */
-function generateFromPresets(
+async function generateFromPresets(
   nodeId: string,
   layer: MarketLayer,
   profile: RegionProfile,
   layerConfig: ResolvedLayerConfig,
-): InternalMarketListing[] {
+): Promise<InternalMarketListing[]> {
   const listings: InternalMarketListing[] = [];
 
   for (let i = 0; i < layerConfig.count; i++) {
     const type = weightedPickType(profile);
     const rank = rollQualityInRange(layerConfig.rankRange);
     const pool = MARKET_PRESET_POOL[type]?.[rank];
-
-    if (!pool || pool.length === 0) continue;
-
-    const preset = pool[Math.floor(Math.random() * pool.length)];
+    const preset =
+      type === 'seed'
+        ? getFallbackMaterialPreset(type, rank)
+        : pool?.[Math.floor(Math.random() * pool.length)];
+    if (!preset) continue;
     const price = computePrice(layer, rank, type, profile.priceModifier);
 
     listings.push({
@@ -655,12 +669,41 @@ function generateFromPresets(
       rank,
       element: preset.element,
       description: preset.description,
-      details: {},
+      details:
+        type === 'seed'
+          ? createSpiritSeedDetails(
+              `market:${nodeId}:${layer}:${rank}:${crypto.randomUUID()}`,
+              'market',
+            )
+          : {},
       quantity: 1,
       price,
     });
   }
 
+  const seedIndexes = listings.flatMap((listing, index) =>
+    listing.type === 'seed' ? [index] : [],
+  );
+  if (!seedIndexes.length) return listings;
+  const generated = await SpiritSeedGenerator.generateFromSkeletons(
+    seedIndexes.map((index) => ({
+      type: 'seed',
+      rank: listings[index].rank,
+      quantity: 1,
+      forcedElement: listings[index].element,
+    })),
+    'market',
+  );
+  seedIndexes.forEach((listingIndex, generatedIndex) => {
+    const copy = generated[generatedIndex];
+    listings[listingIndex] = {
+      ...listings[listingIndex],
+      name: copy.name,
+      element: copy.element,
+      description: copy.description,
+      details: copy.details,
+    };
+  });
   return listings;
 }
 
@@ -760,7 +803,18 @@ function buildListingFromLibraryMaterial(args: {
     rank: args.material.rank,
     element: args.material.element,
     description: args.material.description,
-    details: args.material.details ?? {},
+    details:
+      args.material.type === 'seed'
+        ? (() => {
+            const existing = readSpiritSeedDetails(args.material.details);
+            return existing
+              ? withSpiritSeedSource(existing, 'market')
+              : createSpiritSeedDetails(
+                  `market-library:${args.nodeId}:${args.layer}:${args.material.name}:${crypto.randomUUID()}`,
+                  'market',
+                );
+          })()
+        : (args.material.details ?? {}),
     quantity: 1,
     price: computePrice(
       args.layer,
@@ -846,7 +900,7 @@ async function generateListings(
   );
 
   if (allowPresetFallback && listings.length < layerConfig.count) {
-    const fallback = generateFromPresets(nodeId, layer, profile, {
+    const fallback = await generateFromPresets(nodeId, layer, profile, {
       ...layerConfig,
       count: layerConfig.count - listings.length,
     });

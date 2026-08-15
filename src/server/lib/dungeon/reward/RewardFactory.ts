@@ -10,9 +10,10 @@
  * - 材料生成简化，使用 AI 提供的元素和类型信息
  */
 
+import { createSpiritSeedDetails } from '@shared/contracts/herbGarden';
+import { calculateDungeonExp } from '@shared/engine/cultivation/ExpBudgetCalculator';
 import type { ResourceOperation } from '@shared/engine/resource/types';
 import { YieldCalculator } from '@shared/engine/yield/YieldCalculator';
-import { calculateDungeonExp } from '@shared/engine/cultivation/ExpBudgetCalculator';
 import {
   getDungeonRewardBonus,
   type DungeonDifficultyTier,
@@ -108,10 +109,7 @@ export class RewardFactory {
       );
       rewards.push({
         type: 'comprehension_insight',
-        value: Math.max(
-          1,
-          Math.floor(insightValue * rewardBonus),
-        ),
+        value: Math.max(1, Math.floor(insightValue * rewardBonus)),
       });
     }
 
@@ -253,6 +251,14 @@ export class RewardFactory {
       description: bp.description || '',
       price: Math.floor(basePrice * (1 + dangerBonus * 0.1)), // 危险分数增加价值
       quantity: 1,
+      ...(materialType === 'seed'
+        ? {
+            details: createSpiritSeedDetails(
+              `dungeon:${bp.name ?? '灵种'}:${quality}:${element}:${Math.random()}`,
+              'dungeon',
+            ),
+          }
+        : {}),
     };
 
     return {
@@ -364,8 +370,7 @@ export class RewardFactory {
       ((safeRewardScore - 50) / 50) * 0.9 +
       (tierRarityBias[tier] ?? 0) +
       ((safeDangerScore - 50) / 50) * 0.06;
-    const baseChanceMap =
-      YieldCalculator.getMaterialQualityChanceMap(mapRealm);
+    const baseChanceMap = YieldCalculator.getMaterialQualityChanceMap(mapRealm);
     const weightedQualities = QUALITY_VALUES.map((quality, index) => ({
       quality,
       weight:

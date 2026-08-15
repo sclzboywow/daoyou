@@ -12,6 +12,7 @@ import {
 } from '@server/lib/services/AuctionApplicationService';
 import { AuctionServiceError } from '@server/lib/services/AuctionService';
 import { toPlayerStateMutationResponse } from '@server/lib/services/ResourceMutationResponse';
+import { sanitizeMaterialForClient } from '@server/lib/services/materialDetailsPrivacy';
 import { QUALITY_VALUES } from '@shared/types/constants';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -103,7 +104,17 @@ router.get('/listings', requireActiveCultivatorRef(), async (c) => {
     const totalPages = Math.ceil(result.total / limit);
 
     return c.json({
-      listings: result.listings,
+      listings: result.listings.map((listing) => ({
+        ...listing,
+        itemSnapshot:
+          listing.itemType === 'material' &&
+          listing.itemSnapshot &&
+          typeof listing.itemSnapshot === 'object'
+            ? sanitizeMaterialForClient(
+                listing.itemSnapshot as { details?: unknown },
+              )
+            : listing.itemSnapshot,
+      })),
       pagination: {
         page,
         limit,

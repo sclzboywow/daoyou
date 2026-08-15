@@ -1,3 +1,19 @@
+import { isTalismanScenario } from '@shared/config/talismanScenarios';
+import { CULTIVATION_BOOST_STATUS_KEY } from '@shared/lib/cultivationBoost';
+import type {
+  CreateItemLibraryEntry,
+  ItemLibraryEntry,
+  UpdateItemLibraryEntry,
+} from '@shared/lib/itemLibrary';
+import {
+  BREAKTHROUGH_FOCUS_STATUS_KEY,
+  CLEAR_MIND_STATUS_KEY,
+  PROTECT_MERIDIANS_STATUS_KEY,
+} from '@shared/lib/pillEffectScaling';
+import type {
+  ConditionStatusKey,
+  ConditionTrackPath,
+} from '@shared/types/condition';
 import {
   ELEMENT_VALUES,
   EQUIPMENT_SLOT_VALUES,
@@ -11,29 +27,13 @@ import {
   type RealmType,
 } from '@shared/types/constants';
 import {
-  type PillAppearanceGrade,
   TALISMAN_SESSION_MODE_VALUES,
   type ConditionOperation,
+  type PillAppearanceGrade,
   type PillFamily,
   type PillQuotaCategory,
   type TalismanSessionMode,
 } from '@shared/types/consumable';
-import { isTalismanScenario } from '@shared/config/talismanScenarios';
-import { CULTIVATION_BOOST_STATUS_KEY } from '@shared/lib/cultivationBoost';
-import {
-  BREAKTHROUGH_FOCUS_STATUS_KEY,
-  CLEAR_MIND_STATUS_KEY,
-  PROTECT_MERIDIANS_STATUS_KEY,
-} from '@shared/lib/pillEffectScaling';
-import type {
-  CreateItemLibraryEntry,
-  ItemLibraryEntry,
-  UpdateItemLibraryEntry,
-} from '@shared/lib/itemLibrary';
-import type {
-  ConditionStatusKey,
-  ConditionTrackPath,
-} from '@shared/types/condition';
 
 export const ITEM_LIBRARY_STATUS_LABELS = {
   published: '已发布',
@@ -147,6 +147,7 @@ export interface ItemLibraryDraft {
   materialType: MaterialType;
   materialRank: Quality;
   materialElement: '' | ElementType;
+  materialDetails?: Record<string, unknown>;
   consumableKind: 'pill' | 'talisman';
   consumableQuality: Quality;
   consumableElement: '' | ElementType;
@@ -168,8 +169,7 @@ export interface ItemLibraryDraft {
   artifactRealmStage: '' | RealmStage;
   artifactAffixIds: string[];
   artifactPayload:
-    | Extract<ItemLibraryEntry, { type: 'artifact' }>['payload']
-    | null;
+    Extract<ItemLibraryEntry, { type: 'artifact' }>['payload'] | null;
 }
 
 function toNumberText(value: unknown, fallback = ''): string {
@@ -194,7 +194,10 @@ function parsePositiveNumber(value: string, label: string): number {
   return parsed;
 }
 
-function parseOptionalPositiveInt(value: string, label: string): number | undefined {
+function parseOptionalPositiveInt(
+  value: string,
+  label: string,
+): number | undefined {
   if (!value.trim()) return undefined;
   const parsed = parsePositiveNumber(value, label);
   if (!Number.isInteger(parsed)) {
@@ -218,7 +221,9 @@ function getPayloadNumber(
   key: string,
 ): number | undefined {
   const value = payload?.[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function splitSourceMaterials(value: string): string[] {
@@ -347,6 +352,7 @@ export function createEmptyDraft(): ItemLibraryDraft {
     materialType: MATERIAL_TYPE_VALUES[0],
     materialRank: QUALITY_VALUES[0],
     materialElement: '',
+    materialDetails: undefined,
     consumableKind: 'pill',
     consumableQuality: QUALITY_VALUES[0],
     consumableElement: '',
@@ -411,7 +417,9 @@ function visualOperationFromConditionOperation(
             ? operation.duration.kind
             : '',
         expiresAt:
-          operation.duration?.kind === 'time' ? operation.duration.expiresAt : '',
+          operation.duration?.kind === 'time'
+            ? operation.duration.expiresAt
+            : '',
         boostPercent: rateToPercentText(boostPercent, '50'),
         breakthroughChanceBonus: rateToPercentText(
           getPayloadNumber(operation.payload, 'breakthroughChanceBonus'),
@@ -453,26 +461,48 @@ export function entryToDraft(entry: ItemLibraryEntry): ItemLibraryDraft {
     draft.materialType = entry.payload.type;
     draft.materialRank = entry.payload.rank;
     draft.materialElement = entry.payload.element ?? '';
+    draft.materialDetails = entry.payload.details;
   }
 
   if (entry.type === 'consumable') {
-    draft.consumableKind = entry.payload.spec.kind;
+    draft.consumableKind =
+      entry.payload.spec.kind === 'talisman' ? 'talisman' : 'pill';
     draft.consumableQuality = entry.payload.quality ?? QUALITY_VALUES[0];
     draft.consumableScore = toNumberText(entry.payload.score, '80');
 
-    if (entry.payload.spec.kind === 'pill') {
+    if (
+      entry.payload.spec.kind === 'pill' ||
+      entry.payload.spec.kind === 'spirit_fruit'
+    ) {
       draft.pillFamily = entry.payload.spec.family;
       draft.pillQuotaCategory = entry.payload.spec.consumeRules.quotaCategory;
-      draft.pillAppearance = entry.payload.spec.alchemyMeta.appearance ?? '';
-      draft.pillStability = String(entry.payload.spec.alchemyMeta.stability);
-      draft.pillToxicity = String(entry.payload.spec.alchemyMeta.toxicityRating);
+      draft.pillAppearance =
+        entry.payload.spec.kind === 'pill'
+          ? (entry.payload.spec.alchemyMeta.appearance ?? '')
+          : '';
+      draft.pillStability = String(
+        entry.payload.spec.kind === 'pill'
+          ? entry.payload.spec.alchemyMeta.stability
+          : 100,
+      );
+      draft.pillToxicity = String(
+        entry.payload.spec.kind === 'pill'
+          ? entry.payload.spec.alchemyMeta.toxicityRating
+          : 0,
+      );
       draft.consumableElement =
-        entry.payload.spec.alchemyMeta.dominantElement ?? '';
+        entry.payload.spec.kind === 'pill'
+          ? (entry.payload.spec.alchemyMeta.dominantElement ?? '')
+          : (entry.payload.spec.cultivationMeta.element ?? '');
       draft.pillSourceMaterials =
-        entry.payload.spec.alchemyMeta.sourceMaterials.join('、');
+        entry.payload.spec.kind === 'pill'
+          ? entry.payload.spec.alchemyMeta.sourceMaterials.join('、')
+          : '';
       draft.pillOperations =
         entry.payload.spec.operations.length > 0
-          ? entry.payload.spec.operations.map(visualOperationFromConditionOperation)
+          ? entry.payload.spec.operations.map(
+              visualOperationFromConditionOperation,
+            )
           : [buildDefaultPillOperation(entry.payload.spec.family)];
     } else {
       draft.talismanScenario = entry.payload.spec.scenario;
@@ -627,6 +657,7 @@ export function buildItemLibrarySubmitBody(
         type: draft.materialType,
         rank: draft.materialRank,
         ...(draft.materialElement ? { element: draft.materialElement } : {}),
+        ...(draft.materialDetails ? { details: draft.materialDetails } : {}),
         ...(draft.description.trim()
           ? { description: draft.description.trim() }
           : {}),

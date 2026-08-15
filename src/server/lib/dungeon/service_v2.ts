@@ -10,6 +10,7 @@ import {
 import { getPaginatedInventoryByType } from '@server/lib/services/cultivator/CultivatorInventoryRepository';
 import { updateCultivator } from '@server/lib/services/cultivator/CultivatorStateRepository';
 import { resourceEngine } from '@server/lib/services/resource/ResourceEngine';
+import { enrichSpiritSeedMaterial } from '@server/lib/services/SpiritSeedService';
 import { generateAiObject } from '@server/utils/aiClient';
 import { stableCompactStringify } from '@server/utils/llmPayload';
 import type { CultivatorDisplayInput } from '@shared/engine/battle-v5/adapters/CultivatorDisplayAdapter';
@@ -40,7 +41,7 @@ import {
   RealmType,
   type RealmStage,
 } from '@shared/types/constants';
-import type { Cultivator } from '@shared/types/cultivator';
+import type { Cultivator, Material } from '@shared/types/cultivator';
 import { randomUUID } from 'crypto';
 import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 import { getExecutor, type DbTransaction } from '../drizzle/db';
@@ -2109,8 +2110,7 @@ export class DungeonService {
     const committedSettlementGain = state.gainLedger?.find(
       (entry) => entry.source === 'settlement',
     );
-    const realGains =
-      state.realGains ??
+    const generatedRealGains =
       committedSettlementGain?.gains ??
       RewardFactory.generateAllRewards(
         settlement.settlement.reward_blueprints as RewardBlueprint[],
@@ -2120,6 +2120,24 @@ export class DungeonService {
         state.playerInfo, // 传递玩家信息用于修为计算
         mapNode ? resolveDungeonMapConfig(mapNode).difficultyTier : undefined,
       );
+    const realGains =
+      state.realGains ??
+      (await Promise.all(
+        generatedRealGains.map(async (gain) => {
+          if (
+            gain.type !== 'material' ||
+            !gain.data ||
+            (gain.data as Partial<Material>).type !== 'seed' ||
+            !(gain.data as Partial<Material>).rank
+          )
+            return gain;
+          const data = await enrichSpiritSeedMaterial(
+            gain.data as Material,
+            'dungeon',
+          );
+          return { ...gain, name: data.name, data };
+        }),
+      ));
     state.realGains = realGains;
     if (!deferPersistence) {
       await this.saveState(state.cultivatorId, state);
