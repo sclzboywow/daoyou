@@ -1,4 +1,8 @@
-import { createSpiritSeedDetails } from '@shared/contracts/herbGarden';
+import {
+  createSpiritSeedDetails,
+  readSpiritSeedDetails,
+  withSpiritSeedSource,
+} from '@shared/contracts/herbGarden';
 import type { ResourceOperation } from '@shared/engine/resource/types';
 import { getGameConceptLabel } from '@shared/lib/gameConceptDisplay';
 import {
@@ -157,6 +161,7 @@ export const ItemLibraryMaterialPayloadSchema = z.object({
   rank: z.enum(QUALITY_VALUES),
   element: z.enum(ELEMENT_VALUES).optional(),
   description: z.string().optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const ItemLibraryConsumablePayloadSchema = z.object({
@@ -402,10 +407,15 @@ export function buildAttachmentFromItemLibraryEntry(
           ...clonePlainData(entry.payload),
           ...(entry.payload.type === 'seed'
             ? {
-                details: createSpiritSeedDetails(
-                  `sect-treasury:${entry.itemId}:${Date.now()}:${Math.random()}`,
-                  'sect_treasury',
-                ),
+                details: (() => {
+                  const existing = readSpiritSeedDetails(entry.payload.details);
+                  return existing
+                    ? withSpiritSeedSource(existing, 'sect_treasury')
+                    : createSpiritSeedDetails(
+                        `sect-treasury:${entry.itemId}:${Date.now()}:${Math.random()}`,
+                        'sect_treasury',
+                      );
+                })(),
               }
             : {}),
           quantity,

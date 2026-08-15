@@ -14,6 +14,9 @@ import lifespanExhaustedPrompt from '@server/prompts/lifespan-exhausted.md?raw';
 import materialGenerationPrompt from '@server/prompts/material-generation.md?raw';
 import materialSemanticEnrichmentPrompt from '@server/prompts/material-semantic-enrichment.md?raw';
 import productNamingPrompt from '@server/prompts/product-naming.md?raw';
+import spiritPlantOutcomeNamingPrompt from '@server/prompts/spirit-plant-outcome-naming.md?raw';
+import spiritSeedGenerationPrompt from '@server/prompts/spirit-seed-generation.md?raw';
+import spiritSeedStageAssessmentPrompt from '@server/prompts/spirit-seed-stage-assessment.md?raw';
 import yieldStoryPrompt from '@server/prompts/yield-story.md?raw';
 import { renderTemplate, type TemplateVariableMap } from '../template/render';
 
@@ -47,6 +50,9 @@ const bundledPromptSources: Record<string, string> = {
   'material-generation.md': materialGenerationPrompt,
   'material-semantic-enrichment.md': materialSemanticEnrichmentPrompt,
   'product-naming.md': productNamingPrompt,
+  'spirit-plant-outcome-naming.md': spiritPlantOutcomeNamingPrompt,
+  'spirit-seed-generation.md': spiritSeedGenerationPrompt,
+  'spirit-seed-stage-assessment.md': spiritSeedStageAssessmentPrompt,
   'yield-story.md': yieldStoryPrompt,
 };
 

@@ -11,7 +11,8 @@ import {
   plantHerb,
   stealFriendHerb,
 } from '@server/lib/services/HerbGardenService';
-import { CULTIVATION_METHOD_VALUES } from '@shared/contracts/herbGarden';
+import { HERB_GARDEN_ACTION_VALUES } from '@shared/contracts/herbGarden';
+import { ELEMENT_VALUES } from '@shared/types/constants';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
@@ -20,13 +21,15 @@ const router = new Hono<AppEnv>();
 const PlantSchema = z.object({
   slot: z.number().int().min(1).max(6),
   seedMaterialId: z.string().uuid(),
-  methodId: z.enum(CULTIVATION_METHOD_VALUES),
+  actionId: z.enum(HERB_GARDEN_ACTION_VALUES),
   materialId: z.string().uuid().optional(),
+  rootElement: z.enum(ELEMENT_VALUES).optional(),
 });
 
 const CultivateSchema = z.object({
-  methodId: z.enum(CULTIVATION_METHOD_VALUES),
+  actionId: z.enum(HERB_GARDEN_ACTION_VALUES),
   materialId: z.string().uuid().optional(),
+  rootElement: z.enum(ELEMENT_VALUES).optional(),
 });
 
 const PlotIdSchema = z.object({ plotId: z.string().uuid() });

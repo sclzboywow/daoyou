@@ -1,6 +1,15 @@
-import { createSpiritSeedDetails } from '@shared/contracts/herbGarden';
+import {
+  createSpiritSeedDetails,
+  readSpiritSeedDetails,
+  withSpiritSeedSource,
+} from '@shared/contracts/herbGarden';
 import type { GeneratedMaterial } from '@shared/engine/material/creation/types';
-import type { ElementType, Quality } from '@shared/types/constants';
+import { SpiritSeedGenerator } from '@shared/engine/material/creation/SpiritSeedGenerator';
+import type {
+  ElementType,
+  MaterialType,
+  Quality,
+} from '@shared/types/constants';
 
 const SEED_NAMES = [
   '青霄灵籽',
@@ -65,6 +74,14 @@ export function normalizeGeneratedSeed(
   source?: Parameters<typeof createSpiritSeedMaterial>[0]['source'],
 ): GeneratedMaterial {
   if (material.type !== 'seed') return material;
+  const details = readSpiritSeedDetails(material.details);
+  if (details) {
+    return {
+      ...material,
+      details: withSpiritSeedSource(details, source),
+      quantity: 1,
+    };
+  }
   return createSpiritSeedMaterial({
     rank: material.rank,
     element: material.element,
@@ -72,4 +89,37 @@ export function normalizeGeneratedSeed(
     name: material.name,
     quantity: 1,
   });
+}
+
+export async function enrichSpiritSeedMaterial<
+  T extends {
+    type: MaterialType;
+    rank: Quality;
+    element?: ElementType;
+    name?: string;
+    description?: string;
+    details?: unknown;
+    quantity?: number;
+  },
+>(material: T, source: Parameters<typeof createSpiritSeedMaterial>[0]['source']): Promise<T> {
+  if (material.type !== 'seed') return material;
+  const [copy] = await SpiritSeedGenerator.generateFromSkeletons(
+    [
+      {
+        type: 'seed',
+        rank: material.rank,
+        quantity: 1,
+        forcedElement: material.element,
+      },
+    ],
+    source,
+  );
+  return {
+    ...material,
+    name: copy.name,
+    description: copy.description,
+    element: copy.element,
+    details: copy.details,
+    quantity: 1,
+  };
 }

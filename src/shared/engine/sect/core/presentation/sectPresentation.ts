@@ -332,7 +332,7 @@ const STANDARD_SCENES: Record<SectSceneKey, SectScenePresentation> = {
   ),
   herbGarden: scene(
     '药田',
-    '查看药田设施提供的周期产出。',
+    '培育灵种、辨察种性并与好友互访药田。',
     '药田记录正在读取……',
   ),
   gate: scene('山门', '查看宗门近期动态与公共事务。', '山门记录正在读取……'),
@@ -646,7 +646,7 @@ const STANDARD_ROOMS: Readonly<Record<string, SectRoomDefinition>> =
           'sect.herb-garden.caretaker',
           {
             facilityKey: 'herb_garden',
-            detail: '药田产出玩法后续开放。',
+            detail: '药园执事负责六畦培育、草木值录与好友访采。',
             stages: [
               '新畦初醒',
               '灵苗成行',
@@ -667,7 +667,7 @@ const STANDARD_ROOMS: Readonly<Record<string, SectRoomDefinition>> =
           {
             facilityKey: 'herb_garden',
             effectKey: 'herb_garden',
-            detail: '药田产出玩法后续开放。',
+            detail: '设施等级会解锁更多整地与蕴养方式。',
           },
           'herb-garden-facility',
           'facility',

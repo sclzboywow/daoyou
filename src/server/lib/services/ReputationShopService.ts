@@ -11,6 +11,7 @@ import {
 } from '@server/lib/drizzle/schema';
 import { findPublishedItemLibraryByItemIds } from '@server/lib/repositories/itemLibraryRepository';
 import { resourceEngine } from '@server/lib/services/resource/ResourceEngine';
+import { sanitizeMaterialDetails } from '@server/lib/services/materialDetailsPrivacy';
 import type {
   ResourceOperationSettlement,
 } from '@shared/engine/resource/types';
@@ -53,8 +54,11 @@ export function getReputationShopPurchaseWeek(date = new Date()): string {
   return getItemExchangePurchaseWeek(date);
 }
 
-function parseItem(row: ItemLibraryRow): ItemLibraryEntry {
-  return parseItemLibraryEntry({
+function parseItem(
+  row: ItemLibraryRow,
+  options: { publicView?: boolean } = {},
+): ItemLibraryEntry {
+  const entry = parseItemLibraryEntry({
     id: row.id,
     itemId: row.itemId,
     type: row.type,
@@ -71,6 +75,20 @@ function parseItem(row: ItemLibraryRow): ItemLibraryEntry {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   });
+  if (
+    options.publicView &&
+    entry.type === 'material' &&
+    entry.payload.type === 'seed'
+  ) {
+    return {
+      ...entry,
+      payload: {
+        ...entry.payload,
+        details: sanitizeMaterialDetails(entry.payload.details),
+      },
+    };
+  }
+  return entry;
 }
 
 async function countPurchases(
@@ -97,6 +115,7 @@ async function buildView(args: {
   row: ShopItemRow;
   item: ItemLibraryRow;
   cultivatorId?: string;
+  publicView?: boolean;
   q: DbExecutor | DbTransaction;
 }): Promise<ReputationShopItemView> {
   const purchaseWeek = getReputationShopPurchaseWeek();
@@ -118,7 +137,7 @@ async function buildView(args: {
     sortOrder: args.row.sortOrder,
     purchasedCount,
     remainingPurchases,
-    item: parseItem(args.item),
+    item: parseItem(args.item, { publicView: args.publicView }),
     createdAt: toIso(args.row.createdAt),
     updatedAt: toIso(args.row.updatedAt),
   };
@@ -182,6 +201,7 @@ export async function listReputationShopItems(args: {
           row: entry.row,
           item: entry.item,
           cultivatorId: args.cultivatorId,
+          publicView: args.userVisibleOnly,
           q,
         }),
     ),
@@ -377,6 +397,7 @@ export async function buyReputationShopItem(params: {
       row: loaded.row,
       item: loaded.item,
       cultivatorId: params.cultivatorId,
+      publicView: true,
       q: params.tx,
     }),
     reputation: resourceResult.settlement.reputation ?? 0,

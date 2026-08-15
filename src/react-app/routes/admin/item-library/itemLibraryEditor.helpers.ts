@@ -147,6 +147,7 @@ export interface ItemLibraryDraft {
   materialType: MaterialType;
   materialRank: Quality;
   materialElement: '' | ElementType;
+  materialDetails?: Record<string, unknown>;
   consumableKind: 'pill' | 'talisman';
   consumableQuality: Quality;
   consumableElement: '' | ElementType;
@@ -351,6 +352,7 @@ export function createEmptyDraft(): ItemLibraryDraft {
     materialType: MATERIAL_TYPE_VALUES[0],
     materialRank: QUALITY_VALUES[0],
     materialElement: '',
+    materialDetails: undefined,
     consumableKind: 'pill',
     consumableQuality: QUALITY_VALUES[0],
     consumableElement: '',
@@ -459,6 +461,7 @@ export function entryToDraft(entry: ItemLibraryEntry): ItemLibraryDraft {
     draft.materialType = entry.payload.type;
     draft.materialRank = entry.payload.rank;
     draft.materialElement = entry.payload.element ?? '';
+    draft.materialDetails = entry.payload.details;
   }
 
   if (entry.type === 'consumable') {
@@ -654,6 +657,7 @@ export function buildItemLibrarySubmitBody(
         type: draft.materialType,
         rank: draft.materialRank,
         ...(draft.materialElement ? { element: draft.materialElement } : {}),
+        ...(draft.materialDetails ? { details: draft.materialDetails } : {}),
         ...(draft.description.trim()
           ? { description: draft.description.trim() }
           : {}),

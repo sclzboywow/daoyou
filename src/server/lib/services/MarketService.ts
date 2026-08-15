@@ -8,7 +8,11 @@ import {
   withRedisLock,
 } from '@server/lib/redis/lock';
 import { createMessage } from '@server/lib/repositories/worldChatRepository';
-import { createSpiritSeedDetails } from '@shared/contracts/herbGarden';
+import {
+  createSpiritSeedDetails,
+  readSpiritSeedDetails,
+  withSpiritSeedSource,
+} from '@shared/contracts/herbGarden';
 import {
   BASE_PRICES,
   QUALITY_CHANCE_MAP,
@@ -17,6 +21,7 @@ import {
 } from '@shared/engine/material/creation/config';
 import { getFallbackMaterialPreset } from '@shared/engine/material/creation/fallbackPresets';
 import { MARKET_PRESET_POOL } from '@shared/engine/material/creation/marketPresets';
+import { SpiritSeedGenerator } from '@shared/engine/material/creation/SpiritSeedGenerator';
 import {
   evaluateFateContext,
   getMarketPurchasePriceMultiplier,
@@ -636,12 +641,12 @@ function applyMarketPurchaseDiscount(
 /**
  * 低层市场的材料库兜底池。仅 common / treasure 可用。
  */
-function generateFromPresets(
+async function generateFromPresets(
   nodeId: string,
   layer: MarketLayer,
   profile: RegionProfile,
   layerConfig: ResolvedLayerConfig,
-): InternalMarketListing[] {
+): Promise<InternalMarketListing[]> {
   const listings: InternalMarketListing[] = [];
 
   for (let i = 0; i < layerConfig.count; i++) {
@@ -676,6 +681,29 @@ function generateFromPresets(
     });
   }
 
+  const seedIndexes = listings.flatMap((listing, index) =>
+    listing.type === 'seed' ? [index] : [],
+  );
+  if (!seedIndexes.length) return listings;
+  const generated = await SpiritSeedGenerator.generateFromSkeletons(
+    seedIndexes.map((index) => ({
+      type: 'seed',
+      rank: listings[index].rank,
+      quantity: 1,
+      forcedElement: listings[index].element,
+    })),
+    'market',
+  );
+  seedIndexes.forEach((listingIndex, generatedIndex) => {
+    const copy = generated[generatedIndex];
+    listings[listingIndex] = {
+      ...listings[listingIndex],
+      name: copy.name,
+      element: copy.element,
+      description: copy.description,
+      details: copy.details,
+    };
+  });
   return listings;
 }
 
@@ -777,10 +805,15 @@ function buildListingFromLibraryMaterial(args: {
     description: args.material.description,
     details:
       args.material.type === 'seed'
-        ? createSpiritSeedDetails(
-            `market-library:${args.nodeId}:${args.layer}:${args.material.name}:${crypto.randomUUID()}`,
-            'market',
-          )
+        ? (() => {
+            const existing = readSpiritSeedDetails(args.material.details);
+            return existing
+              ? withSpiritSeedSource(existing, 'market')
+              : createSpiritSeedDetails(
+                  `market-library:${args.nodeId}:${args.layer}:${args.material.name}:${crypto.randomUUID()}`,
+                  'market',
+                );
+          })()
         : (args.material.details ?? {}),
     quantity: 1,
     price: computePrice(
@@ -867,7 +900,7 @@ async function generateListings(
   );
 
   if (allowPresetFallback && listings.length < layerConfig.count) {
-    const fallback = generateFromPresets(nodeId, layer, profile, {
+    const fallback = await generateFromPresets(nodeId, layer, profile, {
       ...layerConfig,
       count: layerConfig.count - listings.length,
     });

@@ -16,6 +16,7 @@ import {
   TYPE_MULTIPLIERS,
 } from './config';
 import { getFallbackMaterialPreset } from './fallbackPresets';
+import { SpiritSeedGenerator } from './SpiritSeedGenerator';
 import {
   getMaterialGenerationPrompt,
   getMaterialGenerationUserPrompt,
@@ -60,6 +61,44 @@ export class MaterialGenerator {
    * 核心方法：调用 AI 为骨架填充 Name, Description, Element
    */
   private static async fillMaterialDetails(
+    skeletons: MaterialSkeleton[],
+  ): Promise<GeneratedMaterial[]> {
+    if (skeletons.length === 0) return [];
+    const seedEntries = skeletons.flatMap((skeleton, index) =>
+      skeleton.type === 'seed' ? [{ skeleton, index }] : [],
+    );
+    const ordinaryEntries = skeletons.flatMap((skeleton, index) =>
+      skeleton.type === 'seed' ? [] : [{ skeleton, index }],
+    );
+    const [seedCopies, ordinaryMaterials] = await Promise.all([
+      SpiritSeedGenerator.generateFromSkeletons(
+        seedEntries.map((entry) => entry.skeleton),
+      ),
+      this.fillGenericMaterialDetails(
+        ordinaryEntries.map((entry) => entry.skeleton),
+      ),
+    ]);
+    const result: GeneratedMaterial[] = [];
+    seedEntries.forEach((entry, seedIndex) => {
+      const copy = seedCopies[seedIndex];
+      result[entry.index] = {
+        name: copy.name,
+        type: 'seed',
+        rank: entry.skeleton.rank,
+        element: copy.element,
+        description: copy.description,
+        details: copy.details,
+        quantity: 1,
+        price: this.calculatePrice(entry.skeleton.rank, 'seed'),
+      };
+    });
+    ordinaryEntries.forEach((entry, ordinaryIndex) => {
+      result[entry.index] = ordinaryMaterials[ordinaryIndex];
+    });
+    return result;
+  }
+
+  private static async fillGenericMaterialDetails(
     skeletons: MaterialSkeleton[],
   ): Promise<GeneratedMaterial[]> {
     if (skeletons.length === 0) return [];

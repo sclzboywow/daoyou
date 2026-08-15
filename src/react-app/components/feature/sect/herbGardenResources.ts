@@ -1,8 +1,9 @@
 import type {
-  CultivationMethodId,
+  HerbGardenActionId,
   HerbGardenHarvestResult,
   HerbGardenState,
 } from '@shared/contracts/herbGarden';
+import type { ElementType } from '@shared/types/constants';
 import { useCallback, useEffect, useState } from 'react';
 
 interface GardenResponse {
@@ -46,6 +47,32 @@ export function useHerbGarden(ownerId?: string) {
     return () => window.clearTimeout(timer);
   }, [reload]);
 
+  useEffect(() => {
+    if (!data) return;
+    const nextReadyAt = data.plots
+      .flatMap((plot) =>
+        plot.status === 'cultivating' && plot.readyAt
+          ? [new Date(plot.readyAt).getTime()]
+          : [],
+      )
+      .filter((timestamp) => timestamp > Date.now())
+      .sort((left, right) => left - right)[0];
+    if (!nextReadyAt) return;
+    const timer = window.setTimeout(
+      () => void reload(),
+      Math.max(250, nextReadyAt - Date.now() + 250),
+    );
+    return () => window.clearTimeout(timer);
+  }, [data, reload]);
+
+  useEffect(() => {
+    const refreshVisible = () => {
+      if (document.visibilityState === 'visible') void reload();
+    };
+    document.addEventListener('visibilitychange', refreshVisible);
+    return () => document.removeEventListener('visibilitychange', refreshVisible);
+  }, [reload]);
+
   const mutate = useCallback(
     async <T extends { garden: HerbGardenState }>(
       url: string,
@@ -78,23 +105,31 @@ export function useHerbGarden(ownerId?: string) {
     (
       slot: number,
       seedMaterialId: string,
-      methodId: CultivationMethodId,
+      actionId: HerbGardenActionId,
       materialId?: string,
+      rootElement?: ElementType,
     ) =>
       mutate<GardenResponse>('/api/herb-garden/plant', {
         slot,
         seedMaterialId,
-        methodId,
+        actionId,
         materialId,
+        rootElement,
       }),
     [mutate],
   );
 
   const cultivate = useCallback(
-    (plotId: string, methodId: CultivationMethodId, materialId?: string) =>
+    (
+      plotId: string,
+      actionId: HerbGardenActionId,
+      materialId?: string,
+      rootElement?: ElementType,
+    ) =>
       mutate<GardenResponse>(`/api/herb-garden/plots/${plotId}/cultivate`, {
-        methodId,
+        actionId,
         materialId,
+        rootElement,
       }),
     [mutate],
   );
@@ -129,7 +164,7 @@ export function useHerbGarden(ownerId?: string) {
         GardenResponse & {
           result: {
             name: string;
-            kind: 'herb' | 'spirit_fruit' | 'treasure';
+            kind: 'herb' | 'spirit_fruit' | 'tcdb';
             quantity: 1;
           };
         }
