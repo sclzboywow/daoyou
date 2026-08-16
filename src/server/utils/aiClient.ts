@@ -51,46 +51,6 @@ function logLlmDebug(
   );
 }
 
-function createLlmDebugFetch(sceneId: LlmSceneId, model: string): typeof fetch {
-  return Object.assign(
-    async (
-      input: Parameters<typeof fetch>[0],
-      init?: Parameters<typeof fetch>[1],
-    ) => {
-      logLlmDebug(
-        'REQUEST',
-        sceneId,
-        model,
-        typeof init?.body === 'string' ? init.body : String(init?.body ?? ''),
-      );
-
-      try {
-        const response = await globalThis.fetch(input, init);
-        void response
-          .clone()
-          .text()
-          .then((body) => {
-            logLlmDebug(
-              `RESPONSE status=${response.status}`,
-              sceneId,
-              model,
-              body,
-            );
-          })
-          .catch((error) => {
-            logLlmDebug('RESPONSE_READ_ERROR', sceneId, model, String(error));
-          });
-        return response;
-      } catch (error) {
-        logLlmDebug('REQUEST_ERROR', sceneId, model, String(error));
-        throw error;
-      }
-    },
-    // Bun's fetch type requires this property; AI SDK only invokes the function.
-    { preconnect: () => undefined },
-  );
-}
-
 const STRUCTURED_RETRY_OUTPUT_CHARS = 8_000;
 const STRUCTURED_RETRY_MAX_OUTPUT_TOKENS = 16_384;
 
