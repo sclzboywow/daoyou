@@ -20,6 +20,7 @@ import type {
   HerbGardenJournalEntry,
   HerbGardenObservationKind,
   HerbGardenPlotView,
+  HerbGardenStageRecord,
   HerbGardenState,
   StageAssessment,
 } from '@shared/contracts/herbGarden';
@@ -817,7 +818,7 @@ function ObservationTools({
   const observed = new Set(
     (plot.history ?? [])
       .filter(
-        (record) =>
+        (record): record is Extract<HerbGardenJournalEntry, { kind: 'observation' }> =>
           record.kind === 'observation' && record.stage === currentStage,
       )
       .map((record) => record.observation),
@@ -1152,7 +1153,7 @@ function latestMethodAssessment(
   const record = [...(history ?? [])]
     .reverse()
     .find(
-      (entry) =>
+      (entry): entry is HerbGardenStageRecord =>
         entry.kind !== 'observation' &&
         entry.kind !== 'consultation' &&
         entry.actionId === actionId,
