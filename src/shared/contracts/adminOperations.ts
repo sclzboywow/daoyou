@@ -26,7 +26,7 @@ export interface AdminOperationsSnapshot {
   generatedAt: string;
   windowStartedAt: string;
   security: {
-    turnstileEnabled: boolean;
+    altchaEnabled: boolean;
   };
   players: {
     total: number;

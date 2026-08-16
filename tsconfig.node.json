@@ -32,5 +32,6 @@
     "./src/server",
     "./scripts"
   ],
+  "exclude": ["./scripts/migrate-alchemy-formulas-v4.ts"],
   "files": ["./src/server/types/markdown.d.ts"]
 }

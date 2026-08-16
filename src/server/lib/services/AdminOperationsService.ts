@@ -2,7 +2,7 @@ import {
   getExecutor,
   runDbTasks,
 } from '@server/lib/drizzle/db';
-import { isTurnstileServerEnabled } from '@server/lib/auth/turnstile';
+import { isAltchaServerEnabled } from '@server/lib/auth/altcha';
 import {
   cultivators,
   cultivatorTasks,
@@ -213,7 +213,7 @@ export async function getAdminOperationsSnapshot(): Promise<AdminOperationsSnaps
     generatedAt: now.toISOString(),
     windowStartedAt: windowStartedAt.toISOString(),
     security: {
-      turnstileEnabled: isTurnstileServerEnabled(),
+      altchaEnabled: isAltchaServerEnabled(),
     },
     players: {
       total: toNumber(playerSummary?.total),
