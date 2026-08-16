@@ -1,8 +1,10 @@
 import {
   AuthPageShell,
+  AuthCaptchaField,
   buildEmailOtpTarget,
   toErrorMessage,
   useAuthFeedback,
+  useCaptchaField,
   validateEmailField,
   validatePasswordConfirmation,
   validateRequiredField,
@@ -18,6 +20,13 @@ export default function SignupPasswordRoute() {
   const navigate = useNavigate();
   const { signUpWithPassword } = useAuth();
   const { showErrorDialog } = useAuthFeedback();
+  const {
+    captchaRef,
+    captchaError,
+    ensureCaptcha,
+    resetCaptcha,
+    setCaptchaPayload,
+  } = useCaptchaField();
 
   const [displayName, setDisplayName] = useState(
     searchParams.get('name') ?? '',
@@ -51,6 +60,11 @@ export default function SignupPasswordRoute() {
       return;
     }
 
+    const verifiedCaptchaToken = ensureCaptcha();
+    if (verifiedCaptchaToken === null) {
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -58,6 +72,7 @@ export default function SignupPasswordRoute() {
         displayName,
         email,
         password,
+        verifiedCaptchaToken || undefined,
       );
 
       if (error) {
@@ -75,6 +90,7 @@ export default function SignupPasswordRoute() {
         '注册失败',
       );
     } finally {
+      resetCaptcha();
       setLoading(false);
     }
   };
@@ -158,6 +174,12 @@ export default function SignupPasswordRoute() {
           placeholder="请再次输入密码"
           error={errors.confirmPassword}
           disabled={loading}
+        />
+        <AuthCaptchaField
+          action="sign-up"
+          error={captchaError}
+          captchaRef={captchaRef}
+          onPayloadChange={setCaptchaPayload}
         />
         <InkButton
           type="submit"

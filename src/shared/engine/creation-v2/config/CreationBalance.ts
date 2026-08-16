@@ -1,5 +1,6 @@
 import { AffixRarity, AffixSlot, CreationProductType } from '../types';
 import { CREATION_EVENT_PRIORITY_LEVELS } from './CreationEventPriorities';
+import { MAX_PLAYER_ITEM_QUANTITY } from '@shared/config/itemQuantity';
 import type { Quality } from '@shared/types/constants';
 
 /**
@@ -53,6 +54,9 @@ export const CREATION_INPUT_CONSTRAINTS = {
   // 单种材料最多提交多少个，避免堆量过度放大收益。
   maxQuantityPerMaterial: 3,
 } as const;
+
+// 炼丹允许一次处理更大的材料堆叠；普通造物仍使用上面的通用上限。
+export const ALCHEMY_MAX_DOSE = MAX_PLAYER_ITEM_QUANTITY;
 
 /**
  * 主动技能在缺少完整词缀时的默认投影参数。

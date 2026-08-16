@@ -40,8 +40,7 @@ export const PILL_APPEARANCE_GRADE_VALUES = [
   'perfect',
 ] as const;
 
-export type PillAppearanceGrade =
-  (typeof PILL_APPEARANCE_GRADE_VALUES)[number];
+export type PillAppearanceGrade = (typeof PILL_APPEARANCE_GRADE_VALUES)[number];
 
 export const ALCHEMY_PROPERTY_KEY_VALUES = [
   'restore_hp',
@@ -76,8 +75,7 @@ export type LegacyAlchemyPropertyKey =
   (typeof LEGACY_ALCHEMY_PROPERTY_KEY_VALUES)[number];
 
 export type CompatibleAlchemyPropertyKey =
-  | AlchemyPropertyKey
-  | LegacyAlchemyPropertyKey;
+  AlchemyPropertyKey | LegacyAlchemyPropertyKey;
 
 export interface WeightedAlchemyProperty {
   key: AlchemyPropertyKey;
@@ -95,6 +93,45 @@ export interface AlchemyMaterialPropertyVector {
   properties: WeightedAlchemyProperty[];
 }
 
+export interface AlchemyEssenceSummary {
+  rawEssence: number;
+  effectiveEssence: number;
+  qualityPotential: number;
+  purity: number;
+  stability: number;
+}
+
+export interface AlchemyOutputLot {
+  quality: Quality;
+  appearance: PillAppearanceGrade;
+  quantity: number;
+  essenceSpent: number;
+  effectMultiplier: number;
+}
+
+export interface AlchemyYieldProfile {
+  essence: AlchemyEssenceSummary;
+  primaryQuality: Quality;
+  lots: AlchemyOutputLot[];
+  totalQuantity: number;
+  wastedEssence: number;
+  essenceLossRatio?: number;
+  distributionSummary: string;
+}
+
+export interface AlchemyYieldDisplayProfile {
+  primaryQuality: Quality;
+  lots: Array<
+    Pick<
+      AlchemyOutputLot,
+      'quality' | 'appearance' | 'quantity' | 'effectMultiplier'
+    >
+  >;
+  totalQuantity: number;
+  essenceLossRatio: number;
+  distributionSummary: string;
+}
+
 export const ALCHEMY_COMPOUND_TIER_VALUES = [
   'single',
   'balanced',
@@ -102,25 +139,34 @@ export const ALCHEMY_COMPOUND_TIER_VALUES = [
   'conflict',
 ] as const;
 
-export type AlchemyCompoundTier =
-  (typeof ALCHEMY_COMPOUND_TIER_VALUES)[number];
+export type AlchemyCompoundTier = (typeof ALCHEMY_COMPOUND_TIER_VALUES)[number];
 
 export interface AlchemyBatchProfile {
-  yieldQuantity: number;
+  /** @deprecated 新炼丹产量由 yieldProfile/批次引擎决定。仅兼容历史数据。 */
+  yieldQuantity?: number;
+  lotQuantity?: number;
   synergyScore: number;
   conflictScore: number;
   compoundTier: AlchemyCompoundTier;
   roleSummary: string;
   stabilityDelta: number;
   toxicityDelta: number;
-  secondaryEffectMultiplierBonus: number;
+  /** @deprecated v4 效果槽位倍率固定，不再接受批次加成。 */
+  secondaryEffectMultiplierBonus?: number;
+  essenceSummary?: AlchemyEssenceSummary;
+  yieldProfile?: AlchemyYieldProfile;
+  essenceLossRatio?: number;
 }
 
-export interface AlchemyBatchPreview {
-  minYield: number;
-  maxYield: number;
-  materialKindCount: number;
-  totalDose: number;
+/** 面向玩家的丹方推演摘要；不得包含药蕴绝对值或内部炉况参数。 */
+export interface AlchemyBatchDisplayProfile {
+  compoundTier: AlchemyCompoundTier;
+  roleSummary: string;
+  totalQuantityRange: { min: number; max: number };
+  primaryQualityRange: { min: Quality; max: Quality };
+  possibleQualities: Quality[];
+  appearanceHints: Partial<Record<PillAppearanceGrade, number>>;
+  essenceLossRatioRange: { min: number; max: number };
   summary: string;
   warnings: string[];
 }
@@ -134,11 +180,7 @@ export const FORMULA_MATERIAL_VERDICT_VALUES = [
 export type FormulaMaterialVerdict =
   (typeof FORMULA_MATERIAL_VERDICT_VALUES)[number];
 
-export const FORMULA_FIT_BAND_VALUES = [
-  'aligned',
-  'degraded',
-  'poor',
-] as const;
+export const FORMULA_FIT_BAND_VALUES = ['aligned', 'degraded', 'poor'] as const;
 
 export type FormulaFitBand = (typeof FORMULA_FIT_BAND_VALUES)[number];
 
@@ -183,6 +225,7 @@ export type PillAlchemyMeta =
       appearance?: PillAppearanceGrade;
       tags: string[];
       batch?: AlchemyBatchProfile;
+      version?: 3 | 4;
       breakthroughTargetRealm?: RealmType;
       breakthroughLabel?: string;
     }
@@ -202,6 +245,7 @@ export type PillAlchemyMeta =
       appearance?: PillAppearanceGrade;
       tags: string[];
       batch?: AlchemyBatchProfile;
+      version?: 3 | 4;
       breakthroughTargetRealm?: RealmType;
       breakthroughLabel?: string;
     };
@@ -297,10 +341,18 @@ export interface TalismanSpec {
 export type ConsumableSpec = PillSpec | TalismanSpec;
 
 export interface AlchemyFormulaBlueprint {
-  operations: ConditionOperation[];
+  version: 4;
+  route: AlchemyEffectRoute;
+  needsRebirth?: boolean;
   consumeRules: PillConsumeRules;
   targetStability: number;
   targetToxicity: number;
+}
+
+export type AlchemyEffectKey = AlchemyPropertyKey;
+
+export interface AlchemyEffectRoute {
+  effects: Array<{ key: AlchemyEffectKey; weight: number }>;
 }
 
 export interface FormulaAnalysisResult {
@@ -313,7 +365,7 @@ export interface FormulaAnalysisResult {
   warnings: string[];
   materialJudgments: FormulaMaterialJudgment[];
   aggregatedPropertyVector: WeightedAlchemyProperty[];
-  batchProfile?: AlchemyBatchProfile;
+  batchProfile?: AlchemyBatchDisplayProfile;
   dominantElement?: ElementType;
   stability: number;
   toxicityRating: number;

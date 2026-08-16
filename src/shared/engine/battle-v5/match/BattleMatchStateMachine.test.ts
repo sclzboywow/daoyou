@@ -13,16 +13,21 @@ import { BattleRuntime } from '../runtime/BattleRuntime';
 import { Unit } from '../units/Unit';
 import {
   applyBattleRoundResolution,
-  cancelBattleResolution,
+  cancelBattleMatch,
+  completeBattlePresentation,
   createBattleMatchPlayerView,
+  createBattleMatchViewProjection,
   createBattleMatchState,
   markBattleResolutionFailed,
+  markBattlePresentationReady,
   retryFailedBattleResolution,
   transitionBattleMatch,
 } from './BattleMatchStateMachine';
 import type { BattleControllerV1, BattleMatchStateV1 } from './types';
 
-function save(options: { queuedUnitId?: string } = {}): BattleSaveV1 {
+function save(
+  options: { queuedUnitId?: string; noActionUnitId?: string } = {},
+): BattleSaveV1 {
   const runtime = new BattleRuntime();
   const units = [
     new Unit(
@@ -35,6 +40,9 @@ function save(options: { queuedUnitId?: string } = {}): BattleSaveV1 {
     new Unit('b0', 'b0', {}, { runtime, teamId: 'b', slot: 0 }),
     new Unit('b1', 'b1', {}, { runtime, teamId: 'b', slot: 1 }),
   ];
+  units
+    .find((unit) => unit.id === options.noActionUnitId)
+    ?.tags.addTags([GameplayTags.STATUS.CONTROL.NO_BASIC]);
   const queuedUnit = units.find((unit) => unit.id === options.queuedUnitId);
   if (queuedUnit) {
     setQueuedAction(
@@ -148,6 +156,58 @@ describe('BattleMatchStateMachine', () => {
     ).toBe(true);
   });
 
+  it('isolates planning units when multiple players share one team', () => {
+    const state = createBattleMatchState({
+      matchId: 'shared-team-match',
+      battle: save(),
+      controllers: [
+        { playerId: 'p-a1', teamId: 'a', unitIds: ['a0'] },
+        { playerId: 'p-a2', teamId: 'a', unitIds: ['a1'] },
+        { playerId: 'p-b', teamId: 'b', unitIds: ['b0', 'b1'] },
+      ],
+      now: 1_000,
+    });
+    const projection = createBattleMatchViewProjection(state);
+
+    expect(
+      createBattleMatchPlayerView(state, 'p-a1', 1_001, projection)
+        .planningView?.units.map((unit) => unit.unitId),
+    ).toEqual(['a0']);
+    expect(
+      createBattleMatchPlayerView(state, 'p-a2', 1_001, projection)
+        .planningView?.units.map((unit) => unit.unitId),
+    ).toEqual(['a1']);
+  });
+
+  it('does not wait for a player whose controlled units are all dead', () => {
+    const battle = save();
+    battle.checkpoint.units.a0!.hp = 0;
+    battle.checkpoint.units.a1!.hp = 0;
+    const state = createBattleMatchState({
+      matchId: 'eliminated-player-match',
+      battle,
+      controllers,
+      now: 1_000,
+    });
+
+    expect(state.planning?.committedPlayerIds).toEqual(['p-a']);
+    const result = transitionBattleMatch(
+      state,
+      {
+        type: 'resolve_planning_timeout',
+        matchId: 'eliminated-player-match',
+        ...commandBase(state, 'resolve-after-elimination'),
+      },
+      31_001,
+    );
+
+    expect(result.state.status).toBe('resolving');
+    expect(Object.keys(result.state.resolving!.commandSet.intents).sort()).toEqual([
+      'b0',
+      'b1',
+    ]);
+  });
+
   it('requires every living controlled unit exactly once in an atomic commit', () => {
     const state = createBattleMatchState({
       matchId: 'match-test',
@@ -195,8 +255,39 @@ describe('BattleMatchStateMachine', () => {
       'b0',
       'b1',
     ]);
-    const alphaView = createBattleMatchPlayerView(state, 'p-a', 1_002);
-    const betaView = createBattleMatchPlayerView(state, 'p-b', 1_002);
+    const projection = createBattleMatchViewProjection(state);
+    const alphaView = createBattleMatchPlayerView(
+      state,
+      'p-a',
+      1_002,
+      projection,
+    );
+    const betaView = createBattleMatchPlayerView(
+      state,
+      'p-b',
+      1_002,
+      projection,
+    );
+    expect(alphaView).toEqual(createBattleMatchPlayerView(state, 'p-a', 1_002));
+    expect(alphaView.publicSnapshot).toEqual(betaView.publicSnapshot);
+    expect(alphaView.planningView?.units.map((unit) => unit.unitId)).toEqual([
+      'a0',
+      'a1',
+    ]);
+    expect(betaView.planningView?.units.map((unit) => unit.unitId)).toEqual([
+      'b0',
+      'b1',
+    ]);
+    expect(
+      alphaView.planningView?.units.every((unit) =>
+        controllers[0]!.unitIds.includes(unit.unitId),
+      ),
+    ).toBe(true);
+    expect(
+      betaView.planningView?.units.every((unit) =>
+        controllers[1]!.unitIds.includes(unit.unitId),
+      ),
+    ).toBe(true);
     expect(alphaView.ownCommitted).toBe(false);
     expect(alphaView.ownSubmissions).toEqual({});
     expect(betaView.ownCommitted).toBe(true);
@@ -359,6 +450,28 @@ describe('BattleMatchStateMachine', () => {
     });
   });
 
+  it('uses skip when a timed-out unit has no legal action', () => {
+    const state = createBattleMatchState({
+      matchId: 'match-test',
+      battle: save({ noActionUnitId: 'a0' }),
+      controllers,
+      now: 1_000,
+    });
+    const result = transitionBattleMatch(
+      state,
+      {
+        type: 'resolve_planning_timeout',
+        matchId: 'match-test',
+        ...commandBase(state, 'timeout-skip'),
+      },
+      31_000,
+    );
+    expect(result.state.resolving?.commandSet.intents.a0).toEqual({
+      kind: 'skip',
+      submittedBy: 'timeout',
+    });
+  });
+
   it('returns to planning after applying a non-terminal resolution', () => {
     let state = createBattleMatchState({
       matchId: 'match-test',
@@ -400,10 +513,55 @@ describe('BattleMatchStateMachine', () => {
         },
       },
     };
-    const next = applyBattleRoundResolution(state, resolution, 32_000);
+    const presenting = applyBattleRoundResolution(state, resolution, 32_000, {
+      resultId: 'result-1',
+      startedAt: 32_000,
+      readyAcceptedAt: 33_500,
+      scheduledEndsAt: 40_000,
+    });
+    expect(presenting.status).toBe('presenting');
+    expect(presenting.planning).toBeUndefined();
+    const oneReady = markBattlePresentationReady(
+      presenting,
+      'p-a',
+      'result-1',
+      34_000,
+    );
+    expect(oneReady.status).toBe('presenting');
+    const allReady = markBattlePresentationReady(
+      oneReady,
+      'p-b',
+      'result-1',
+      34_100,
+    );
+    expect(allReady.status).toBe('presenting');
+    expect(allReady.presentation?.readyPlayerIds).toEqual(['p-a', 'p-b']);
+    const earlyReadyA = markBattlePresentationReady(
+      presenting,
+      'p-a',
+      'result-1',
+      32_500,
+    );
+    const earlyReadyAll = markBattlePresentationReady(
+      earlyReadyA,
+      'p-b',
+      'result-1',
+      32_600,
+    );
+    expect(earlyReadyAll.status).toBe('presenting');
+    const heldUntilScheduledEnd = completeBattlePresentation(
+      earlyReadyAll,
+      39_999,
+    );
+    expect(heldUntilScheduledEnd.status).toBe('presenting');
+    const next = completeBattlePresentation(allReady, 40_000);
     expect(next.status).toBe('planning');
-    expect(next.planning?.round).toBe(2);
-    const view = createBattleMatchPlayerView(next, 'p-a', 32_001);
+    expect(next.planning).toMatchObject({
+      round: 2,
+      opensAt: 40_000,
+      deadlineAt: 70_000,
+    });
+    const view = createBattleMatchPlayerView(next, 'p-a', 40_001);
     expect(view.latestResolution?.version).toBe(
       'battle_round_resolution_public_v1',
     );
@@ -411,6 +569,140 @@ describe('BattleMatchStateMachine', () => {
       'battle_save_v1',
     );
     expect(view.latestResolution).not.toHaveProperty('stateTimeline');
+  });
+
+  it('does not auto-ready an eliminated player during the presentation phase', () => {
+    const battle = save();
+    battle.checkpoint.units.a0!.hp = 0;
+    battle.checkpoint.units.a1!.hp = 0;
+    const planning = createBattleMatchState({
+      matchId: 'eliminated-presentation-match',
+      battle,
+      controllers,
+      now: 1_000,
+    });
+    const resolving = transitionBattleMatch(
+      planning,
+      {
+        type: 'resolve_planning_timeout',
+        matchId: 'eliminated-presentation-match',
+        ...commandBase(planning, 'timeout-eliminated-presentation'),
+      },
+      31_000,
+    ).state;
+    const nextSave = {
+      ...battle,
+      checkpoint: {
+        ...battle.checkpoint,
+        round: 1,
+        checkpointRevision: 1,
+      },
+    };
+    const presenting = applyBattleRoundResolution(
+      resolving,
+      {
+        version: 'battle_round_resolution_v1',
+        commandSetId: resolving.resolving!.commandSet.commandSetId,
+        round: 1,
+        outcome: { battleEnded: false },
+        sequences: [],
+        stateTimeline: {
+          version: 'battle_state_timeline_v3',
+          frames: [],
+        },
+        checkpoint: nextSave.checkpoint,
+        save: nextSave,
+      },
+      32_000,
+      {
+        resultId: 'eliminated-presentation-result',
+        startedAt: 32_000,
+        readyAcceptedAt: 33_500,
+        scheduledEndsAt: 40_000,
+      },
+    );
+
+    expect(presenting.presentation?.readyPlayerIds).toEqual([]);
+    const survivorReady = markBattlePresentationReady(
+      presenting,
+      'p-b',
+      'eliminated-presentation-result',
+      34_000,
+    );
+    expect(survivorReady.status).toBe('presenting');
+    expect(survivorReady.presentation?.readyPlayerIds).toEqual(['p-b']);
+    const advanced = completeBattlePresentation(survivorReady, 40_000);
+    expect(advanced.status).toBe('planning');
+    expect(advanced.planning?.committedPlayerIds).toContain('p-a');
+  });
+
+  it('keeps a terminal presentation alive until its scheduled end', () => {
+    const planning = createBattleMatchState({
+      matchId: 'terminal-presentation-match',
+      battle: save(),
+      controllers,
+      now: 1_000,
+    });
+    const resolving = transitionBattleMatch(
+      planning,
+      {
+        type: 'resolve_planning_timeout',
+        matchId: 'terminal-presentation-match',
+        ...commandBase(planning, 'timeout-terminal-presentation'),
+      },
+      31_000,
+    ).state;
+    const nextSave = {
+      ...resolving.battle,
+      checkpoint: {
+        ...resolving.battle.checkpoint,
+        round: 1,
+        checkpointRevision: 1,
+      },
+    };
+    const presenting = applyBattleRoundResolution(
+      resolving,
+      {
+        version: 'battle_round_resolution_v1',
+        commandSetId: resolving.resolving!.commandSet.commandSetId,
+        round: 1,
+        outcome: { battleEnded: true, winningTeamId: 'a' },
+        sequences: [],
+        stateTimeline: {
+          version: 'battle_state_timeline_v3',
+          frames: [],
+        },
+        checkpoint: nextSave.checkpoint,
+        save: nextSave,
+      },
+      32_000,
+      {
+        resultId: 'terminal-presentation-result',
+        startedAt: 32_000,
+        readyAcceptedAt: 33_500,
+        scheduledEndsAt: 40_000,
+      },
+    );
+    const readyA = markBattlePresentationReady(
+      presenting,
+      'p-a',
+      'terminal-presentation-result',
+      34_000,
+    );
+    const allReady = markBattlePresentationReady(
+      readyA,
+      'p-b',
+      'terminal-presentation-result',
+      34_100,
+    );
+
+    expect(allReady.status).toBe('presenting');
+    expect(completeBattlePresentation(allReady, 39_999).status).toBe(
+      'presenting',
+    );
+    expect(completeBattlePresentation(allReady, 40_000).status).toBe(
+      'finished',
+    );
   });
 
   it('freezes deterministic failures without leaking diagnostics and supports retry or abort', () => {
@@ -449,9 +741,56 @@ describe('BattleMatchStateMachine', () => {
     expect(retried.status).toBe('resolving');
     expect(retried.resolving?.failure).toBeUndefined();
 
-    const cancelled = cancelBattleResolution(failed, 31_300);
+    const cancelled = cancelBattleMatch(failed, 31_300);
     expect(cancelled.status).toBe('cancelled');
     expect(cancelled.resolving).toBeUndefined();
+  });
+
+  it.each([
+    'waiting',
+    'planning',
+    'resolving',
+    'presenting',
+    'resolution_failed',
+  ] as const)('allows technical cancellation from %s', (status) => {
+    const base = createBattleMatchState({
+      matchId: 'match-test',
+      battle: save(),
+      controllers,
+      now: 1_000,
+    });
+    const state = {
+      ...base,
+      status,
+      planning: status === 'planning' ? base.planning : undefined,
+      resolving: status === 'resolving' || status === 'resolution_failed'
+        ? {
+            commandSet: {
+              version: 'round_command_set_v1' as const,
+              commandSetId: 'match-test:1:0',
+              round: 1,
+              checkpointRevision: 0,
+              intents: {},
+            },
+            startedAt: 1_100,
+          }
+        : undefined,
+      presentation: status === 'presenting'
+        ? {
+            resultId: 'result:1',
+            round: 1,
+            startedAt: 1_100,
+            readyAcceptedAt: 1_200,
+            scheduledEndsAt: 2_000,
+            readyPlayerIds: [],
+          }
+        : undefined,
+    } as BattleMatchStateV1;
+    const cancelled = cancelBattleMatch(state, 2_500);
+    expect(cancelled.status).toBe('cancelled');
+    expect(cancelled.planning).toBeUndefined();
+    expect(cancelled.resolving).toBeUndefined();
+    expect(cancelled.presentation).toBeUndefined();
   });
 
   it('preserves the resolution limit code in the private state and public failure view', () => {

@@ -8,8 +8,7 @@
   <strong>一款 AIGC 驱动、高自由度文字体验、修仙世界观的开源游戏项目。</strong>
 </p>
 
-> 本仓库当前实现为 `Hono + React SPA`。  
-> 这里的说明以现有代码为准，已不再适用于旧版 Next.js 架构。
+> 本仓库当前实现为 `Hono + React SPA`。这里的说明以现有代码为准，已不再适用于旧版 Next.js 架构。
 
 ---
 
@@ -43,18 +42,18 @@
   <img src="https://page-r2.daoyou.org/index/Xnip2026-02-02_19-02-21.png" alt="云游坊市" width="260" />
 </p>
 
-## 当前技术栈
+## 技术概览
 
 - 服务端：`Hono 4` + `Bun`
 - 前端：`React 19` + `React Router 7` + `Vite 8`
 - 样式：`Tailwind CSS 4`
 - 数据库：`PostgreSQL` + `Drizzle ORM`
-- 认证：`Better Auth`
 - 缓存 / 分布式协调：`Redis`
 - 消息与实时广播：`NATS JetStream` + `NATS Core`
+- 认证：`Better Auth`
 - AI 能力：`AI SDK` + `DeepSeek / ARK / Kimi / Alibaba / OpenRouter / OpenAI-compatible`
 
-## 当前目录结构
+## 仓库布局
 
 ```text
 .
@@ -64,15 +63,16 @@
 ├── src/shared/                  # 共享引擎、配置、类型、契约
 ├── drizzle/                     # 业务表 Drizzle migrations
 ├── drizzle-auth/                # Better Auth Drizzle migrations
-├── drizzle.auth.config.ts       # Better Auth 独立迁移配置
-├── scripts/                     # 部署脚本、生产/NATS Compose 与战斗 E2E
-├── docker/
-│   ├── Dockerfile.app
-│   └── Dockerfile.battle
+├── scripts/                     # 部署脚本与生产/NATS Compose
+├── docker/Dockerfile.app        # Bun 主服务镜像
 └── vite.config.ts
 ```
 
-## 运行方式
+## 本地开发与部署
+
+官方上游的环境要求、环境变量、数据库初始化、本地开发、构建、Docker、生产 cron 与部署脚本说明见 [docs/development.md](docs/development.md)。
+
+以下保留本仓库生产/自托管定制说明（部分战斗架构已随上游改为进程内 online-battle runtime，旧 boardgame/battle-server 路径可能失效，部署前请对照 `scripts/build-production-release.sh`）。
 
 这个仓库不是 SSR 应用。
 
@@ -165,20 +165,20 @@ cp .env.example .env.local
 
 ### 登录 / 注册相关
 
-当前鉴权中，以下接口会强制要求 Turnstile token：
+当前鉴权中，以下接口会强制要求 Altcha 人机验证：
 
 - `/api/auth/sign-in/email`
 - `/api/auth/sign-up/email`
 - `/api/auth/request-password-reset`
 - `/api/auth/email-otp/send-verification-otp`
 
-因此前端若不配置 Turnstile，相关表单无法正常工作。
+因此前端若不配置 Altcha，相关表单无法正常工作。
 
 | 变量 | 说明 |
 | --- | --- |
 | `VITE_API_BASE_URL` | 前端构建时注入的后端 API 基地址，如 `https://api.example.com` |
-| `VITE_TURNSTILE_SITE_KEY` | 前端构建时注入；没有它，登录/注册/找回密码页不会渲染验证码组件 |
-| `TURNSTILE_SECRET_KEY` 或 `TURNSTILE_SECRET` | 服务端校验 Turnstile 的密钥；未配置时服务端仍要求 token，但不会调用 Cloudflare 做真正校验 |
+| `VITE_ALTCHA / ALTCHA 相关变量（见 `.env.example` 与 docs/development.md）` | 前端构建时注入；没有它，登录/注册/找回密码页不会渲染验证码组件 |
+| `ALTCHA_HMAC_KEY` 等 Altcha 服务端配置` | 服务端校验 Altcha 的密钥；未配置时服务端仍要求 token，但不会调用 Cloudflare 做真正校验 |
 
 ### 邮件能力
 
@@ -297,7 +297,7 @@ docker run --rm -p 3000:3000 \
 
 注意：
 
-- `VITE_API_BASE_URL` 和 `VITE_TURNSTILE_SITE_KEY` 是前端 Pages 构建期变量，不进入后端 Docker 镜像
+- `VITE_API_BASE_URL` 和 `VITE_ALTCHA / ALTCHA 相关变量（见 `.env.example` 与 docs/development.md）` 是前端 Pages 构建期变量，不进入后端 Docker 镜像
 - 服务运行时环境变量通过 shell、容器环境或 `--env-file` 注入
 
 ## 仓库内现成部署脚本
@@ -404,10 +404,7 @@ React SPA 仍由 Cloudflare Pages 独立部署。
 4. 推送到分支 (`git push origin feature/NewFeature`)。
 5. 提交 Pull Request。
 
-- **架构原则**：
-  - 引擎层（`engine/`）完全独立于 UI 和框架
-  - 业务逻辑放在 Service 层
-  - 数据访问使用 Repository 模式
+开发与部署的完整约定请参见 [本地开发与部署](#本地开发与部署)。
 
 ## 💬 交流群
 
@@ -418,6 +415,12 @@ React SPA 仍由 Cloudflare Pages 独立部署。
 ## 💖 赞助与鸣谢
 
 感谢每一位帮助《万界道友》持续维护与成长的道友。新的赞助统一通过 [爱发电](https://afdian.com/u/baef2b20501311f09da252540025c377) 进行；具体规则请见 [赞助说明](SPONSORING.md)，公开赞助人名单与历史鸣谢请见 [SPONSORS.md](SPONSORS.md)。
+
+<p align="center">
+  <a href="https://afdian.com/u/baef2b20501311f09da252540025c377">
+    <img src="sponsorkit/sponsors.svg" alt="爱发电赞助人名单" width="720" />
+  </a>
+</p>
 
 赞助名单不会展示支付信息或具体金额，赞助不会影响游戏数值、账号权益或项目决策权。
 

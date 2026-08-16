@@ -11,13 +11,21 @@ import {
   validateBattleIntents,
 } from '../round/BattleRoundResolver';
 import { resolveLegalQueuedAction } from '../round/QueuedActionResolver';
-import type { BattleActionIntentV1, RoundCommandSetV1 } from '../round/types';
+import type {
+  BattleActionIntentV1,
+  BattlePlanningViewV1,
+  RoundCommandSetV1,
+} from '../round/types';
 import { ROUND_PLANNING_TIMEOUT_MS } from '../round/types';
-import { createBattlePublicSnapshot } from './BattlePublicSnapshot';
+import {
+  createBattlePublicSnapshotFromRoster,
+  type BattlePublicSnapshotV1,
+} from './BattlePublicSnapshot';
 import type {
   BattleControllerV1,
   BattleMatchCommandV1,
   BattleMatchPlayerViewV1,
+  BattleMatchPresentationV1,
   BattleMatchStateV1,
   BattleMatchTransitionV1,
   BattleResolutionFailureV1,
@@ -50,14 +58,49 @@ export function createBattleMatchState(
     planning: {
       round: input.battle.checkpoint.round + 1,
       checkpointRevision: input.battle.checkpoint.checkpointRevision,
+      opensAt: input.now,
       deadlineAt: input.now + timeout,
       submissions: {},
-      committedPlayerIds: [],
+      committedPlayerIds: getPlayersWithoutLivingUnits(
+        input.battle,
+        input.controllers,
+      ),
     },
     createdAt: input.now,
     updatedAt: input.now,
   };
   return clone(state);
+}
+
+export function holdBattleMatchForPlayers(
+  state: BattleMatchStateV1,
+): BattleMatchStateV1 {
+  if (state.status !== 'planning' || !state.planning) return clone(state);
+  return clone({ ...state, status: 'waiting', planning: undefined });
+}
+
+export function openBattlePlanning(
+  state: BattleMatchStateV1,
+  now: number,
+): BattleMatchStateV1 {
+  if (state.status !== 'waiting') return clone(state);
+  return clone({
+    ...state,
+    status: 'planning',
+    planning: {
+      round: state.battle.checkpoint.round + 1,
+      checkpointRevision: state.battle.checkpoint.checkpointRevision,
+      opensAt: now,
+      deadlineAt: now + ROUND_PLANNING_TIMEOUT_MS,
+      submissions: {},
+      committedPlayerIds: getPlayersWithoutLivingUnits(
+        state.battle,
+        state.controllers,
+      ),
+    },
+    revision: state.revision + 1,
+    updatedAt: now,
+  });
 }
 
 export function transitionBattleMatch(
@@ -174,6 +217,7 @@ export function applyBattleRoundResolution(
   state: BattleMatchStateV1,
   resolution: import('../round/types').BattleRoundResolutionV1,
   now: number,
+  presentation: Omit<BattleMatchPresentationV1, 'round' | 'readyPlayerIds'>,
 ): BattleMatchStateV1 {
   if (state.status !== 'resolving' || !state.resolving) {
     throw new Error('Battle match is not resolving');
@@ -181,27 +225,96 @@ export function applyBattleRoundResolution(
   if (state.resolving.commandSet.commandSetId !== resolution.commandSetId) {
     throw new Error('Resolution does not match the sealed command set');
   }
-  const next = resolution.outcome.battleEnded
-    ? { status: 'finished' as const, planning: undefined, resolving: undefined }
-    : {
-        status: 'planning' as const,
-        planning: {
-          round: resolution.checkpoint.round + 1,
-          checkpointRevision: resolution.checkpoint.checkpointRevision,
-          deadlineAt: now + ROUND_PLANNING_TIMEOUT_MS,
-          submissions: {},
-          committedPlayerIds: [],
-        },
-        resolving: undefined,
-      };
+  validatePresentationTiming(presentation, now);
   return clone({
     ...state,
-    ...next,
+    status: 'presenting',
+    planning: undefined,
+    resolving: undefined,
+    presentation: {
+      ...presentation,
+      round: resolution.round,
+      readyPlayerIds: [],
+    },
     battle: resolution.save,
     latestResolution: toPublicResolution(resolution),
     revision: state.revision + 1,
     updatedAt: now,
   });
+}
+
+export function markBattlePresentationReady(
+  state: BattleMatchStateV1,
+  playerId: PlayerId,
+  resultId: string,
+  now: number,
+): BattleMatchStateV1 {
+  // Ready is an informational acknowledgement from the client. The
+  // authoritative presentation boundary remains scheduledEndsAt and is
+  // enforced by completeBattlePresentation below.
+  if (state.status !== 'presenting' || !state.presentation) {
+    throw new Error('Battle match is not presenting');
+  }
+  getController(state, playerId);
+  if (state.presentation.resultId !== resultId) {
+    throw new Error('Battle presentation result is stale');
+  }
+  if (state.presentation.readyPlayerIds.includes(playerId)) return clone(state);
+  const readyPlayerIds = [...state.presentation.readyPlayerIds, playerId].sort();
+  const next = clone({
+    ...state,
+    presentation: { ...state.presentation, readyPlayerIds },
+    revision: state.revision + 1,
+    updatedAt: now,
+  });
+  return next;
+}
+
+export function completeBattlePresentation(
+  state: BattleMatchStateV1,
+  now: number,
+): BattleMatchStateV1 {
+  if (state.status !== 'presenting' || !state.presentation) return clone(state);
+  // Never let an early client Ready acknowledgement shorten the animation
+  // window; only the authoritative scheduled end may advance the match.
+  if (now < state.presentation.scheduledEndsAt) {
+    return clone(state);
+  }
+  const finished = Boolean(state.latestResolution?.outcome.battleEnded);
+  return clone({
+    ...state,
+    status: finished ? 'finished' : 'planning',
+    presentation: undefined,
+    planning: finished
+      ? undefined
+      : {
+          round: state.battle.checkpoint.round + 1,
+          checkpointRevision: state.battle.checkpoint.checkpointRevision,
+          opensAt: now,
+          deadlineAt: now + ROUND_PLANNING_TIMEOUT_MS,
+          submissions: {},
+          committedPlayerIds: getPlayersWithoutLivingUnits(
+            state.battle,
+            state.controllers,
+          ),
+        },
+    revision: state.revision + 1,
+    updatedAt: now,
+  });
+}
+
+function validatePresentationTiming(
+  presentation: Omit<BattleMatchPresentationV1, 'round' | 'readyPlayerIds'>,
+  now: number,
+): void {
+  if (
+    !presentation.resultId ||
+    presentation.startedAt !== now ||
+    presentation.readyAcceptedAt < presentation.startedAt ||
+    presentation.scheduledEndsAt < presentation.readyAcceptedAt
+  ) {
+    throw new Error('Battle presentation timing is invalid');
+  }
 }
 
 export function markBattleResolutionFailed(
@@ -235,11 +348,11 @@ export function retryFailedBattleResolution(
   });
 }
 
-export function cancelBattleResolution(
+export function cancelBattleMatch(
   state: BattleMatchStateV1,
   now: number,
 ): BattleMatchStateV1 {
-  if (state.status !== 'resolution_failed' && state.status !== 'resolving') {
+  if (state.status === 'finished' || state.status === 'cancelled') {
     return clone(state);
   }
   return clone({
@@ -247,6 +360,7 @@ export function cancelBattleResolution(
     status: 'cancelled',
     planning: undefined,
     resolving: undefined,
+    presentation: undefined,
     revision: state.revision + 1,
     updatedAt: now,
   });
@@ -287,23 +401,10 @@ export function createBattleMatchPlayerView(
   state: BattleMatchStateV1,
   playerId: PlayerId,
   now: number,
+  projection = createBattleMatchViewProjection(state),
 ): BattleMatchPlayerViewV1 {
   const controller = getController(state, playerId);
   const planning = state.planning;
-  let planningView;
-  if (planning) {
-    const restored = restoreBattleSave(state.battle);
-    try {
-      planningView = createBattlePlanningView({
-        roster: restored.roster,
-        round: planning.round,
-        checkpointRevision: planning.checkpointRevision,
-        teamId: controller.teamId,
-      });
-    } finally {
-      restored.runtime.dispose();
-    }
-  }
   return clone({
     version: 'battle_match_player_view_v1',
     matchId: state.matchId,
@@ -321,9 +422,10 @@ export function createBattleMatchPlayerView(
       state.resolving?.commandSet.checkpointRevision ??
       state.battle.checkpoint.checkpointRevision,
     deadlineAt: planning?.deadlineAt,
+    planningOpensAt: planning?.opensAt,
     serverNow: now,
-    publicSnapshot: createBattlePublicSnapshot(state.battle),
-    planningView,
+    publicSnapshot: projection.publicSnapshot,
+    planningView: projection.planningViewByPlayerId[playerId],
     ownSubmissions: Object.fromEntries(
       controller.unitIds
         .filter((unitId) => planning?.submissions[unitId])
@@ -331,6 +433,7 @@ export function createBattleMatchPlayerView(
     ),
     ownCommitted: planning?.committedPlayerIds.includes(playerId) ?? false,
     latestResolution: state.latestResolution,
+    presentation: state.presentation,
     resolutionFailure: state.resolving?.failure
       ? {
           code: state.resolving.failure.code,
@@ -341,6 +444,41 @@ export function createBattleMatchPlayerView(
   });
 }
 
+export interface BattleMatchViewProjection {
+  readonly publicSnapshot: BattlePublicSnapshotV1;
+  readonly planningViewByPlayerId: Readonly<
+    Record<PlayerId, BattlePlanningViewV1>
+  >;
+}
+
+export function createBattleMatchViewProjection(
+  state: BattleMatchStateV1,
+): BattleMatchViewProjection {
+  const restored = restoreBattleSave(state.battle);
+  try {
+    const planningViewByPlayerId: Record<PlayerId, BattlePlanningViewV1> = {};
+    if (state.planning) {
+      for (const controller of state.controllers) {
+        planningViewByPlayerId[controller.playerId] = createBattlePlanningView({
+          roster: restored.roster,
+          round: state.planning.round,
+          checkpointRevision: state.planning.checkpointRevision,
+          unitIds: controller.unitIds,
+        });
+      }
+    }
+    return {
+      publicSnapshot: createBattlePublicSnapshotFromRoster(
+        state.battle,
+        restored.roster,
+      ),
+      planningViewByPlayerId,
+    };
+  } finally {
+    restored.runtime.dispose();
+  }
+}
+
 function toPublicResolution(
   resolution: import('../round/types').BattleRoundResolutionV1,
 ): BattleRoundResolutionPublicV1 {
@@ -349,7 +487,6 @@ function toPublicResolution(
     commandSetId: resolution.commandSetId,
     round: resolution.round,
     outcome: resolution.outcome,
-    sequences: resolution.sequences,
   };
 }
 
@@ -408,13 +545,13 @@ function completeMissingIntentsAtDeadline(
       const target = queued
         ? resolveLegalQueuedAction(unit, allUnits)?.target
         : resolveLegalBasicAttack(unit, allUnits)?.target;
-      if (!target)
-        throw new Error(`Unit ${unit.id} has no legal timeout attack target`);
-      result[unit.id] = {
-        kind: 'basic_attack',
-        targetUnitId: target.id,
-        submittedBy: 'timeout',
-      };
+      result[unit.id] = target
+        ? {
+            kind: 'basic_attack',
+            targetUnitId: target.id,
+            submittedBy: 'timeout',
+          }
+        : { kind: 'skip', submittedBy: 'timeout' };
     }
     return result;
   } finally {
@@ -423,9 +560,41 @@ function completeMissingIntentsAtDeadline(
 }
 
 function allControllersCommitted(state: BattleMatchStateV1): boolean {
-  return state.controllers.every((controller) =>
-    state.planning!.committedPlayerIds.includes(controller.playerId),
+  const playersRequiringCommit = getPlayersWithLivingUnits(
+    state.battle,
+    state.controllers,
   );
+  return playersRequiringCommit.every((playerId) =>
+    state.planning!.committedPlayerIds.includes(playerId),
+  );
+}
+
+function getPlayersWithoutLivingUnits(
+  battle: BattleSaveV1,
+  controllers: readonly BattleControllerV1[],
+): PlayerId[] {
+  const livingPlayers = new Set(getPlayersWithLivingUnits(battle, controllers));
+  return controllers
+    .map((controller) => controller.playerId)
+    .filter((playerId) => !livingPlayers.has(playerId));
+}
+
+function getPlayersWithLivingUnits(
+  battle: BattleSaveV1,
+  controllers: readonly BattleControllerV1[],
+): PlayerId[] {
+  const restored = restoreBattleSave(battle);
+  try {
+    return controllers
+      .filter((controller) =>
+        controller.unitIds.some((unitId) =>
+          restored.roster.getUnit(unitId).isAlive(),
+        ),
+      )
+      .map((controller) => controller.playerId);
+  } finally {
+    restored.runtime.dispose();
+  }
 }
 
 function getController(

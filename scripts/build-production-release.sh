@@ -11,7 +11,9 @@ STAGE_DIR="$RELEASES_DIR/.staging-$RELEASE_ID"
 RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
 BUILD_ENV_FILE="${BUILD_ENV_FILE:-$RUNTIME_DIR/app.env}"
 IMAGE_TAG="${IMAGE_TAG:-daoyou-hono:source-$RELEASE_ID}"
-BATTLE_IMAGE_TAG="${BATTLE_IMAGE_TAG:-daoyou-battle:source-$RELEASE_ID}"
+# Official online battle now runs in-process; keep the existing battle image for
+# nginx /socket.io compatibility until the separate container is retired.
+BATTLE_IMAGE_TAG="${BATTLE_IMAGE_TAG:-daoyou-battle:stable-socket-worker}"
 
 if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "Invalid release id: $RELEASE_ID" >&2
@@ -48,21 +50,27 @@ test -f dist/icons/icon-192.png
 test -d dist/assets
 cp -a dist/. "$STAGE_DIR/web/"
 
-echo "==> Building server without replacing the client output"
+echo "==> Building server (includes online-battle-resolver worker)"
 bun run build:server
 test -f dist/index.js
 test -f dist/index.html
 test -f dist/version.json
+test -f dist/online-battle-resolver.js
 cp -a dist/. "$STAGE_DIR/server/"
 
-echo "==> Building battle service"
-bun run build:battle
-test -f dist-battle/battle-server.js
-cp -a dist-battle/. "$STAGE_DIR/battle/"
+echo "==> Reusing battle image for legacy socket.io container: $BATTLE_IMAGE_TAG"
+docker image inspect "$BATTLE_IMAGE_TAG" >/dev/null
+EXTRACT_CONTAINER="daoyou-battle-extract-$RELEASE_ID"
+docker rm -f "$EXTRACT_CONTAINER" >/dev/null 2>&1 || true
+docker create --name "$EXTRACT_CONTAINER" "$BATTLE_IMAGE_TAG" >/dev/null
+docker cp "$EXTRACT_CONTAINER:/app/dist-battle/." "$STAGE_DIR/battle/"
+docker rm -f "$EXTRACT_CONTAINER" >/dev/null
+test -f "$STAGE_DIR/battle/battle-server.js"
 
 test -f "$STAGE_DIR/web/index.html"
 test ! -f "$STAGE_DIR/web/index.js"
 test -f "$STAGE_DIR/server/index.js"
+test -f "$STAGE_DIR/server/online-battle-resolver.js"
 test -f "$STAGE_DIR/battle/battle-server.js"
 
 echo "==> Building runtime image: $IMAGE_TAG"
@@ -70,12 +78,6 @@ docker build \
   -f deploy/production/Dockerfile.runtime \
   -t "$IMAGE_TAG" \
   "$STAGE_DIR/server"
-
-echo "==> Building battle runtime image: $BATTLE_IMAGE_TAG"
-docker build \
-  -f docker/Dockerfile.battle \
-  -t "$BATTLE_IMAGE_TAG" \
-  .
 
 COMMIT_SHA="$(git rev-parse HEAD)" \
 RELEASE_ID="$RELEASE_ID" \
@@ -95,7 +97,7 @@ MANIFEST_FILE="$STAGE_DIR/release.json" \
 
 (
   cd "$STAGE_DIR"
-  sha256sum web/index.html server/index.js battle/battle-server.js > SHA256SUMS
+  sha256sum web/index.html server/index.js server/online-battle-resolver.js battle/battle-server.js > SHA256SUMS
 )
 
 mv "$STAGE_DIR" "$RELEASE_DIR"

@@ -1,19 +1,19 @@
 import { auth } from '@server/lib/auth/auth';
-import { authError } from '@server/lib/auth/errors';
 import { authUsers } from '@server/lib/auth/schema';
 import {
-  isTurnstileAuthEnabled,
-  verifyTurnstileToken,
-} from '@server/lib/auth/turnstile';
+  isAltchaServerEnabled,
+  verifyAltchaPayload,
+  type AltchaAction,
+} from '@server/lib/auth/altcha';
 import { db } from '@server/lib/drizzle/db';
-import { getRequestIp } from '@server/lib/http/requestIp';
 import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
-const CAPTCHA_PROTECTED_PATHS = new Set([
-  '/api/auth/sign-in/email',
-  '/api/auth/request-password-reset',
-  '/api/auth/email-otp/send-verification-otp',
+const CAPTCHA_ACTION_BY_PATH = new Map<string, AltchaAction>([
+  ['/api/auth/sign-in/email', 'sign-in'],
+  ['/api/auth/sign-up/email', 'sign-up'],
+  ['/api/auth/request-password-reset', 'password-reset'],
+  ['/api/auth/email-otp/send-verification-otp', 'email-otp'],
 ]);
 const ADMIN_AUTH_PATH = '/api/auth/admin';
 
@@ -36,29 +36,48 @@ async function readRequestBody(request: Request): Promise<Record<string, unknown
   return {};
 }
 
+function authError(message: string, status = 400) {
+  return Response.json(
+    {
+      success: false,
+      error: message,
+    },
+    { status },
+  );
+}
+
 async function validateCaptcha(context: Context): Promise<Response | null> {
-  if (!CAPTCHA_PROTECTED_PATHS.has(context.req.path)) {
+  const action = CAPTCHA_ACTION_BY_PATH.get(context.req.path);
+  if (!action) {
     return null;
   }
 
-  if (!isTurnstileAuthEnabled()) {
-    return null;
+  if (!isAltchaServerEnabled()) {
+    return authError('人机验证服务未配置', 503);
   }
 
   const body = await readRequestBody(context.req.raw);
-  const captchaTokenHeader = context.req.header('x-turnstile-token');
-  const captchaTokenBody =
-    typeof body.captchaToken === 'string' ? body.captchaToken : '';
-  const captchaToken = captchaTokenHeader || captchaTokenBody;
+  const captchaPayloadHeader = context.req.header('x-altcha-payload');
+  const captchaPayloadBody =
+    typeof body.altcha === 'string'
+      ? body.altcha
+      : typeof body.captchaPayload === 'string'
+        ? body.captchaPayload
+        : '';
+  const captchaPayload = captchaPayloadHeader || captchaPayloadBody;
 
-  if (!captchaToken) {
-    return authError('请先完成人机验证', 400, 'CAPTCHA_REQUIRED');
+  if (!captchaPayload) {
+    return authError('请先完成人机验证');
   }
 
-  const verified = await verifyTurnstileToken(captchaToken, getRequestIp(context));
+  const verification = await verifyAltchaPayload(captchaPayload, action);
 
-  if (!verified) {
-    return authError('人机验证失败，请重试', 400, 'CAPTCHA_FAILED');
+  if (verification === 'unavailable') {
+    return authError('人机验证服务暂不可用，请稍后重试', 503);
+  }
+
+  if (verification !== 'verified') {
+    return authError('人机验证失败，请重试');
   }
 
   return null;
@@ -74,7 +93,7 @@ async function validateOtpSignUpName(context: Context): Promise<Response | null>
   const name = typeof body.name === 'string' ? body.name.trim() : '';
 
   if (!email) {
-    return authError('缺少邮箱地址', 400, 'MISSING_EMAIL');
+    return authError('缺少邮箱地址');
   }
 
   const existingUser = await db
@@ -84,7 +103,7 @@ async function validateOtpSignUpName(context: Context): Promise<Response | null>
     .limit(1);
 
   if (existingUser.length === 0 && !name) {
-    return authError('首次注册请填写昵称', 400, 'NAME_REQUIRED');
+    return authError('首次注册请填写昵称');
   }
 
   return null;
@@ -95,7 +114,7 @@ export async function handleAuthRequest(context: Context): Promise<Response> {
     context.req.path === ADMIN_AUTH_PATH ||
     context.req.path.startsWith(`${ADMIN_AUTH_PATH}/`)
   ) {
-    return authError('未找到该接口', 404, 'NOT_FOUND');
+    return authError('未找到该接口', 404);
   }
 
   if (context.req.method === 'POST') {

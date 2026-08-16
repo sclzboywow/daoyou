@@ -28,6 +28,69 @@ import {
 } from 'ai';
 import { z } from 'zod';
 
+const LLM_DEBUG_ENABLED =
+  process.env.LLM_DEBUG === 'true' ||
+  process.env.LLM_DEBUG === '1' ||
+  (process.env.LLM_DEBUG !== 'false' &&
+    process.env.LLM_DEBUG !== '0' &&
+    process.env.NODE_ENV !== 'production' &&
+    process.env.NODE_ENV !== 'test');
+
+function logLlmDebug(
+  label: string,
+  sceneId: string,
+  model: string,
+  content: string,
+): void {
+  if (!LLM_DEBUG_ENABLED) {
+    return;
+  }
+
+  console.log(
+    `[LLM_DEBUG][${label}] sceneId=${sceneId} model=${model}\n${content}`,
+  );
+}
+
+function createLlmDebugFetch(sceneId: LlmSceneId, model: string): typeof fetch {
+  return Object.assign(
+    async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      logLlmDebug(
+        'REQUEST',
+        sceneId,
+        model,
+        typeof init?.body === 'string' ? init.body : String(init?.body ?? ''),
+      );
+
+      try {
+        const response = await globalThis.fetch(input, init);
+        void response
+          .clone()
+          .text()
+          .then((body) => {
+            logLlmDebug(
+              `RESPONSE status=${response.status}`,
+              sceneId,
+              model,
+              body,
+            );
+          })
+          .catch((error) => {
+            logLlmDebug('RESPONSE_READ_ERROR', sceneId, model, String(error));
+          });
+        return response;
+      } catch (error) {
+        logLlmDebug('REQUEST_ERROR', sceneId, model, String(error));
+        throw error;
+      }
+    },
+    // Bun's fetch type requires this property; AI SDK only invokes the function.
+    { preconnect: () => undefined },
+  );
+}
+
 const STRUCTURED_RETRY_OUTPUT_CHARS = 8_000;
 const STRUCTURED_RETRY_MAX_OUTPUT_TOKENS = 16_384;
 
@@ -537,8 +600,10 @@ export function streamAiText(options: AiTextOptions) {
         }
         recordTerminalMetric('failure', usage);
       },
-      onEnd: ({ usage }) =>
-        recordTerminalMetric('success', summarizeUsage(usage)),
+      onEnd: ({ text, usage }) => {
+        logLlmDebug('STREAM_TEXT', options.sceneId, modelName, text);
+        recordTerminalMetric('success', summarizeUsage(usage));
+      },
     });
   } catch (error) {
     recordTerminalMetric('failure');

@@ -17,7 +17,6 @@ import {
   attachRealtimeBattlePhaser,
   type RealtimeBattlePhaserController,
 } from '@app/components/feature/battle/realtime/RealtimeBattlePhaserRuntime';
-import { CombatActionLogV3 } from '@app/components/feature/battle/v3/CombatActionLog';
 import {
   BATTLE_QUICKBAR_MAX_SLOTS,
   loadBattleQuickbar,
@@ -29,7 +28,6 @@ import type {
   ClientBattleIntentV1,
 } from '@shared/engine/battle-v5/match/types';
 import type { PlanningAbilityViewV1 } from '@shared/engine/battle-v5/round/types';
-import type { CombatSequenceV3 } from '@shared/engine/battle-v5/v3';
 import {
   createBattlePresentationSnapshot,
   createBattlePresentationSnapshotFromPublic,
@@ -43,11 +41,6 @@ import {
   useState,
 } from 'react';
 import { Link, useParams } from 'react-router';
-
-function remainingSeconds(deadlineAt: number | undefined, now: number) {
-  if (!deadlineAt) return undefined;
-  return Math.max(0, Math.ceil((deadlineAt - now) / 1000));
-}
 
 interface PlanningCommandChoice {
   abilityId: string;
@@ -65,6 +58,31 @@ function unitName(view: BattleMatchPlayerViewV1, unitId: string) {
   );
 }
 
+function assertOwnIntentSet(
+  livingControlledUnitIds: readonly string[],
+  intents: Record<string, ClientBattleIntentV1>,
+): void {
+  const allowed = new Set(livingControlledUnitIds);
+  const submitted = Object.keys(intents);
+  if (
+    submitted.length !== allowed.size ||
+    submitted.some((unitId) => !allowed.has(unitId))
+  ) {
+    throw new Error('本次提交必须包含当前玩家全部存活修士的指令');
+  }
+}
+
+function intentSetKey(
+  epoch: string,
+  intents: Record<string, ClientBattleIntentV1>,
+): string {
+  return `${epoch}:${JSON.stringify(
+    Object.entries(intents).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  )}`;
+}
+
 type BattleCommandMode =
   | 'select_unit'
   | 'select_ability'
@@ -80,20 +98,37 @@ interface BattleCommandDraft {
   readonly stage: 'select_target';
 }
 
+interface LocalPlanningState {
+  readonly epoch: string | null;
+  readonly intents: Record<string, ClientBattleIntentV1>;
+  readonly drafts: Record<string, BattleCommandDraft>;
+}
+
+const EMPTY_PLANNED_INTENTS: Record<string, ClientBattleIntentV1> = {};
+const EMPTY_COMMAND_DRAFTS: Record<string, BattleCommandDraft> = {};
+
+function planningStateForEpoch(
+  current: LocalPlanningState,
+  epoch: string,
+): LocalPlanningState {
+  return current.epoch === epoch
+    ? current
+    : { epoch, intents: {}, drafts: {} };
+}
+
 export default function LiveBattleMatchPage() {
   const { matchId } = useParams<{ matchId: string }>();
   const { view, viewReceivedAt, connectionStatus, error, actions } =
     useBattleMatchClient(matchId ?? null);
-  const [now, setNow] = useState(() => Date.now());
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
   const [inspectedUnitId, setInspectedUnitId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [commandDrafts, setCommandDrafts] = useState<
-    Record<string, BattleCommandDraft>
-  >({});
-  const [plannedIntents, setPlannedIntents] = useState<
-    Record<string, ClientBattleIntentV1>
-  >({});
+  const [localPlanningState, setLocalPlanningState] =
+    useState<LocalPlanningState>({
+      epoch: null,
+      intents: {},
+      drafts: {},
+    });
   const [commitPending, setCommitPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [quickbarOverrides, setQuickbarOverrides] = useState<
@@ -103,12 +138,6 @@ export default function LiveBattleMatchPage() {
     string | null
   >(null);
   const [phaserReady, setPhaserReady] = useState(false);
-  const [debugOpen, setDebugOpen] = useState(false);
-  const [debugSequences, setDebugSequences] = useState<CombatSequenceV3[]>([]);
-  const [debugActiveSequenceId, setDebugActiveSequenceId] = useState<
-    string | null
-  >(null);
-  const [debugResolvedFactCount, setDebugResolvedFactCount] = useState(0);
   const phaserRootRef = useRef<HTMLDivElement>(null);
   const phaserControllerRef = useRef<RealtimeBattlePhaserController | null>(
     null,
@@ -116,17 +145,27 @@ export default function LiveBattleMatchPage() {
   const presentationDirectorRef = useRef<BattlePresentationDirector | null>(
     null,
   );
-  const checkpointRevisionRef = useRef<number | null>(null);
+  const readyReportedResultRef = useRef<string | null>(null);
+  const presentationBoundarySyncAttemptRef = useRef<string | null>(null);
   const autoCommitAttemptRef = useRef<string | null>(null);
   const commitRequestRef = useRef<{
-    checkpointRevision: number;
+    epoch: string;
     requestId: string;
   } | null>(null);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(timer);
-  }, []);
+  const currentPlanningEpoch =
+    matchId && view?.matchId === matchId && view.status === 'planning'
+      ? `${matchId}:${view.round}:${view.checkpointRevision}`
+      : null;
+  const planningStateCurrent =
+    currentPlanningEpoch !== null &&
+    localPlanningState.epoch === currentPlanningEpoch;
+  const plannedIntents = planningStateCurrent
+    ? localPlanningState.intents
+    : EMPTY_PLANNED_INTENTS;
+  const commandDrafts = planningStateCurrent
+    ? localPlanningState.drafts
+    : EMPTY_COMMAND_DRAFTS;
 
   const ownUnits = useMemo(
     () => view?.planningView?.units ?? [],
@@ -151,18 +190,15 @@ export default function LiveBattleMatchPage() {
     ownUnits.find((unit) => unit.unitId === resolvedActiveUnitId) ?? null;
   const activeAbilities = activeUnit?.abilities ?? [];
   const ownSubmissions = view?.ownSubmissions ?? {};
-  const allPlayersReady = view?.orchestration.allPlayersReady ?? false;
-  const serverNow =
-    view?.serverNow !== undefined && viewReceivedAt !== null
-      ? view.serverNow + (now - viewReceivedAt)
-      : now;
+  const presentationKey = view?.presentationWindow
+    ? view.presentationWindow.resultId
+    : null;
   const presentationActive = Boolean(
-    view?.presentation && serverNow < view.presentation.endsAt,
+    view?.status === 'presenting' && view.presentationWindow,
   );
   const isPlanning = Boolean(
     view &&
     connectionStatus === 'connected' &&
-    allPlayersReady &&
     view.status === 'planning' &&
     !presentationActive,
   );
@@ -199,7 +235,6 @@ export default function LiveBattleMatchPage() {
           : resolvedActiveUnitId
             ? 'select_ability'
             : 'select_unit';
-  const roundRemainingSeconds = remainingSeconds(view?.deadlineAt, serverNow);
   const roundPhase: RealtimeBattleRoundPhase = presentationActive
     ? 'presenting'
     : view?.status === 'finished' || view?.status === 'cancelled'
@@ -210,18 +245,15 @@ export default function LiveBattleMatchPage() {
           ? 'committed'
           : !view
             ? 'connecting'
-            : !allPlayersReady
+            : view.status === 'waiting'
               ? 'waiting'
               : 'planning';
   const commandDockExpanded = Boolean(
     isPlanning && !isCommitted && !allLivingUnitsLocked,
   );
   const presentationSnapshot = useMemo(
-    () =>
-      view
-        ? createBattlePresentationSnapshot(view, inspectedUnitId ?? undefined)
-        : null,
-    [view, inspectedUnitId],
+    () => (view ? createBattlePresentationSnapshot(view) : null),
+    [view],
   );
   const initialPresentationSnapshotRef = useRef<{
     matchId: string | undefined;
@@ -233,28 +265,40 @@ export default function LiveBattleMatchPage() {
       activeAbilities.find((ability) => ability.abilityId === abilityId),
     )
     .filter((ability): ability is PlanningAbilityViewV1 => Boolean(ability));
-  const debugActiveIndex = debugSequences.findIndex(
-    (sequence) => sequence.id === debugActiveSequenceId,
-  );
-  const debugCurrentIndex =
-    debugActiveIndex >= 0
-      ? debugActiveIndex
-      : Math.max(0, debugSequences.length - 1);
-
   const submitLockedIntents = useCallback(
     (intents: Record<string, ClientBattleIntentV1>) => {
-      if (!actions || !isPlanning || isCommitted || commitPending || !view)
+      if (
+        !actions ||
+        !isPlanning ||
+        isCommitted ||
+        commitPending ||
+        !view ||
+        !currentPlanningEpoch ||
+        localPlanningState.epoch !== currentPlanningEpoch
+      )
         return false;
+      try {
+        assertOwnIntentSet(
+          ownUnits.filter((unit) => unit.alive).map((unit) => unit.unitId),
+          intents,
+        );
+      } catch (error) {
+        setActionError(
+          error instanceof Error
+            ? error.message
+            : '本方指令未能确认，请重试。',
+        );
+        return false;
+      }
       setActionError(null);
       setCommitPending(true);
       try {
         const requestId =
-          commitRequestRef.current?.checkpointRevision ===
-          view.checkpointRevision
+          commitRequestRef.current?.epoch === currentPlanningEpoch
             ? commitRequestRef.current.requestId
             : crypto.randomUUID();
         commitRequestRef.current = {
-          checkpointRevision: view.checkpointRevision,
+          epoch: currentPlanningEpoch,
           requestId,
         };
         actions.commitIntents(
@@ -270,25 +314,48 @@ export default function LiveBattleMatchPage() {
         return false;
       }
     },
-    [actions, commitPending, isCommitted, isPlanning, view],
+    [
+      actions,
+      commitPending,
+      currentPlanningEpoch,
+      isCommitted,
+      isPlanning,
+      localPlanningState.epoch,
+      ownUnits,
+      view,
+    ],
   );
+
+  useEffect(() => {
+    if (!currentPlanningEpoch) return;
+    autoCommitAttemptRef.current = null;
+    commitRequestRef.current = null;
+    const timer = window.setTimeout(() => {
+      setCommitPending(false);
+      setActionError(null);
+      setDrawerOpen(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [currentPlanningEpoch]);
 
   useEffect(() => {
     if (
       !allLivingUnitsLocked ||
       !view ||
       !isPlanning ||
+      !currentPlanningEpoch ||
       isCommitted ||
       commitPending
     )
       return;
-    const attemptKey = `${view.checkpointRevision}:${Object.keys(plannedIntents).sort().join(',')}`;
+    const attemptKey = intentSetKey(currentPlanningEpoch, plannedIntents);
     if (autoCommitAttemptRef.current === attemptKey) return;
     autoCommitAttemptRef.current = attemptKey;
     submitLockedIntents(plannedIntents);
   }, [
     allLivingUnitsLocked,
     commitPending,
+    currentPlanningEpoch,
     isCommitted,
     isPlanning,
     plannedIntents,
@@ -316,18 +383,33 @@ export default function LiveBattleMatchPage() {
   useEffect(() => {
     const receipt = view?.commandReceipt;
     const request = commitRequestRef.current;
-    if (!receipt || !request || receipt.requestId !== request.requestId) return;
+    if (
+      !receipt ||
+      !request ||
+      receipt.requestId !== request.requestId ||
+      request.epoch !== currentPlanningEpoch
+    )
+      return;
     const timer = window.setTimeout(() => {
       setCommitPending(false);
       if (receipt.status === 'rejected') {
+        commitRequestRef.current = null;
         const labels = {
           deadline_reached: '本回合已经截止，服务端正在执行默认操作。',
           already_committed: '本方指令已经确认，不能重复修改。',
           stale_match: '战局状态已经变化，请等待最新状态同步。',
           stale_checkpoint: '当前指令属于旧回合，请等待最新战况。',
-          invalid_intents: '本方指令不符合当前战局规则。',
+          invalid_intents: '战局已经变化，请重新选择本回合行动。',
           match_not_planning: '战局已经进入结算阶段。',
         } as const;
+        if (receipt.reason === 'invalid_intents') {
+          autoCommitAttemptRef.current = null;
+          setLocalPlanningState((current) =>
+            current.epoch === request.epoch
+              ? { ...current, intents: {}, drafts: {} }
+              : current,
+          );
+        }
         setActionError(
           receipt.reason ? labels[receipt.reason] : '服务端拒绝了本方指令。',
         );
@@ -336,22 +418,30 @@ export default function LiveBattleMatchPage() {
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [view?.commandReceipt]);
+  }, [currentPlanningEpoch, view?.commandReceipt]);
 
   const lockUnitIntent = useCallback(
     (unitId: string, intent: ClientBattleIntentV1) => {
-      setPlannedIntents((current) =>
-        current[unitId] ? current : { ...current, [unitId]: intent },
-      );
-      setCommandDrafts((current) => {
-        if (!current[unitId]) return current;
-        const next = { ...current };
-        delete next[unitId];
-        return next;
+      if (!currentPlanningEpoch) return;
+      setLocalPlanningState((current) => {
+        const planning = planningStateForEpoch(
+          current,
+          currentPlanningEpoch,
+        );
+        if (planning.intents[unitId]) {
+          return current;
+        }
+        const drafts = { ...planning.drafts };
+        delete drafts[unitId];
+        return {
+          ...planning,
+          intents: { ...planning.intents, [unitId]: intent },
+          drafts,
+        };
       });
       setActionError(null);
     },
-    [],
+    [currentPlanningEpoch],
   );
 
   const chooseAbility = (ability: PlanningAbilityViewV1) => {
@@ -375,15 +465,25 @@ export default function LiveBattleMatchPage() {
       ability.targetScope === 'single' &&
       ability.legalTargetIds.length > 0;
     if (needsTarget) {
-      setCommandDrafts((current) => ({
-        ...current,
-        [activeUnit.unitId]: {
-          unitId: activeUnit.unitId,
-          intent,
-          choice: { ...ability, intentKind: 'ability' },
-          stage: 'select_target',
-        },
-      }));
+      setLocalPlanningState((current) => {
+        if (!currentPlanningEpoch) return current;
+        const planning = planningStateForEpoch(
+          current,
+          currentPlanningEpoch,
+        );
+        return {
+          ...planning,
+          drafts: {
+            ...planning.drafts,
+            [activeUnit.unitId]: {
+              unitId: activeUnit.unitId,
+              intent,
+              choice: { ...ability, intentKind: 'ability' },
+              stage: 'select_target',
+            },
+          },
+        };
+      });
     } else {
       lockUnitIntent(activeUnit.unitId, intent);
     }
@@ -418,24 +518,32 @@ export default function LiveBattleMatchPage() {
           legalTargetIds: activeUnit.basicAttack.legalTargetIds,
           intentKind: 'basic_attack',
         };
-    setCommandDrafts((current) => ({
-      ...current,
-      [activeUnit.unitId]: {
-        unitId: activeUnit.unitId,
-        intent: { kind: 'basic_attack' },
-        choice,
-        stage: 'select_target',
-      },
-    }));
+    setLocalPlanningState((current) => {
+      if (!currentPlanningEpoch) return current;
+      const planning = planningStateForEpoch(current, currentPlanningEpoch);
+      return {
+        ...planning,
+        drafts: {
+          ...planning.drafts,
+          [activeUnit.unitId]: {
+            unitId: activeUnit.unitId,
+            intent: { kind: 'basic_attack' },
+            choice,
+            stage: 'select_target',
+          },
+        },
+      };
+    });
     setActionError(null);
   };
 
   const clearActiveDraft = () => {
-    if (!resolvedActiveUnitId) return;
-    setCommandDrafts((current) => {
-      const next = { ...current };
-      delete next[resolvedActiveUnitId];
-      return next;
+    if (!resolvedActiveUnitId || !currentPlanningEpoch) return;
+    setLocalPlanningState((current) => {
+      if (current.epoch !== currentPlanningEpoch) return current;
+      const drafts = { ...current.drafts };
+      delete drafts[resolvedActiveUnitId];
+      return { ...current, drafts };
     });
     setActionError(null);
   };
@@ -452,6 +560,7 @@ export default function LiveBattleMatchPage() {
         ?.abilityName ??
       ownUnits.find((unit) => unit.unitId === unitId)?.basicAttack?.name ??
       '普通攻击';
+    if (intent.kind === 'skip') return '已跳过行动';
     const target = intent.targetUnitId
       ? unitName(view!, intent.targetUnitId)
       : '自动目标';
@@ -460,55 +569,17 @@ export default function LiveBattleMatchPage() {
 
   useEffect(() => {
     presentationDirectorRef.current?.cancel();
-    checkpointRevisionRef.current = null;
+    readyReportedResultRef.current = null;
+    presentationBoundarySyncAttemptRef.current = null;
     autoCommitAttemptRef.current = null;
     commitRequestRef.current = null;
     const clearTimer = window.setTimeout(() => {
       setCommitPending(false);
       setActionError(null);
-      setCommandDrafts({});
-      setPlannedIntents({});
       setDrawerOpen(false);
-      setDebugSequences([]);
-      setDebugActiveSequenceId(null);
-      setDebugResolvedFactCount(0);
     }, 0);
     return () => window.clearTimeout(clearTimer);
   }, [matchId]);
-
-  useEffect(() => {
-    if (!view) return;
-    if (checkpointRevisionRef.current === null) {
-      checkpointRevisionRef.current = view.checkpointRevision;
-      return;
-    }
-    if (checkpointRevisionRef.current === view.checkpointRevision) return;
-    checkpointRevisionRef.current = view.checkpointRevision;
-    autoCommitAttemptRef.current = null;
-    commitRequestRef.current = null;
-    const timer = window.setTimeout(() => {
-      setPlannedIntents({});
-      setCommandDrafts({});
-      setCommitPending(false);
-      setDrawerOpen(false);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [view?.checkpointRevision, view]);
-
-  useEffect(() => {
-    const resolution = view?.latestResolution;
-    if (!resolution) return;
-    const timer = window.setTimeout(() => {
-      setDebugSequences((current) => {
-        const existing = new Set(current.map((sequence) => sequence.id));
-        const additions = resolution.sequences.filter(
-          (sequence) => !existing.has(sequence.id),
-        );
-        return additions.length > 0 ? [...current, ...additions] : current;
-      });
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [view?.latestResolution]);
 
   const entityClickRef = useRef<(entityId: string) => void>(() => undefined);
   useEffect(() => {
@@ -612,6 +683,10 @@ export default function LiveBattleMatchPage() {
   }, [presentationActive, presentationSnapshot]);
 
   useEffect(() => {
+    phaserControllerRef.current?.focus(inspectedUnitId ?? undefined);
+  }, [inspectedUnitId, phaserReady, view?.revision]);
+
+  useEffect(() => {
     phaserControllerRef.current?.setCommandSelection({
       actorUnitId:
         isPlanning && !allLivingUnitsLocked
@@ -631,62 +706,117 @@ export default function LiveBattleMatchPage() {
     targetAbility,
   ]);
 
+  const playbackInputRef = useRef({
+    view,
+    viewReceivedAt,
+    presentationSnapshot,
+  });
   useEffect(() => {
-    if (!phaserReady || !view?.presentation || !presentationSnapshot) return;
+    playbackInputRef.current = { view, viewReceivedAt, presentationSnapshot };
+  }, [presentationSnapshot, view, viewReceivedAt]);
+
+  useEffect(() => {
+    const current = playbackInputRef.current;
+    const presentationView = current.view;
+    const presentation = presentationView?.presentationWindow;
+    if (
+      !phaserReady ||
+      !presentationKey ||
+      !presentationView ||
+      !presentation ||
+      !current.presentationSnapshot
+    )
+      return;
     const startSnapshot = createBattlePresentationSnapshotFromPublic(
-      view.presentation.startingPublicSnapshot,
-      view.teamId,
+      presentation.startingPublicSnapshot,
+      presentationView.teamId,
       {
-        cycle: view.presentation.plan.round,
+        cycle: presentation.plan.round,
         phase: '回合演算',
-        focusedEntityId: inspectedUnitId ?? undefined,
       },
     );
     presentationDirectorRef.current?.play({
-      window: view.presentation,
+      window: presentation,
       startingSnapshot: startSnapshot,
-      finalSnapshot: presentationSnapshot,
+      finalSnapshot: current.presentationSnapshot,
       serverNow:
-        view.serverNow +
-        (viewReceivedAt === null ? 0 : Date.now() - viewReceivedAt),
-      onBeatStart: (beat) => {
-        setDebugActiveSequenceId(
-          beat.sequenceIds[beat.sequenceIds.length - 1] ?? null,
+        presentationView.serverNow +
+        (current.viewReceivedAt === null
+          ? 0
+          : Date.now() - current.viewReceivedAt),
+      onComplete: () => {
+        if (
+          !actions ||
+          readyReportedResultRef.current === presentation.resultId
+        )
+          return;
+        readyReportedResultRef.current = presentation.resultId;
+        actions.presentationReady(
+          presentation.plan.round,
+          presentation.resultId,
         );
       },
-      onFactResolved: () => setDebugResolvedFactCount((current) => current + 1),
     });
     return () => presentationDirectorRef.current?.cancel();
+  }, [actions, phaserReady, presentationKey]);
+
+  useEffect(() => {
+    const presentation = view?.presentationWindow;
+    if (
+      connectionStatus !== 'connected' ||
+      view?.status !== 'presenting' ||
+      !presentation ||
+      !actions
+    ) {
+      return;
+    }
+    const estimatedServerNow =
+      view.serverNow +
+      (viewReceivedAt === null ? 0 : Date.now() - viewReceivedAt);
+    const eventSeq = view.clientEventSeq;
+    const resultId = presentation.resultId;
+    const boundarySyncKey = `${view.matchId}:${resultId}:${eventSeq}`;
+    const delay = Math.max(
+      0,
+      presentation.scheduledEndsAt - estimatedServerNow + 500,
+    );
+    const timer = window.setTimeout(() => {
+      const current = playbackInputRef.current.view;
+      if (
+        !current ||
+        current.matchId !== matchId ||
+        current.status !== 'presenting' ||
+        current.presentationWindow?.resultId !== resultId ||
+        current.clientEventSeq !== eventSeq ||
+        presentationBoundarySyncAttemptRef.current === boundarySyncKey
+      ) {
+        return;
+      }
+      presentationBoundarySyncAttemptRef.current = boundarySyncKey;
+      actions.syncLatest();
+    }, delay);
+    return () => window.clearTimeout(timer);
   }, [
-    inspectedUnitId,
-    phaserReady,
-    presentationSnapshot,
-    view?.presentation,
+    actions,
+    connectionStatus,
+    matchId,
+    presentationKey,
+    view?.clientEventSeq,
+    view?.matchId,
+    view?.presentationWindow,
     view?.serverNow,
-    view?.teamId,
+    view?.status,
     viewReceivedAt,
   ]);
 
   useEffect(() => {
     if (view?.status !== 'finished' || !matchId) return;
-    const currentServerNow =
-      view.serverNow +
-      (viewReceivedAt === null ? 0 : Date.now() - viewReceivedAt);
-    const presentationMs = view.presentation
-      ? Math.max(0, view.presentation.endsAt - currentServerNow) + 250
-      : 0;
     const timer = window.setTimeout(
       () => setRevealedResultMatchId(matchId),
-      presentationMs,
+      250,
     );
     return () => window.clearTimeout(timer);
-  }, [
-    matchId,
-    view?.presentation,
-    view?.serverNow,
-    view?.status,
-    viewReceivedAt,
-  ]);
+  }, [matchId, view?.status]);
 
   const commandDockStyle = {
     '--battle-command-safe': commandDockExpanded
@@ -733,16 +863,16 @@ export default function LiveBattleMatchPage() {
 
       <BattleRoundHud
         round={
-          presentationActive ? view?.presentation?.plan.round : view?.round
+          presentationActive
+            ? view?.presentationWindow?.plan.round
+            : view?.round
         }
         phase={roundPhase}
-        remainingSeconds={roundRemainingSeconds}
+        deadlineAt={view?.deadlineAt}
+        serverNow={view?.serverNow}
+        serverNowReceivedAt={viewReceivedAt}
       />
-      <BattleUtilityHud
-        connectionStatus={connectionStatus}
-        debugOpen={debugOpen}
-        onToggleDebug={() => setDebugOpen((current) => !current)}
-      />
+      <BattleUtilityHud connectionStatus={connectionStatus} />
 
       {statusNotice && (
         <BattleStatusNotice tone={statusNotice.tone}>
@@ -756,45 +886,6 @@ export default function LiveBattleMatchPage() {
           isAlly={inspectedUnit.teamId === view.teamId}
           onClose={() => setInspectedUnitId(null)}
         />
-      )}
-
-      {debugOpen && (
-        <aside
-          className="battle-debug-panel fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col p-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl backdrop-blur sm:w-[26rem]"
-          aria-label="Debug 战斗日志"
-        >
-          <div className="mb-2 flex items-start justify-between gap-3 border-b border-[#2c1810]/15 pb-3 text-[0.65rem] text-[#2c1810]/55">
-            <div>
-              <strong className="block text-xs tracking-[0.12em] text-[#2c1810]">
-                引擎事实 / 动画对照
-              </strong>
-              <span className="mt-1 block">对局 {matchId ?? '—'}</span>
-              <span className="mt-1 block">
-                指令集{' '}
-                {view?.presentation?.commandSetId ??
-                  view?.latestResolution?.commandSetId ??
-                  '—'}
-              </span>
-              <span className="block">
-                checkpoint {view?.checkpointRevision ?? '—'} · 已播放事实{' '}
-                {debugResolvedFactCount}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setDebugOpen(false)}
-              className="border-b border-dashed border-[#2c1810]/35"
-            >
-              关闭
-            </button>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col">
-            <CombatActionLogV3
-              sequences={debugSequences}
-              currentIndex={debugCurrentIndex}
-            />
-          </div>
-        </aside>
       )}
 
       {targetAbility && (
@@ -945,7 +1036,7 @@ export default function LiveBattleMatchPage() {
             {commandMode === 'locked' &&
               (commitPending
                 ? '全部单位已选定，正在一次性提交本方操作。'
-                : '全部单位已选定，等待服务端确认。')}
+                : '全部单位已选定，正在等待服务端确认。')}
             {commandMode === 'committed' &&
               (isResolving
                 ? '双方指令已封存，服务端正在统一结算。'
@@ -994,8 +1085,8 @@ export default function LiveBattleMatchPage() {
               战局已定
             </p>
             <h2 className="mt-2 text-xl font-semibold tracking-[0.14em]">
-              {view.latestResolution?.outcome.battleEnded &&
-              view.latestResolution.outcome.winnerTeamId === view.teamId
+              {view.latestResult?.outcome.battleEnded &&
+              view.latestResult.outcome.winnerTeamId === view.teamId
                 ? '此阵得胜'
                 : '此阵惜败'}
             </h2>

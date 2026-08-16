@@ -9,8 +9,6 @@ export const PRODUCE_PRICE_FACTOR_MIN = 0.8;
 export const PRODUCE_PRICE_FACTOR_MAX = 1.2;
 // 回收价封顶：低于普通市场安全价下限 0.95 经最强命格折扣 0.65 后的价格
 export const RECYCLE_PRICE_FACTOR_CAP = 0.6;
-export const PILL_RECYCLE_SCORE_FACTOR = 0.25;
-
 // 低品回收锚定系数（乘以 anchorPrice）
 export const LOW_TIER_ANCHOR_FACTOR: Record<'凡品' | '灵品' | '玄品', number> =
   {

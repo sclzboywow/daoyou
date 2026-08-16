@@ -218,6 +218,20 @@
       "when": 1786454400000,
       "tag": "0030_verdant_herb_garden",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786590366317,
+      "tag": "0031_motionless_marvex",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786608971546,
+      "tag": "0032_smart_harpoon",
+      "breakpoints": true
     }
   ]
 }

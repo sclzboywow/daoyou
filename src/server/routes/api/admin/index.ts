@@ -12,6 +12,7 @@ import feedbackRouter from '@server/routes/api/admin/feedback.router';
 import itemLibraryRouter from '@server/routes/api/admin/item-library.router';
 import jobsRouter from '@server/routes/api/admin/jobs.router';
 import llmMetricsRouter from '@server/routes/api/admin/llm-metrics.router';
+import onlineBattlesRouter from '@server/routes/api/admin/online-battles.router';
 import onlineUsersRouter from '@server/routes/api/admin/online-users.router';
 import operationsRouter from '@server/routes/api/admin/operations.router';
 import playersRouter from '@server/routes/api/admin/players.router';
@@ -54,6 +55,7 @@ router.route('/llm-metrics', llmMetricsRouter);
 router.route('/online-users', onlineUsersRouter);
 router.route('/operations', operationsRouter);
 router.route('/players', playersRouter);
+router.route('/online-battles', onlineBattlesRouter);
 router.route('/tower-enemy-sets', towerEnemySetsRouter);
 router.route('/battle-simulator', battleSimulatorRouter);
 

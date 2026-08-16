@@ -1,5 +1,5 @@
 import type { BattlePublicUnitStateV1 } from '@shared/engine/battle-v5/match/BattlePublicSnapshot';
-import type { CSSProperties, ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
 export type RealtimeBattleConnectionStatus =
@@ -17,7 +17,9 @@ export type RealtimeBattleRoundPhase =
 interface BattleRoundHudProps {
   round?: number;
   phase: RealtimeBattleRoundPhase;
-  remainingSeconds?: number;
+  deadlineAt?: number;
+  serverNow?: number;
+  serverNowReceivedAt?: number | null;
 }
 
 const ROUND_SECONDS = 30;
@@ -53,8 +55,27 @@ function phaseMark(phase: RealtimeBattleRoundPhase, remaining?: number) {
 export function BattleRoundHud({
   round,
   phase,
-  remainingSeconds,
+  deadlineAt,
+  serverNow,
+  serverNowReceivedAt,
 }: BattleRoundHudProps) {
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (phase !== 'planning' || deadlineAt === undefined) return;
+    const initialTimer = window.setTimeout(() => setClockNow(Date.now()), 0);
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1_000);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+    };
+  }, [deadlineAt, phase]);
+  const estimatedServerNow =
+    serverNow !== undefined && serverNowReceivedAt != null
+      ? serverNow + (clockNow - serverNowReceivedAt)
+      : clockNow;
+  const remainingSeconds = deadlineAt === undefined
+    ? undefined
+    : Math.max(0, Math.ceil((deadlineAt - estimatedServerNow) / 1_000));
   const remaining = Math.max(0, remainingSeconds ?? ROUND_SECONDS);
   const progress = phase === 'planning' ? remaining / ROUND_SECONDS : 1;
   const urgency =
@@ -103,14 +124,10 @@ export function BattleRoundHud({
 
 interface BattleUtilityHudProps {
   connectionStatus: RealtimeBattleConnectionStatus;
-  debugOpen: boolean;
-  onToggleDebug: () => void;
 }
 
 export function BattleUtilityHud({
   connectionStatus,
-  debugOpen,
-  onToggleDebug,
 }: BattleUtilityHudProps) {
   const connectionLabel =
     connectionStatus === 'connected'
@@ -131,13 +148,6 @@ export function BattleUtilityHud({
       </div>
 
       <div className="absolute top-[calc(env(safe-area-inset-top)+0.85rem)] right-[calc(env(safe-area-inset-right)+0.85rem)] z-30 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onToggleDebug}
-          className="battle-utility-chip inline-flex min-h-10 items-center rounded-full px-3 text-xs shadow-sm backdrop-blur-md transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#efbf04]"
-        >
-          {debugOpen ? '收起日志' : '战斗日志'}
-        </button>
         <span
           className="battle-utility-chip grid size-10 place-items-center rounded-full shadow-sm backdrop-blur-md"
           title={connectionLabel}

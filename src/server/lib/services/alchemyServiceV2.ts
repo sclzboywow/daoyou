@@ -3,51 +3,54 @@ import {
   type DbExecutor,
   type DbTransaction,
 } from '@server/lib/drizzle/db';
+import { cultivators, materials } from '@server/lib/drizzle/schema';
 import {
-  cultivators,
-  materials,
-} from '@server/lib/drizzle/schema';
-import {
-  buildAlchemyBatchPreview,
-  buildAlchemyPreviewWarnings,
   buildAlchemyPropertyTags,
   describeAlchemyPropertyVector,
   getQuotaCategoryForFamily,
-  type PreparedAlchemyMaterial,
   synthesizeAlchemyFromPlan,
+  type PreparedAlchemyMaterial,
 } from '@server/lib/services/AlchemyRecipeRules';
-import { calculateSingleElixirScore } from '@server/utils/rankingUtils';
+import {
+  addConsumableToInventoryInTransaction,
+  mapMaterialRow,
+} from '@server/lib/services/cultivator/CultivatorInventoryRepository';
+import { getCultivatorPreHeavenFates } from '@server/lib/services/cultivator/CultivatorProfileRepository';
 import { ELEMENT_PREFIX_MAP } from '@shared/config/alchemyConfig';
 import {
   calculateCraftCost,
   calculateHighestMaterialRank,
 } from '@shared/engine/creation-v2/CraftCostCalculator';
+import type { ResourceOperationSettlement } from '@shared/engine/resource/types';
+import { normalizeAlchemyEffectRoute } from '@shared/lib/alchemyEffectResolver';
+import { isAlchemyMaterialType } from '@shared/lib/alchemyMaterials';
+import {
+  calculateAlchemyQiCost,
+  rollAlchemyYieldProfile,
+  toAlchemyYieldDisplayProfile,
+} from '@shared/lib/alchemyYield';
 import {
   getBreakthroughPillLabel,
   getNextMajorRealm,
-  hasBreakthroughFocusEffect,
 } from '@shared/lib/breakthroughPill';
 import {
   evaluateFateContext,
   getAlchemySpiritStoneMultiplier,
-  scaleFateAdjustedValue,
+  scaleFateAdjustedCost,
 } from '@shared/lib/fates';
-import { isAlchemyMaterialType } from '@shared/lib/alchemyMaterials';
 import type {
   ElementType,
   MaterialType,
   Quality,
-  RealmStage,
   RealmType,
 } from '@shared/types/constants';
-import type {
-  AlchemyBatchPreview,
-  AlchemyRecipePlan,
-  PillSpec,
-} from '@shared/types/consumable';
+import type { AlchemyRecipePlan, PillSpec } from '@shared/types/consumable';
 import type { Consumable, PreHeavenFate } from '@shared/types/cultivator';
-import type { ResourceOperationSettlement } from '@shared/engine/resource/types';
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import {
+  assembleAlchemyOutputConsumables,
+  type AlchemyOutputDraft,
+} from './alchemy/AlchemyOutputAssembler';
 import { buildDiscoveryCandidate } from './AlchemyFormulaService';
 import { AlchemyNarrativeEnricher } from './AlchemyNarrativeEnricher';
 import {
@@ -55,13 +58,6 @@ import {
   type AlchemyRecipePlanner,
 } from './AlchemyRecipePlanner';
 import { AlchemyServiceError } from './AlchemyServiceError';
-import {
-  addConsumableToInventoryInTransaction,
-  mapMaterialRow,
-} from '@server/lib/services/cultivator/CultivatorInventoryRepository';
-import {
-  getCultivatorPreHeavenFates,
-} from '@server/lib/services/cultivator/CultivatorProfileRepository';
 import { getMysteryMaterialBlockingReason } from './materialMysteryGuard';
 import { sectOrganizationFacade } from './sect-organization';
 
@@ -79,18 +75,23 @@ export interface AlchemySelectionValidation {
 export interface AlchemyPreviewResult {
   cost: {
     spiritStones: number;
+    qi: number;
   };
   canAfford: boolean;
   validation: AlchemySelectionValidation;
-  batchPreview: AlchemyBatchPreview;
 }
 
 export interface ImprovisedAlchemyCraftResult {
   consumable: Consumable;
+  consumables?: Consumable[];
+  /** 本炉新增数量，不能使用合堆后的库存行作为结果展示数据。 */
+  craftedConsumables?: Consumable[];
+  yieldProfile?: import('@shared/types/consumable').AlchemyYieldDisplayProfile;
   formulaDiscovery?: Awaited<ReturnType<typeof buildDiscoveryCandidate>>;
 }
 
 export interface PreparedImprovisedAlchemyCraft {
+  qiCost: number;
   commit(tx: DbTransaction): Promise<{
     result: ImprovisedAlchemyCraftResult;
     inventoryChanges: ResourceOperationSettlement['inventoryChanges'];
@@ -202,7 +203,6 @@ function buildPreparedMaterials(
 
 function buildSelectionValidation(
   materialRows: MaterialRow[],
-  materialQuantities?: Record<string, number>,
 ): AlchemySelectionValidation {
   for (const material of materialRows) {
     const error = validateMaterialRow(material);
@@ -210,16 +210,7 @@ function buildSelectionValidation(
       return createValidation(false, error);
     }
   }
-
-  const preparedMaterials = buildPreparedMaterials(
-    materialRows,
-    materialQuantities,
-  );
-  return createValidation(
-    true,
-    undefined,
-    buildAlchemyPreviewWarnings(preparedMaterials),
-  );
+  return createValidation(true);
 }
 
 function buildFallbackName(
@@ -247,30 +238,34 @@ function buildFallbackDescription(
 function buildAlchemySpec(
   synthesis: ReturnType<typeof synthesizeAlchemyFromPlan>,
   materialNames: string[],
-): PillSpec {
+  route: import('@shared/types/consumable').AlchemyEffectRoute,
+): Omit<PillSpec, 'operations'> {
   return {
     kind: 'pill',
     family: synthesis.family,
-    operations: synthesis.operations,
     consumeRules: {
       scene: 'out_of_battle_only',
       quotaCategory: getQuotaCategoryForFamily(synthesis.family),
     },
     alchemyMeta: {
       source: 'improvised',
+      version: 4,
       sourceMaterials: materialNames,
       analysisVersion: 2,
-      propertyVector: synthesis.propertyVector,
+      propertyVector: route.effects,
       sourceMaterialVectors: synthesis.sourceMaterialVectors,
       dominantElement: synthesis.dominantElement,
       stability: synthesis.stability,
       toxicityRating: synthesis.toxicityRating,
-      appearance: synthesis.appearance,
-      tags: buildAlchemyPropertyTags(
-        synthesis.propertyVector,
-        synthesis.family,
-      ),
-      batch: synthesis.batchProfile,
+      // 批次生成前的中性占位；最终品相由产出引擎逐枚生成并覆盖。
+      appearance: 'middle',
+      tags: buildAlchemyPropertyTags(route.effects, synthesis.family),
+      batch: (() => {
+        const persisted = { ...synthesis.batchProfile };
+        delete persisted.essenceSummary;
+        delete persisted.yieldProfile;
+        return persisted;
+      })(),
     },
   };
 }
@@ -310,10 +305,7 @@ async function loadOwnedMaterials(
   q: DbExecutor | DbTransaction = getExecutor(),
 ): Promise<MaterialRow[]> {
   const rows = sortRowsByRequestedIds(
-    await q
-      .select()
-      .from(materials)
-      .where(inArray(materials.id, materialIds)),
+    await q.select().from(materials).where(inArray(materials.id, materialIds)),
     materialIds,
   );
 
@@ -348,17 +340,16 @@ export async function previewAlchemySelection(
 
   if (blockingReason) {
     return {
-      cost: { spiritStones: 0 },
+      cost: { spiritStones: 0, qi: 1 },
       canAfford: true,
       validation: createValidation(false, blockingReason),
-      batchPreview: buildAlchemyBatchPreview([]),
     };
   }
 
   const highestMaterialRank = pickHighestRank(rows);
   const fateContext = evaluateFateContext(fates);
   const baseSpiritStones = highestMaterialRank
-    ? scaleFateAdjustedValue(
+    ? scaleFateAdjustedCost(
         calculateCraftCost(highestMaterialRank, 'spiritStone'),
         getAlchemySpiritStoneMultiplier(fateContext),
       )
@@ -369,15 +360,17 @@ export async function previewAlchemySelection(
     'sect.craft.alchemy',
   );
 
-  const validation = buildSelectionValidation(rows, materialQuantities);
+  const validation = buildSelectionValidation(rows);
   const preparedMaterials = validation.valid
     ? buildPreparedMaterials(rows, materialQuantities)
     : [];
   return {
-    cost: { spiritStones },
+    cost: {
+      spiritStones,
+      qi: calculateAlchemyQiCost(preparedMaterials),
+    },
     canAfford: availableSpiritStones >= spiritStones,
     validation,
-    batchPreview: buildAlchemyBatchPreview(preparedMaterials),
   };
 }
 
@@ -399,9 +392,7 @@ export function createAlchemyService(
         .select({
           userId: cultivators.userId,
           spirit_stones: cultivators.spirit_stones,
-          cultivation_progress: cultivators.cultivation_progress,
           realm: cultivators.realm,
-          realm_stage: cultivators.realm_stage,
         })
         .from(cultivators)
         .where(eq(cultivators.id, cultivatorId))
@@ -422,10 +413,8 @@ export function createAlchemyService(
     const highestMaterialRank = calculateHighestMaterialRank(
       selectedMaterials as Array<{ rank: Quality }>,
     );
-    const fateContext = evaluateFateContext(
-      preHeavenFates,
-    );
-    const baseCost = scaleFateAdjustedValue(
+    const fateContext = evaluateFateContext(preHeavenFates);
+    const baseCost = scaleFateAdjustedCost(
       calculateCraftCost(highestMaterialRank, 'spiritStone'),
       getAlchemySpiritStoneMultiplier(fateContext),
     );
@@ -444,6 +433,7 @@ export function createAlchemyService(
       selectedMaterials,
       options.materialQuantities,
     );
+    const qiCost = calculateAlchemyQiCost(preparedMaterials);
 
     let recipePlan: AlchemyRecipePlan;
     try {
@@ -455,43 +445,31 @@ export function createAlchemyService(
       throw new AlchemyServiceError('丹意未明，请稍后重试。', 503);
     }
 
-    const cultivationProgress = cultivator.cultivation_progress as
-      | { exp_cap?: number }
-      | null
-      | undefined;
-    const synthesis = synthesizeAlchemyFromPlan(
-      preparedMaterials,
-      recipePlan,
-      highestMaterialRank,
-      {
-        realm: cultivator.realm as RealmType,
-        realmStage: cultivator.realm_stage as RealmStage,
-        expCap: cultivationProgress?.exp_cap,
-      },
-    );
+    const synthesis = synthesizeAlchemyFromPlan(preparedMaterials, recipePlan);
     const breakthroughTargetRealm =
       synthesis.family === 'breakthrough'
         ? getNextMajorRealm(cultivator.realm as RealmType)
         : null;
+    const route = normalizeAlchemyEffectRoute({
+      effects: synthesis.propertyVector,
+    });
     const spec = buildAlchemySpec(
       synthesis,
       preparedMaterials.map((material) => material.name),
+      route,
     );
 
     const usesFixedBreakthroughName =
       synthesis.family === 'breakthrough' &&
       breakthroughTargetRealm !== null &&
-      hasBreakthroughFocusEffect(spec.operations);
+      route.effects.some((effect) => effect.key === 'breakthrough_support');
 
     if (usesFixedBreakthroughName) {
       spec.alchemyMeta.breakthroughTargetRealm = breakthroughTargetRealm;
       spec.alchemyMeta.breakthroughLabel = getBreakthroughPillLabel(
         breakthroughTargetRealm,
       );
-    } else if (
-      synthesis.family === 'breakthrough' &&
-      breakthroughTargetRealm
-    ) {
+    } else if (synthesis.family === 'breakthrough' && breakthroughTargetRealm) {
       spec.alchemyMeta.breakthroughTargetRealm = breakthroughTargetRealm;
     }
     const generatedCopy =
@@ -500,8 +478,7 @@ export function createAlchemyService(
         dominantElement: synthesis.dominantElement,
         quality: highestMaterialRank,
         materialNames: preparedMaterials.map((material) => material.name),
-        propertyVector: synthesis.propertyVector,
-        operations: spec.operations,
+        propertyVector: route.effects,
         stability: synthesis.stability,
         toxicityRating: synthesis.toxicityRating,
         userPrompt: prompt,
@@ -514,27 +491,26 @@ export function createAlchemyService(
           preparedMaterials.map((material) => material.name),
           synthesis.dominantElement,
         ));
-    const consumable: Consumable = {
+    const draft: AlchemyOutputDraft = {
       name: resolvedName,
       type: '丹药',
-      quality: highestMaterialRank,
-      quantity: synthesis.batchProfile.yieldQuantity,
       prompt,
       description:
         generatedCopy?.description ??
         buildFallbackDescription(
           preparedMaterials.map((material) => material.name),
           prompt,
-          describeAlchemyPropertyVector(synthesis.propertyVector),
+          describeAlchemyPropertyVector(route.effects),
           synthesis.stability,
           synthesis.toxicityRating,
           synthesis.focusMode,
         ),
       spec,
+      route,
+      fitMultiplier: 1,
     };
-    consumable.score = calculateSingleElixirScore(consumable);
-
     return {
+      qiCost,
       async commit(tx: DbTransaction) {
         const inventoryChanges: ResourceOperationSettlement['inventoryChanges'] =
           [];
@@ -566,6 +542,26 @@ export function createAlchemyService(
             );
           }
         }
+
+        // The final distribution is deliberately rolled inside the transaction.
+        // Preview/prepare may be retried, but only a confirmed command consumes RNG.
+        const yieldProfile = rollAlchemyYieldProfile({
+          materials: preparedMaterials,
+          factors: {
+            synergyScore: synthesis.batchProfile.synergyScore,
+            conflictScore: synthesis.batchProfile.conflictScore,
+            stability: synthesis.stability,
+            purity: synthesis.batchProfile.essenceSummary?.purity,
+          },
+        });
+        const outputConsumables = assembleAlchemyOutputConsumables(
+          draft,
+          yieldProfile,
+        );
+        if (outputConsumables.length === 0) {
+          throw new AlchemyServiceError('本炉药蕴不足，无法凝成丹药。', 400);
+        }
+        const primaryConsumable = outputConsumables[0]!;
 
         for (const id of stableMaterialIds) {
           const prepared = preparedMaterials.find((item) => item.id === id);
@@ -641,20 +637,26 @@ export function createAlchemyService(
           throw new AlchemyServiceError(`灵石不足，需要 ${cost} 枚`, 409);
         }
 
-        const savedConsumable =
-          await addConsumableToInventoryInTransaction(
-          cultivatorId,
-          consumable,
-          tx,
-        );
+        const savedConsumables: Consumable[] = [];
+        for (const output of outputConsumables) {
+          const saved = await addConsumableToInventoryInTransaction(
+            cultivatorId,
+            output,
+            tx,
+          );
+          savedConsumables.push(saved);
+          inventoryChanges.push({
+            kind: 'consumables',
+            operation: 'upsert',
+            item: saved,
+          });
+        }
         const result: ImprovisedAlchemyCraftResult = {
-          consumable: savedConsumable,
+          consumable: primaryConsumable,
+          consumables: savedConsumables,
+          craftedConsumables: outputConsumables,
+          yieldProfile: toAlchemyYieldDisplayProfile(yieldProfile),
         };
-        inventoryChanges.push({
-          kind: 'consumables',
-          operation: 'upsert',
-          item: savedConsumable,
-        });
         return {
           result,
           inventoryChanges,
@@ -662,7 +664,9 @@ export function createAlchemyService(
             const formulaDiscovery = await buildDiscoveryCandidate(
               cultivatorId,
               {
-                consumable: savedConsumable as Consumable & { spec: PillSpec },
+                consumable: primaryConsumable as Consumable & {
+                  spec: PillSpec;
+                },
                 materials: preparedMaterials,
               },
             );

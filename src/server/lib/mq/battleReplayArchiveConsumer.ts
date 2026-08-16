@@ -1,22 +1,23 @@
 import { getJetStreamClient } from '@server/lib/nats';
 import { archiveBattleReplay } from '@server/lib/repositories/battleReplayArchiveRepository';
-import { ArenaRoomService } from '@server/lib/services/ArenaRoomService';
-import { publishArenaRoomChanges } from '@server/lib/services/arenaRoomBroadcaster';
+import {
+  clearBattleReplayArchiveTracking,
+  getBattleReplayArchivePointer,
+  markBattleReplayArchived,
+} from '@server/lib/services/BattleReplayRedisStore';
+import { OnlineBattleStore } from '@server/lib/services/OnlineBattleStore';
 import {
   BATTLE_REPLAY_STREAM,
   BATTLE_REPLAY_SUBJECT,
-  parseBattleReplayArchiveMessage,
-  type BattleReplayArchiveMessageV1,
+  parseBattleReplayArchiveJob,
+  type BattleReplayArchiveJobV3,
 } from '@shared/contracts/battleReplay';
-import { JSONCodec, type ConsumerMessages, type JsMsg } from 'nats';
+import { type ConsumerMessages, type JsMsg } from 'nats';
 import {
   BATTLE_REPLAY_ARCHIVE_CONSUMER,
-  BATTLE_REPLAY_DEAD_LETTER_STREAM,
-  BATTLE_REPLAY_DEAD_LETTER_SUBJECT,
   consumerRetryDelayMs,
 } from './natsTopology';
 
-const codec = JSONCodec();
 let messages: ConsumerMessages | undefined;
 let consumerTask: Promise<void> | undefined;
 let stopping = false;
@@ -25,69 +26,74 @@ const activeHandlers = new Set<Promise<void>>();
 let cancelRestartWait: (() => void) | undefined;
 
 const RESTART_DELAYS_MS = [1_000, 5_000, 15_000, 60_000] as const;
-const arenaRooms = new ArenaRoomService();
-
-async function deadLetterInvalidMessage(message: JsMsg, error: unknown): Promise<void> {
-  const jetStream = await getJetStreamClient();
-  await jetStream.publish(
-    BATTLE_REPLAY_DEAD_LETTER_SUBJECT,
-    codec.encode({
-      consumerName: BATTLE_REPLAY_ARCHIVE_CONSUMER.name,
-      originalSubject: message.subject,
-      streamSequence: message.info.streamSequence,
-      failedAt: new Date().toISOString(),
-      error: (error instanceof Error ? error.message : String(error)).slice(0, 2_000),
-      payloadPrefix: message.string().slice(0, 512 * 1_024),
-    }),
-    {
-      msgID: `invalid:${message.info.streamSequence}`,
-      expect: { streamName: BATTLE_REPLAY_DEAD_LETTER_STREAM },
-      timeout: 5_000,
-    },
-  );
-}
+const store = new OnlineBattleStore();
 
 async function processMessage(message: JsMsg): Promise<void> {
-  let archiveMessage: BattleReplayArchiveMessageV1;
+  let archiveJob: BattleReplayArchiveJobV3;
   try {
     if (message.subject !== BATTLE_REPLAY_SUBJECT) {
       throw new Error(`Unexpected battle replay subject: ${message.subject}`);
     }
-    archiveMessage = parseBattleReplayArchiveMessage(message.json());
+    archiveJob = parseBattleReplayArchiveJob(message.json());
   } catch (error) {
-    try {
-      await deadLetterInvalidMessage(message, error);
-      message.term();
-    } catch (deadLetterError) {
-      console.error('[battle-replay-archiver] invalid message dead-letter failed', {
-        streamSequence: message.info.streamSequence,
-        deadLetterError,
-      });
-      message.nak(60_000);
-    }
+    console.warn('[battle-replay-archiver] discarded invalid archive job', {
+      streamSequence: message.info.streamSequence,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    message.term();
     return;
   }
   try {
-    await archiveBattleReplay(archiveMessage.replay);
-    const arenaRoom = await arenaRooms.finishByBattleMatch(archiveMessage.replay.matchId);
-    if (arenaRoom) {
-      publishArenaRoomChanges(
-        arenaRoom.teams.alpha.concat(arenaRoom.teams.beta).map((seat) => seat.userId),
+    const pointer = await getBattleReplayArchivePointer(archiveJob.matchId);
+    if (
+      !pointer ||
+      pointer.archiveStatus === 'archived' ||
+      pointer.expectedStorageRevision !== archiveJob.expectedStorageRevision
+    ) {
+      const acknowledged = await message.ackAck({ timeout: 5_000 });
+      if (!acknowledged)
+        throw new Error('Stale replay archive ACK was not confirmed');
+      return;
+    }
+    const replay = await store.buildReplayArchive(
+      archiveJob.matchId,
+      archiveJob.expectedStorageRevision,
+    );
+    if (!replay) {
+      console.error(
+        '[battle-replay-archiver] discarded unrecoverable replay source',
+        { matchId: archiveJob.matchId },
+      );
+      await clearBattleReplayArchiveTracking(archiveJob.matchId);
+      await store.retire(archiveJob.matchId);
+      message.term();
+      return;
+    }
+    await archiveBattleReplay(replay);
+    const confirmed = await markBattleReplayArchived(
+      replay.matchId,
+      archiveJob.expectedStorageRevision,
+    );
+    if (!confirmed) {
+      console.warn(
+        '[battle-replay-archiver] Redis archive confirmation was unavailable',
         {
-          roomId: arenaRoom.roomId,
-          revision: arenaRoom.revision + 1,
-          status: arenaRoom.status,
+          matchId: replay.matchId,
         },
       );
     }
     const acknowledged = await message.ackAck({ timeout: 5_000 });
-    if (!acknowledged) throw new Error('Battle replay JetStream ACK was not confirmed');
+    if (!acknowledged)
+      throw new Error('Battle replay JetStream ACK was not confirmed');
   } catch (error) {
-    console.error('[battle-replay-archiver] PostgreSQL archive failed; retrying', {
-      streamSequence: message.info.streamSequence,
-      deliveryCount: message.info.deliveryCount,
-      error,
-    });
+    console.error(
+      '[battle-replay-archiver] PostgreSQL archive failed; retrying',
+      {
+        streamSequence: message.info.streamSequence,
+        deliveryCount: message.info.deliveryCount,
+        error,
+      },
+    );
     message.nak(consumerRetryDelayMs(message.info.deliveryCount));
   }
 }
@@ -134,7 +140,10 @@ export async function startBattleReplayArchiveConsumer(): Promise<void> {
             await Promise.race(handlers);
           }
         }
-        if (!stopping) throw new Error('Battle replay archive consumer stopped unexpectedly');
+        if (!stopping)
+          throw new Error(
+            'Battle replay archive consumer stopped unexpectedly',
+          );
       } catch (error) {
         healthy = false;
         if (!started) {
@@ -143,9 +152,15 @@ export async function startBattleReplayArchiveConsumer(): Promise<void> {
           return;
         }
         if (!stopping) {
-          const delayMs = RESTART_DELAYS_MS[Math.min(restartAttempt, RESTART_DELAYS_MS.length - 1)]!;
+          const delayMs =
+            RESTART_DELAYS_MS[
+              Math.min(restartAttempt, RESTART_DELAYS_MS.length - 1)
+            ]!;
           restartAttempt += 1;
-          console.error('[battle-replay-archiver] consumer stopped; restarting', { delayMs, error });
+          console.error(
+            '[battle-replay-archiver] consumer stopped; restarting',
+            { delayMs, error },
+          );
           await new Promise<void>((resolve) => {
             const timer = setTimeout(() => {
               cancelRestartWait = undefined;
