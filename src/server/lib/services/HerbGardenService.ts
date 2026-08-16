@@ -1024,7 +1024,8 @@ export async function observeHerbGardenPlot(
     const stage = plot.stage as ActiveHerbGardenStage;
     const history = (plot.stageHistory as StoredJournalEntry[] | null) ?? [];
     const stageObservations = history.filter(
-      (entry) => isObservationRecord(entry) && entry.stage === stage,
+      (entry): entry is HerbGardenObservationRecord =>
+        isObservationRecord(entry) && entry.stage === stage,
     );
     if (stageObservations.some((entry) => entry.observation === observation))
       throw new HerbGardenError('本阶段已经辨察过这一项，请换个方向', 409);
