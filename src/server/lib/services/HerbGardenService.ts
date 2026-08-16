@@ -1023,10 +1023,12 @@ export async function observeHerbGardenPlot(
       throw new HerbGardenError('灵植已经成熟，可直接收获', 409);
     const stage = plot.stage as ActiveHerbGardenStage;
     const history = (plot.stageHistory as StoredJournalEntry[] | null) ?? [];
-    const used = history.filter(
+    const stageObservations = history.filter(
       (entry) => isObservationRecord(entry) && entry.stage === stage,
-    ).length;
-    if (used >= HERB_GARDEN_MAX_OBSERVATIONS_PER_STAGE)
+    );
+    if (stageObservations.some((entry) => entry.observation === observation))
+      throw new HerbGardenError('本阶段已经辨察过这一项，请换个方向', 409);
+    if (stageObservations.length >= HERB_GARDEN_MAX_OBSERVATIONS_PER_STAGE)
       throw new HerbGardenError('本阶段的辨察次数已用尽', 409);
     const snapshot = plot.seedSnapshot as SeedSnapshot;
     const safeFact = observationSafeFact(seedSpec(snapshot), observation);

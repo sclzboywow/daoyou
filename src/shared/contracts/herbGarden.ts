@@ -12,7 +12,7 @@ import type { ConditionOperation, PillFamily } from '@shared/types/consumable';
 export const HERB_GARDEN_PLOT_COUNT = 6;
 export const HERB_GARDEN_MAX_HELPERS = 3;
 export const HERB_GARDEN_MAX_STEAL_RATIO = 0.2;
-export const HERB_GARDEN_MAX_OBSERVATIONS_PER_STAGE = 2;
+export const HERB_GARDEN_MAX_OBSERVATIONS_PER_STAGE = 3;
 export const HERB_GARDEN_MAX_QUESTIONS_PER_STAGE = 2;
 export const SPIRIT_SEED_SPEC_KEY = 'seedSpec';
 export const HIDDEN_SPIRIT_SEED_KEY = '__serverHiddenSpiritSeed';

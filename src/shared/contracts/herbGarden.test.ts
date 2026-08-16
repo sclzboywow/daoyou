@@ -2,6 +2,7 @@ import { QI_ACTION_COSTS } from '@shared/config/qiSystem';
 import {
   CULTIVATION_METHODS,
   FORMATION_METHODS,
+  HERB_GARDEN_MAX_OBSERVATIONS_PER_STAGE,
   canCultivateSeedQuality,
   createSpiritSeedDetails,
   getHerbGardenMaxSeedQuality,
@@ -38,6 +39,10 @@ describe('spirit herb garden domain', () => {
     expect(
       CULTIVATION_METHODS.every((method) => method.stages.length > 0),
     ).toBe(true);
+  });
+
+  it('keeps three observation choices so one clue direction stays unknown', () => {
+    expect(HERB_GARDEN_MAX_OBSERVATIONS_PER_STAGE).toBe(3);
   });
 
   it('keeps qi acceleration aligned with the unified qi ledger cost', () => {
