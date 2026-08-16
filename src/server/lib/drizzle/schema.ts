@@ -1424,6 +1424,92 @@ export const towerEnemyFloors = pgTable(
   ],
 );
 
+// ===== 宗门灵田：六畦三阶段培育 =====
+export const herbGardenProfiles = pgTable('wanjiedaoyou_herb_garden_profiles', {
+  cultivatorId: uuid('cultivator_id')
+    .primaryKey()
+    .references(() => cultivators.id, { onDelete: 'cascade' }),
+  totalHarvests: integer('total_harvests').notNull().default(0),
+  totalVisits: integer('total_visits').notNull().default(0),
+  initializedAt: timestamp('initialized_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at')
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const herbGardenPlots = pgTable(
+  'wanjiedaoyou_herb_garden_plots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    cultivatorId: uuid('cultivator_id')
+      .notNull()
+      .references(() => cultivators.id, { onDelete: 'cascade' }),
+    slot: integer('slot').notNull(),
+    stage: varchar('stage', { length: 20 }).notNull().default('germination'),
+    seedName: varchar('seed_name', { length: 100 }).notNull(),
+    seedRank: varchar('seed_rank', { length: 20 }).notNull(),
+    seedElement: varchar('seed_element', { length: 20 }),
+    seedSnapshot: jsonb('seed_snapshot').notNull(),
+    stageHistory: jsonb('stage_history').notNull().default([]),
+    currentScore: integer('current_score').notNull().default(0),
+    plantedAt: timestamp('planted_at').notNull().defaultNow(),
+    readyAt: timestamp('ready_at').notNull(),
+    remainingYield: integer('remaining_yield').notNull().default(0),
+    stealLimit: integer('steal_limit').notNull().default(0),
+    stolenCount: integer('stolen_count').notNull().default(0),
+    outcomeSnapshot: jsonb('outcome_snapshot'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex('herb_garden_plots_owner_slot_uidx').on(
+      table.cultivatorId,
+      table.slot,
+    ),
+    index('herb_garden_plots_owner_ready_idx').on(
+      table.cultivatorId,
+      table.readyAt,
+    ),
+  ],
+);
+
+export const herbGardenInteractions = pgTable(
+  'wanjiedaoyou_herb_garden_interactions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    plotId: uuid('plot_id'),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => cultivators.id, { onDelete: 'cascade' }),
+    actorId: uuid('actor_id')
+      .notNull()
+      .references(() => cultivators.id, { onDelete: 'cascade' }),
+    action: varchar('action', { length: 20 }).notNull(),
+    plantName: varchar('plant_name', { length: 100 }).notNull(),
+    payload: jsonb('payload').notNull().default({}),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('herb_garden_interactions_plot_actor_action_uidx')
+      .on(table.plotId, table.actorId, table.action)
+      .where(
+        sql`${table.plotId} is not null and ${table.action} in ('help', 'steal')`,
+      ),
+    index('herb_garden_interactions_owner_created_idx').on(
+      table.ownerId,
+      table.createdAt,
+    ),
+    index('herb_garden_interactions_actor_created_idx').on(
+      table.actorId,
+      table.createdAt,
+    ),
+  ],
+);
+
 // 拍卖行表
 export const auctionListings = pgTable(
   'wanjiedaoyou_auction_listings',

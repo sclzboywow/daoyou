@@ -25,10 +25,6 @@ import {
   getPositiveFateEffects,
   isHighQualityFate,
 } from './FateFragmentRegistry';
-import {
-  getHerbFateName,
-  getHerbPositiveFateEffects,
-} from './HerbFateEffects';
 
 interface FateGenerationOptions {
   candidateCount?: number;
@@ -96,10 +92,7 @@ function composeCandidate(
   dualSidedUsed: boolean,
   usedHashes: Set<string>,
 ): PreHeavenFate | null {
-  const positivePool = [
-    ...getPositiveFateEffects(),
-    ...getHerbPositiveFateEffects(),
-  ];
+  const positivePool = getPositiveFateEffects();
 
   for (let attempt = 0; attempt < 32; attempt += 1) {
     const positive = randomPickOne(positivePool, rng);
@@ -107,15 +100,10 @@ function composeCandidate(
       return null;
     }
 
-    const wantsDualSided = shouldGenerateDualSided(
-      quality,
-      dualSidedUsed,
-      rng,
-    );
+    const wantsDualSided = shouldGenerateDualSided(quality, dualSidedUsed, rng);
     const negativePool = wantsDualSided
-      ? getNegativeFateEffects().filter(
-          (effect) => effect.family !== positive.family,
-        )
+      ? getNegativeFateEffects()
+          .filter((effect) => effect.family !== positive.family)
       : [];
     const negative = wantsDualSided ? randomPickOne(negativePool, rng) : null;
     const category: FateGenerationCategory =
@@ -123,11 +111,7 @@ function composeCandidate(
     const effectIds = negative
       ? [positive.id, negative.id]
       : [positive.id];
-    const compositionHash = createCompositionHash(
-      quality,
-      effectIds,
-      category,
-    );
+    const compositionHash = createCompositionHash(quality, effectIds, category);
     if (usedHashes.has(compositionHash)) {
       continue;
     }
@@ -140,9 +124,7 @@ function composeCandidate(
       }),
       ...(negative ? [buildFateEffectEntry(negative, quality, rng)] : []),
     ];
-    const fallbackName =
-      getHerbFateName(positive.id, quality) ??
-      buildFallbackFateName(positive, quality);
+    const fallbackName = buildFallbackFateName(positive, quality);
     const fallbackDescription = buildPresetFateDescription(
       positive,
       quality,
@@ -182,8 +164,7 @@ export const FateEngine = {
   async generateCandidatePool(
     options: FateGenerationOptions | (() => number) = {},
   ): Promise<PreHeavenFate[]> {
-    const rng =
-      typeof options === 'function' ? options : options.rng ?? Math.random;
+    const rng = typeof options === 'function' ? options : options.rng ?? Math.random;
     const candidateCount =
       typeof options === 'function'
         ? FATE_CANDIDATE_COUNT

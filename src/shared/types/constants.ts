@@ -177,6 +177,7 @@ export const MATERIAL_TYPE_VALUES = [
   'monster',
   'tcdb',
   'aux',
+  'seed',
   'gongfa_manual',
   'skill_manual',
 ] as const;

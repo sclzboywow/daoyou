@@ -1,7 +1,10 @@
 import type {
+  HerbGardenActionId,
   HerbGardenHarvestResult,
+  HerbGardenObservationKind,
   HerbGardenState,
 } from '@shared/contracts/herbGarden';
+import type { ElementType } from '@shared/types/constants';
 import { useCallback, useEffect, useState } from 'react';
 
 interface GardenResponse {
@@ -41,12 +44,42 @@ export function useHerbGarden(ownerId?: string) {
   }, [endpoint]);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => void reload(), 0);
-    return () => window.clearTimeout(timeoutId);
+    const timer = window.setTimeout(() => void reload(), 0);
+    return () => window.clearTimeout(timer);
+  }, [reload]);
+
+  useEffect(() => {
+    if (!data) return;
+    const nextReadyAt = data.plots
+      .flatMap((plot) =>
+        plot.status === 'cultivating' && plot.readyAt
+          ? [new Date(plot.readyAt).getTime()]
+          : [],
+      )
+      .filter((timestamp) => timestamp > Date.now())
+      .sort((left, right) => left - right)[0];
+    if (!nextReadyAt) return;
+    const timer = window.setTimeout(
+      () => void reload(),
+      Math.max(250, nextReadyAt - Date.now() + 250),
+    );
+    return () => window.clearTimeout(timer);
+  }, [data, reload]);
+
+  useEffect(() => {
+    const refreshVisible = () => {
+      if (document.visibilityState === 'visible') void reload();
+    };
+    document.addEventListener('visibilitychange', refreshVisible);
+    return () =>
+      document.removeEventListener('visibilitychange', refreshVisible);
   }, [reload]);
 
   const mutate = useCallback(
-    async <T extends { garden: HerbGardenState }>(url: string, body?: unknown) => {
+    async <T extends { garden: HerbGardenState }>(
+      url: string,
+      body?: unknown,
+    ) => {
       setBusy(true);
       setError(undefined);
       try {
@@ -59,7 +92,8 @@ export function useHerbGarden(ownerId?: string) {
         setData(result.garden);
         return result;
       } catch (reason) {
-        const message = reason instanceof Error ? reason.message : '药田事务失败';
+        const message =
+          reason instanceof Error ? reason.message : '药田事务失败';
         setError(message);
         throw reason;
       } finally {
@@ -70,8 +104,35 @@ export function useHerbGarden(ownerId?: string) {
   );
 
   const plant = useCallback(
-    (slot: number, seedMaterialId: string) =>
-      mutate<GardenResponse>('/api/herb-garden/plant', { slot, seedMaterialId }),
+    (
+      slot: number,
+      seedMaterialId: string,
+      actionId: HerbGardenActionId,
+      materialId?: string,
+      rootElement?: ElementType,
+    ) =>
+      mutate<GardenResponse>('/api/herb-garden/plant', {
+        slot,
+        seedMaterialId,
+        actionId,
+        materialId,
+        rootElement,
+      }),
+    [mutate],
+  );
+
+  const cultivate = useCallback(
+    (
+      plotId: string,
+      actionId: HerbGardenActionId,
+      materialId?: string,
+      rootElement?: ElementType,
+    ) =>
+      mutate<GardenResponse>(`/api/herb-garden/plots/${plotId}/cultivate`, {
+        actionId,
+        materialId,
+        rootElement,
+      }),
     [mutate],
   );
 
@@ -80,6 +141,22 @@ export function useHerbGarden(ownerId?: string) {
       mutate<GardenResponse & { result: HerbGardenHarvestResult }>(
         `/api/herb-garden/plots/${plotId}/harvest`,
       ),
+    [mutate],
+  );
+
+  const observe = useCallback(
+    (plotId: string, observation: HerbGardenObservationKind) =>
+      mutate<GardenResponse>(`/api/herb-garden/plots/${plotId}/observe`, {
+        observation,
+      }),
+    [mutate],
+  );
+
+  const consult = useCallback(
+    (plotId: string, question: string) =>
+      mutate<GardenResponse>(`/api/herb-garden/plots/${plotId}/consult`, {
+        question,
+      }),
     [mutate],
   );
 
@@ -101,9 +178,15 @@ export function useHerbGarden(ownerId?: string) {
 
   const steal = useCallback(
     (friendId: string, plotId: string) =>
-      mutate<GardenResponse & { result: { herbName: string; quantity: 1 } }>(
-        `/api/herb-garden/visit/${friendId}/plots/${plotId}/steal`,
-      ),
+      mutate<
+        GardenResponse & {
+          result: {
+            name: string;
+            kind: 'herb' | 'spirit_fruit' | 'tcdb';
+            quantity: 1;
+          };
+        }
+      >(`/api/herb-garden/visit/${friendId}/plots/${plotId}/steal`),
     [mutate],
   );
 
@@ -115,6 +198,9 @@ export function useHerbGarden(ownerId?: string) {
     reload,
     retry: reload,
     plant,
+    cultivate,
+    observe,
+    consult,
     harvest,
     harvestAll,
     help,

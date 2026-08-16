@@ -1,5 +1,4 @@
 import * as creationProductRepository from '@server/lib/repositories/creationProductRepository';
-import { createHash } from 'node:crypto';
 import {
   calculateSingleArtifactScore,
   calculateSingleElixirScore,
@@ -8,6 +7,7 @@ import {
   rehydrateStoredProductModel,
   serializeProductModel,
 } from '@shared/engine/creation-v2/persistence/ProductPersistenceMapper';
+import { buildConsumableStackKey } from '@shared/lib/consumables';
 import {
   ELEMENT_VALUES,
   ElementType,
@@ -33,6 +33,7 @@ import {
   sql,
   type SQL,
 } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import {
   getExecutor,
   type DbExecutor,
@@ -40,7 +41,6 @@ import {
 } from '../../drizzle/db';
 import * as schema from '../../drizzle/schema';
 import { mapConsumableRow } from '../consumablePersistence';
-import { buildConsumableStackKey } from '@shared/lib/consumables';
 import { toArtifactFromProduct } from '../creationProductArtifactSupport';
 import { sanitizeMaterialDetails } from '../materialDetailsPrivacy';
 import { addMaterialStackToInventory } from '../materialInventory';
@@ -99,6 +99,18 @@ export function mapMaterialRow(
   };
 }
 
+export function mapMaterialRowInternal(
+  m: typeof schema.materials.$inferSelect,
+): Cultivator['inventory']['materials'][number] {
+  return {
+    ...mapMaterialRow(m),
+    details:
+      m.details && typeof m.details === 'object'
+        ? { ...(m.details as Record<string, unknown>) }
+        : undefined,
+  };
+}
+
 export async function getCultivatorConsumableById(
   cultivatorId: string,
   consumableId: string,
@@ -150,7 +162,7 @@ export async function getPaginatedInventoryByType<T extends InventoryType>(
     materialElements?: ElementType[];
     materialSortBy?: MaterialInventorySortBy;
     materialSortOrder?: MaterialInventorySortOrder;
-    consumableKind?: 'pill';
+    consumableKind?: 'pill' | 'spirit_fruit' | 'talisman';
   },
   q: DbExecutor | DbTransaction = getExecutor(),
 ): Promise<PaginatedInventoryResult<T>> {
@@ -204,13 +216,12 @@ export async function getPaginatedInventoryByType<T extends InventoryType>(
   }
 
   if (options.type === 'consumables') {
-    const consumableWhere =
-      options.consumableKind === 'pill'
-        ? and(
-            eq(schema.consumables.cultivatorId, cultivatorId),
-            sql`${schema.consumables.spec}->>'kind' = 'pill'`,
-          )
-        : eq(schema.consumables.cultivatorId, cultivatorId);
+    const consumableWhere = options.consumableKind
+      ? and(
+          eq(schema.consumables.cultivatorId, cultivatorId),
+          sql`${schema.consumables.spec}->>'kind' = ${options.consumableKind}`,
+        )
+      : eq(schema.consumables.cultivatorId, cultivatorId);
     const countResult = await q
       .select({ count: sql<number>`count(*)` })
       .from(schema.consumables)

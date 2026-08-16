@@ -15,13 +15,14 @@ export const QUALITY_CHANCE_MAP: Record<Quality, number> = {
 
 // 随机生成时各类型出现的权重 (非固定生成时使用)
 export const TYPE_CHANCE_MAP: Record<MaterialType, number> = {
-  herb: 0.3, // 30% 灵药
-  ore: 0.28, // 28% 矿石
-  monster: 0.22, // 22% 妖兽材料
+  herb: 0.28,
+  ore: 0.26,
+  monster: 0.2,
   tcdb: 0.05, // 5% 天材地宝
   aux: 0.05, // 5% 特殊辅料
   gongfa_manual: 0.05, // 5% 功法典籍（稀有）
   skill_manual: 0.05, // 5% 神通秘术（稀有）
+  seed: 0.06,
 };
 
 // 品质基础价格
@@ -45,6 +46,7 @@ export const TYPE_MULTIPLIERS: Record<MaterialType, number> = {
   aux: 1.5,
   gongfa_manual: 3.0, // 功法典籍
   skill_manual: 3.0, // 神通秘术
+  seed: 1.4,
 };
 
 // 类型中文描述与解释（用于 Prompt）
@@ -56,6 +58,7 @@ export const TYPE_DESCRIPTIONS: Record<MaterialType, string> = {
   aux: `${getMaterialTypeLabel('aux')} (炼丹/炼器的辅助材料，如灵液、粉尘)`,
   gongfa_manual: getMaterialTypeLabel('gongfa_manual'),
   skill_manual: getMaterialTypeLabel('skill_manual'),
+  seed: `${getMaterialTypeLabel('seed')} (用于宗门灵田三阶段培育)`,
 };
 
 // 各品质的堆叠数量配置 [min, max]

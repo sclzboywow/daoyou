@@ -338,7 +338,21 @@ export interface TalismanSpec {
   notes?: string;
 }
 
-export type ConsumableSpec = PillSpec | TalismanSpec;
+export interface SpiritFruitSpec {
+  kind: 'spirit_fruit';
+  family: PillFamily;
+  operations: ConditionOperation[];
+  consumeRules: PillConsumeRules;
+  cultivationMeta: {
+    source: 'herb_garden';
+    element?: ElementType;
+    tags: string[];
+    sourceSeedName?: string;
+    manifestationTags?: string[];
+  };
+}
+
+export type ConsumableSpec = PillSpec | TalismanSpec | SpiritFruitSpec;
 
 export interface AlchemyFormulaBlueprint {
   version: 4;

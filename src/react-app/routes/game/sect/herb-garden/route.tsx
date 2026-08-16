@@ -1,20 +1,51 @@
+import { describePillOperation } from '@app/components/feature/consumables';
+import {
+  NpcConversation,
+  type NpcConversationMessage,
+  type NpcConversationOption,
+} from '@app/components/feature/room';
 import { useHerbGarden } from '@app/components/feature/sect/herbGardenResources';
-import { GameSceneLoading, GameSceneNote } from '@app/components/game-shell';
+import {
+  SectFacilityStatusConversation,
+  SectNpcConversationRegistry,
+  SectRoutedRoom,
+  type SectNpcConversationRendererProps,
+} from '@app/components/feature/sect/room';
 import { useInkUI } from '@app/components/providers/InkUIProvider';
 import { InkButton } from '@app/components/ui/InkButton';
-import { InkCard } from '@app/components/ui/InkCard';
-import {
-  InkDialog,
-  type InkDialogState,
-} from '@app/components/ui/InkDialog';
 import type {
+  CultivationMethodDefinition,
+  HerbGardenActionId,
+  HerbGardenObservationKind,
   HerbGardenPlotView,
-  HerbGardenSeedStack,
+  HerbGardenState,
 } from '@shared/contracts/herbGarden';
-import { useEffect, useState, type ReactNode } from 'react';
+import { STANDARD_SECT_PRESENTATION } from '@shared/engine/sect';
+import { cn } from '@shared/lib/cn';
+import type { ElementType, MaterialType } from '@shared/types/constants';
+import { useEffect, useMemo, useState } from 'react';
 import { SectPermissionBoundary, SectScene } from '../components/SectScene';
 
-const SLOT_LABELS = ['壹号畦', '贰号畦', '叁号畦', '肆号畦', '伍号畦', '陆号畦'];
+const registry = new SectNpcConversationRegistry([
+  {
+    key: 'sect.herb-garden.status',
+    renderer: SectFacilityStatusConversation,
+  },
+  {
+    key: 'sect.herb-garden.caretaker',
+    renderer: HerbGardenCaretakerConversation,
+  },
+]).assertRoom(STANDARD_SECT_PRESENTATION.rooms.herbGarden);
+
+const SLOT_NAMES = ['壹号畦', '贰号畦', '叁号畦', '肆号畦', '伍号畦', '陆号畦'];
+const STAGE_NAMES = {
+  germination: '启灵',
+  growth: '蕴养',
+  formation: '凝华',
+  ready: '成熟',
+} as const;
+
+type GardenMode = 'overview' | 'plot' | 'seeds' | 'logs' | 'friends';
 
 export default function SectHerbGardenPage() {
   return (
@@ -22,629 +53,868 @@ export default function SectHerbGardenPage() {
       permission="sect.herb_garden.view"
       sceneKey="herbGarden"
     >
-      <SectHerbGardenScene />
+      <SectScene sceneKey="herbGarden" mood="garden">
+        <SectRoutedRoom
+          roomKey="herbGarden"
+          registry={registry}
+          eyebrow="药畦晨露 · 草木值录"
+        />
+      </SectScene>
     </SectPermissionBoundary>
   );
 }
 
-function SectHerbGardenScene() {
+function HerbGardenCaretakerConversation({
+  actor,
+  onExit,
+}: SectNpcConversationRendererProps) {
   const { pushToast } = useInkUI();
+  const [mode, setMode] = useState<GardenMode>('overview');
+  const [selectedSlot, setSelectedSlot] = useState<number>();
   const [visitOwnerId, setVisitOwnerId] = useState<string>();
   const garden = useHerbGarden(visitOwnerId);
-  const [dialog, setDialog] = useState<InkDialogState | null>(null);
-  const [now, setNow] = useState(() => Date.now());
 
+  const notify = (message: string) => pushToast({ message, tone: 'success' });
+  const returnToOverview = () => {
+    setSelectedSlot(undefined);
+    setMode('overview');
+  };
+
+  if (!garden.data) {
+    return (
+      <NpcConversation
+        actor={actor}
+        messages={[
+          {
+            id: 'loading',
+            speaker: actor.name,
+            body: garden.loading
+              ? '且稍候，我正在翻看今日草木值录。'
+              : '田间值录一时未能取来，请稍后重试。',
+            tone: garden.error ? 'attention' : 'normal',
+          },
+        ]}
+        busy={garden.loading}
+        error={garden.error}
+        options={[
+          { id: 'retry', label: '重新翻看值录', disabled: garden.loading },
+          { id: 'leave', label: '弟子告退', tone: 'muted' },
+        ]}
+        onSelectOption={(optionId) => {
+          if (optionId === 'retry') void garden.retry();
+          else onExit();
+        }}
+      />
+    );
+  }
+
+  const state = garden.data;
+  const selectedPlot = state.plots.find((plot) => plot.slot === selectedSlot);
+  if (mode === 'plot' && selectedPlot) {
+    return (
+      <PlotConversation
+        actor={actor}
+        state={state}
+        plot={selectedPlot}
+        busy={garden.busy}
+        error={garden.error}
+        onBack={returnToOverview}
+        onPlant={async (seedId, actionId, materialId, rootElement) => {
+          await garden.plant(
+            selectedPlot.slot,
+            seedId,
+            actionId,
+            materialId,
+            rootElement,
+          );
+          notify('灵种已经入土，药园执事记下了本轮草木反应。');
+        }}
+        onCultivate={async (actionId, materialId, rootElement) => {
+          await garden.cultivate(
+            selectedPlot.plotId!,
+            actionId,
+            materialId,
+            rootElement,
+          );
+          notify('本阶段培育完成，新的草木征兆已写入值录。');
+        }}
+        onObserve={async (observation) => {
+          await garden.observe(selectedPlot.plotId!, observation);
+          notify('新的草木征兆已记入札记。');
+        }}
+        onConsult={async (question) => {
+          await garden.consult(selectedPlot.plotId!, question);
+          notify('药园执事已依据现有征兆作答。');
+        }}
+        onHarvest={async () => {
+          const response = await garden.harvest(selectedPlot.plotId!);
+          notify(
+            `收获「${response.result.name}」共 ${response.result.quantity} 份。`,
+          );
+          returnToOverview();
+        }}
+        onHelp={async () => {
+          await garden.help(state.owner.cultivatorId, selectedPlot.plotId!);
+          notify('你为道友引来一缕灵气。');
+        }}
+        onSteal={async () => {
+          const response = await garden.steal(
+            state.owner.cultivatorId,
+            selectedPlot.plotId!,
+          );
+          notify(`采得「${response.result.name}」一份。`);
+        }}
+      />
+    );
+  }
+
+  if (mode === 'seeds') {
+    return (
+      <NpcConversation
+        actor={actor}
+        messages={[
+          {
+            id: 'seeds',
+            speaker: actor.name,
+            body: `种子的外相只能作为线索，真正种性还要看每一阶段的草木反应。你当前为${state.progression.realm}，最高可培育${state.progression.maxSeedQuality}灵种。`,
+          },
+        ]}
+        error={garden.error}
+        options={[{ id: 'back', label: '返回巡视六畦', tone: 'muted' }]}
+        onSelectOption={returnToOverview}
+      >
+        <SeedList state={state} />
+      </NpcConversation>
+    );
+  }
+
+  if (mode === 'logs') {
+    return (
+      <NpcConversation
+        actor={actor}
+        messages={[
+          {
+            id: 'logs',
+            speaker: actor.name,
+            body: '近来的播种、培育与访客动静，都按时序记在这里。',
+          },
+        ]}
+        error={garden.error}
+        options={[{ id: 'back', label: '返回巡视六畦', tone: 'muted' }]}
+        onSelectOption={returnToOverview}
+      >
+        <GardenLogs state={state} />
+      </NpcConversation>
+    );
+  }
+
+  if (mode === 'friends') {
+    return (
+      <NpcConversation
+        actor={actor}
+        messages={[
+          {
+            id: 'friends',
+            speaker: actor.name,
+            body: '好友的药田可以互相照料；成熟灵植也会留出少量访采份额。',
+          },
+        ]}
+        error={garden.error}
+        options={[{ id: 'back', label: '返回巡视六畦', tone: 'muted' }]}
+        onSelectOption={returnToOverview}
+      >
+        <FriendList
+          state={state}
+          onVisit={(cultivatorId) => {
+            setVisitOwnerId(cultivatorId);
+            setMode('overview');
+          }}
+        />
+      </NpcConversation>
+    );
+  }
+
+  const overviewMessages: NpcConversationMessage[] = [
+    { id: 'greeting', speaker: actor.name, body: actor.greeting },
+    {
+      id: 'summary',
+      speaker: actor.name,
+      body: state.owner.isSelf
+        ? `六畦之中，现有 ${state.summary.planted} 畦在田，${state.summary.awaitingAction} 畦待择法，${state.summary.ready} 畦已经成熟。`
+        : `这里是${state.owner.name}的药田。可替道友照料未成熟灵植，也可访采成熟灵植留下的份额。`,
+    },
+  ];
+  const overviewOptions: NpcConversationOption[] = state.owner.isSelf
+    ? [
+        ...(state.summary.ready
+          ? [
+              {
+                id: 'harvest-all',
+                label: '收取所有成熟灵植',
+                tone: 'primary' as const,
+              },
+            ]
+          : []),
+        { id: 'seeds', label: '查看灵种匣' },
+        { id: 'friends', label: '前往好友灵田' },
+        { id: 'logs', label: '翻看田间记录' },
+        { id: 'leave', label: '弟子告退', tone: 'muted' },
+      ]
+    : [
+        { id: 'my-garden', label: '返回我的药田', tone: 'muted' },
+        { id: 'leave', label: '弟子告退', tone: 'muted' },
+      ];
+
+  return (
+    <NpcConversation
+      actor={actor}
+      messages={overviewMessages}
+      options={overviewOptions}
+      busy={garden.busy}
+      error={garden.error}
+      onSelectOption={(optionId) => {
+        if (optionId === 'seeds') setMode('seeds');
+        else if (optionId === 'friends') setMode('friends');
+        else if (optionId === 'logs') setMode('logs');
+        else if (optionId === 'my-garden') {
+          setVisitOwnerId(undefined);
+          setMode('overview');
+        } else if (optionId === 'harvest-all') {
+          void garden
+            .harvestAll()
+            .then((response) => {
+              const total = response.results.reduce(
+                (sum, result) => sum + result.quantity,
+                0,
+              );
+              notify(
+                `共收取 ${response.results.length} 畦，得到 ${total} 份产物。`,
+              );
+            })
+            .catch(() => undefined);
+        } else onExit();
+      }}
+    >
+      <PlotGrid
+        state={state}
+        onSelect={(slot) => {
+          setSelectedSlot(slot);
+          setMode('plot');
+        }}
+      />
+    </NpcConversation>
+  );
+}
+
+function PlotGrid({
+  state,
+  onSelect,
+}: {
+  state: HerbGardenState;
+  onSelect(slot: number): void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {state.plots.map((plot) => (
+        <button
+          key={plot.slot}
+          type="button"
+          onClick={() => onSelect(plot.slot)}
+          className="border-ink/15 bg-ink/[0.02] hover:border-crimson/35 hover:bg-crimson/[0.035] focus-visible:outline-crimson min-h-28 border px-4 py-3 text-left transition-colors focus-visible:outline-2"
+        >
+          <span className="text-ink-secondary flex items-center justify-between text-xs">
+            <span>{SLOT_NAMES[plot.slot - 1]}</span>
+            <span>{plotStatusText(plot)}</span>
+          </span>
+          <strong className="mt-3 block text-sm font-normal">
+            {plot.seedName ?? '畦土已整，尚未播种'}
+          </strong>
+          <span className="text-ink-secondary mt-2 block text-xs leading-5">
+            {plot.status === 'cultivating' && plot.readyAt
+              ? `尚需约 ${formatRemaining(new Date(plot.readyAt).getTime() - now)}`
+              : plot.status === 'awaiting_action'
+                ? '本阶段已成，等待选择下一步培育法'
+                : plot.status === 'ready'
+                  ? `已成「${plot.outcomePreview?.name ?? '成熟灵植'}」`
+                  : '点击此畦选择灵种'}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PlotConversation(props: {
+  actor: SectNpcConversationRendererProps['actor'];
+  state: HerbGardenState;
+  plot: HerbGardenPlotView;
+  busy: boolean;
+  error?: string;
+  onBack(): void;
+  onPlant(
+    seedId: string,
+    actionId: HerbGardenActionId,
+    materialId?: string,
+    rootElement?: ElementType,
+  ): Promise<void>;
+  onCultivate(
+    actionId: HerbGardenActionId,
+    materialId?: string,
+    rootElement?: ElementType,
+  ): Promise<void>;
+  onHarvest(): Promise<void>;
+  onObserve(observation: HerbGardenObservationKind): Promise<void>;
+  onConsult(question: string): Promise<void>;
+  onHelp(): Promise<void>;
+  onSteal(): Promise<void>;
+}) {
+  const { plot, state } = props;
+  const actionStage =
+    plot.status === 'empty'
+      ? 'germination'
+      : plot.stage === 'germination'
+        ? 'growth'
+        : plot.stage === 'growth'
+          ? 'formation'
+          : undefined;
+  const methodOptions = useMemo(
+    () =>
+      actionStage === 'formation'
+        ? state.formationMethods
+        : state.methods.filter((method) =>
+            actionStage ? method.stages.includes(actionStage) : false,
+          ),
+    [actionStage, state.formationMethods, state.methods],
+  );
+  const [seedId, setSeedId] = useState('');
+  const [actionId, setActionId] = useState<HerbGardenActionId | ''>('');
+  const [materialId, setMaterialId] = useState('');
+  const [rootElement, setRootElement] = useState<ElementType | ''>('');
+  const [question, setQuestion] = useState('');
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  if (garden.loading && !garden.data) {
-    return (
-      <SectScene sceneKey="herbGarden" mood="garden">
-        <GameSceneLoading message="执事正在翻开今日草木值录……" />
-      </SectScene>
-    );
-  }
+  const selectedSeedId = state.seeds.some(
+    (seed) => seed.materialId === seedId && seed.plantable,
+  )
+    ? seedId
+    : (state.seeds.find((seed) => seed.plantable)?.materialId ?? '');
+  const selectedActionId = methodOptions.some(
+    (methodOption) => methodOption.id === actionId,
+  )
+    ? actionId
+    : (methodOptions[0]?.id ?? '');
+  const method = state.methods.find((entry) => entry.id === selectedActionId);
+  const materialType =
+    method?.cost.kind === 'material' ? method.cost.materialType : undefined;
+  const materials = useMemo(
+    () =>
+      materialType
+        ? state.methodMaterials.filter((item) => item.type === materialType)
+        : [],
+    [materialType, state.methodMaterials],
+  );
+  const selectedMaterialId = materials.some(
+    (material) => material.materialId === materialId,
+  )
+    ? materialId
+    : (materials[0]?.materialId ?? '');
+  const selectedRootElement = state.spiritualRoots.some(
+    (root) => root.element === rootElement,
+  )
+    ? rootElement
+    : (state.spiritualRoots[0]?.element ?? '');
 
-  if (!garden.data) {
-    return (
-      <SectScene sceneKey="herbGarden" mood="garden">
-        <GameSceneNote tone="danger">
-          {garden.error ?? '灵药圃暂时无法读取。'}
-        </GameSceneNote>
-        <InkButton onClick={() => void garden.retry()}>重新读取</InkButton>
-      </SectScene>
-    );
-  }
-
-  const state = garden.data;
-  const isSelf = state.owner.isSelf;
-
-  const showSeedPicker = (slot: number) => {
-    const available = state.seeds.filter(
-      (seed) => seed.quantity > 0 && seed.minGardenLevel <= state.gardenLevel,
-    );
-    setDialog({
-      id: `seed-${slot}`,
-      title: `【${SLOT_LABELS[slot - 1]} · 选择灵种】`,
-      confirmLabel: null,
-      cancelLabel: '收起种匣',
-      content:
-        available.length === 0 ? (
-          <p className="text-ink-secondary text-sm leading-7">
-            当前没有可用于此级药圃的灵种。收获时有机会留种，后续也可从玩法奖励中获得更多灵种。
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {available.map((seed) => (
-              <SeedChoice
-                key={seed.materialId}
-                seed={seed}
-                disabled={garden.busy}
-                onPlant={async () => {
-                  try {
-                    await garden.plant(slot, seed.materialId);
-                    pushToast({
-                      message: `${seed.herbName}已入土，静候草木生发。`,
-                      tone: 'success',
-                    });
-                    setDialog(null);
-                  } catch {
-                    // 服务端原因会留在页面错误区。
-                  }
-                }}
-              />
-            ))}
-          </div>
-        ),
+  const messages: NpcConversationMessage[] = [
+    {
+      id: 'plot',
+      speaker: props.actor.name,
+      body:
+        plot.status === 'empty'
+          ? `${SLOT_NAMES[plot.slot - 1]}已经整好，可从灵种匣中选一枚入土。`
+          : `${SLOT_NAMES[plot.slot - 1]}种着「${plot.seedName}」，眼下正处于${STAGE_NAMES[plot.stage ?? 'germination']}。`,
+    },
+  ];
+  if (plot.description)
+    messages.push({
+      id: 'seed-description',
+      body: plot.description,
+      tone: 'muted',
     });
-  };
-
-  const showPlot = (plot: HerbGardenPlotView) => {
-    if (plot.status === 'empty') {
-      if (isSelf) showSeedPicker(plot.slot);
-      return;
-    }
-
-    const ready = plot.status === 'ready';
-    const actionLabel = isSelf
-      ? ready
-        ? '收获此畦'
-        : null
-      : ready
-        ? plot.canSteal
-          ? '顺手采一株'
-          : null
-        : plot.canHelp
-          ? '替道友聚灵'
-          : null;
-
-    setDialog({
-      id: plot.plotId ?? `plot-${plot.slot}`,
-      title: `【${plot.herbName ?? '灵植'}】`,
-      confirmLabel: actionLabel,
-      cancelLabel: '返回药田',
-      content: <PlotDetail plot={plot} now={now} isSelf={isSelf} />,
-      onConfirm:
-        actionLabel && plot.plotId
-          ? async () => {
-              try {
-                if (isSelf) {
-                  const result = await garden.harvest(plot.plotId!);
-                  const mutation = result.result.mutation
-                    ? `，灵变得「${result.result.mutation.name} ×1」`
-                    : '';
-                  pushToast({
-                    message: `收获${result.result.herbName} ×${result.result.quantity}${mutation}`,
-                    tone: 'success',
-                  });
-                } else if (ready && plot.canSteal) {
-                  const result = await garden.steal(
-                    state.owner.cultivatorId,
-                    plot.plotId!,
-                  );
-                  pushToast({
-                    message: `四下无人……你顺手采走了「${result.result.herbName} ×1」。`,
-                    tone: 'success',
-                  });
-                } else if (plot.canHelp) {
-                  await garden.help(state.owner.cultivatorId, plot.plotId!);
-                  pushToast({
-                    message: '你替道友引来一缕灵气。',
-                    tone: 'success',
-                  });
-                }
-              } catch {
-                // 服务端原因会留在页面错误区。
-              }
-            }
-          : undefined,
+  if (plot.status === 'cultivating' && plot.readyAt)
+    messages.push({
+      id: 'waiting',
+      speaker: props.actor.name,
+      body: `草木灵机仍在沉淀，尚需约 ${formatRemaining(new Date(plot.readyAt).getTime() - now)}。`,
     });
-  };
+  if (plot.status === 'ready' && plot.outcomePreview)
+    messages.push({
+      id: 'ready',
+      speaker: props.actor.name,
+      body: `此株已凝成「${plot.outcomePreview.name}」，品阶为${plot.outcomePreview.rank}，当前可收获 ${plot.remainingYield ?? 0} 份。${
+        plot.outcomePreview.operations?.length
+          ? ` 灵果效用：${plot.outcomePreview.operations
+              .map(describePillOperation)
+              .join('；')}。`
+          : ''
+      }`,
+    });
+
+  const needsDecision =
+    state.owner.isSelf &&
+    (plot.status === 'empty' || plot.status === 'awaiting_action');
+  const submitDisabled =
+    props.busy ||
+    !selectedActionId ||
+    (plot.status === 'empty' && !selectedSeedId) ||
+    Boolean(materialType && !selectedMaterialId) ||
+    Boolean(method?.requiresRoot && !selectedRootElement);
 
   return (
-    <SectScene sceneKey="herbGarden" mood="garden">
-      <div className="space-y-4">
-        {!isSelf ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-current/10 pb-3">
-            <div>
-              <p className="text-ink-secondary text-xs tracking-[0.22em]">
-                访友药田 · 持访客令入圃
-              </p>
-              <p className="mt-1 text-sm">
-                正在拜访 <strong>{state.owner.name}</strong> 的灵药圃
-              </p>
+    <NpcConversation
+      actor={props.actor}
+      messages={messages}
+      busy={props.busy}
+      error={props.error}
+      options={[
+        ...(state.owner.isSelf && plot.status === 'ready'
+          ? [{ id: 'harvest', label: '收获此畦', tone: 'primary' as const }]
+          : []),
+        ...(!state.owner.isSelf && plot.canHelp
+          ? [{ id: 'help', label: '引气相助' }]
+          : []),
+        ...(!state.owner.isSelf && plot.canSteal
+          ? [{ id: 'steal', label: '访采一份', tone: 'primary' as const }]
+          : []),
+        { id: 'back', label: '返回巡视六畦', tone: 'muted' },
+      ]}
+      onSelectOption={(optionId) => {
+        const run =
+          optionId === 'harvest'
+            ? props.onHarvest
+            : optionId === 'help'
+              ? props.onHelp
+              : optionId === 'steal'
+                ? props.onSteal
+                : undefined;
+        if (run) void run().catch(() => undefined);
+        else props.onBack();
+      }}
+    >
+      {needsDecision ? (
+        <div className="space-y-4">
+          {plot.status === 'empty' ? (
+            <QuietSelect
+              label="选择灵种"
+              value={selectedSeedId}
+              onChange={setSeedId}
+              options={state.seeds.map((seed) => ({
+                value: seed.materialId,
+                label: `${seed.name} · ${seed.rank} · 余 ${seed.quantity}${seed.lockedReason ? ` · ${seed.lockedReason}` : ''}`,
+                disabled: !seed.plantable,
+              }))}
+            />
+          ) : null}
+          <div>
+            <p className="text-ink-secondary mb-2 text-xs">选择本阶段方式</p>
+            <div className="border-ink/10 border-t">
+              {methodOptions.map((entry) => {
+                const selected = entry.id === selectedActionId;
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => setActionId(entry.id)}
+                    className={cn(
+                      'border-ink/10 hover:bg-ink/[0.035] flex w-full items-start justify-between gap-4 border-b px-1 py-3 text-left transition-colors',
+                      selected && 'text-crimson bg-crimson/[0.035]',
+                    )}
+                  >
+                    <span>
+                      <strong className="block text-sm font-normal">
+                        {entry.name}
+                      </strong>
+                      <span className="text-ink-secondary mt-1 block text-xs leading-5">
+                        {entry.description}
+                      </span>
+                    </span>
+                    {'cost' in entry ? (
+                      <span className="text-ink-secondary shrink-0 text-xs">
+                        {costLabel(entry)}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
-            <InkButton onClick={() => setVisitOwnerId(undefined)}>
-              返回我的药田
-            </InkButton>
           </div>
-        ) : null}
-
-        {garden.error ? <GameSceneNote tone="danger">{garden.error}</GameSceneNote> : null}
-
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
-          <section className="relative overflow-hidden border border-emerald-950/15 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.42),transparent_26%),linear-gradient(180deg,rgba(151,180,139,0.14),rgba(113,91,58,0.08))] p-3 sm:p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium tracking-[0.12em]">
-                  {state.owner.name}的灵田
-                </p>
-                <p className="text-ink-secondary mt-1 text-xs">
-                  宗门药圃 Lv.{state.gardenLevel} · 六畦轮作 · 灵药成熟后方可采收
-                </p>
-              </div>
-              <span className="border border-emerald-900/15 bg-bgpaper/45 px-3 py-1.5 text-xs text-emerald-950/70">
-                草木灵机 · 平稳
+          {materialType ? (
+            <QuietSelect
+              label={`选择${materialTypeLabel(materialType)}`}
+              value={selectedMaterialId}
+              onChange={setMaterialId}
+              options={materials.map((material) => ({
+                value: material.materialId,
+                label: `${material.name} · ${material.rank} · 余 ${material.quantity}`,
+              }))}
+            />
+          ) : null}
+          {method?.requiresRoot ? (
+            <QuietSelect
+              label="选择本命灵根"
+              value={selectedRootElement}
+              onChange={(value) => setRootElement(value as ElementType)}
+              options={state.spiritualRoots.map((root) => ({
+                value: root.element,
+                label: `${root.element}灵根 · 强度 ${root.strength}`,
+              }))}
+            />
+          ) : null}
+          <InkButton
+            variant="primary"
+            disabled={submitDisabled}
+            onClick={() => {
+              if (!selectedActionId) return;
+              const operation =
+                plot.status === 'empty'
+                  ? props.onPlant(
+                      selectedSeedId,
+                      selectedActionId,
+                      selectedMaterialId || undefined,
+                      selectedRootElement || undefined,
+                    )
+                  : props.onCultivate(
+                      selectedActionId,
+                      selectedMaterialId || undefined,
+                      selectedRootElement || undefined,
+                    );
+              void operation.catch(() => undefined);
+            }}
+          >
+            {props.busy
+              ? '药园执事正在辨察草木灵机'
+              : plot.status === 'empty'
+                ? '确认播种并启灵'
+                : actionStage === 'formation'
+                  ? '确认凝华方式'
+                  : '确认本轮培育'}
+          </InkButton>
+        </div>
+      ) : null}
+      {state.owner.isSelf &&
+      plot.status !== 'empty' &&
+      plot.status !== 'ready' ? (
+        <div className="border-ink/10 mt-5 space-y-4 border-t pt-4">
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+              <span className="text-ink-secondary">辨察草木</span>
+              <span className="text-ink-secondary">
+                {plot.observationAllowance?.used ?? 0}/
+                {plot.observationAllowance?.limit ?? 2}
               </span>
             </div>
-
-            <div className="mb-4 flex flex-wrap gap-2 text-[11px]">
-              <GardenTag>种子影响本轮种质</GardenTag>
-              <GardenTag>灵根契合可加速</GardenTag>
-              <GardenTag>命格共鸣自动结算</GardenTag>
-              {!isSelf ? <GardenTag>好友采药不复制产出</GardenTag> : null}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-              {state.plots.map((plot) => (
-                <HerbPlot
-                  key={plot.slot}
-                  plot={plot}
-                  now={now}
-                  isSelf={isSelf}
-                  onClick={() => showPlot(plot)}
-                />
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ['appearance', '察叶色'],
+                  ['aura', '辨灵气'],
+                  ['soil', '验土性'],
+                  ['root', '探根须'],
+                ] as const
+              ).map(([value, label]) => (
+                <InkButton
+                  key={value}
+                  variant="secondary"
+                  disabled={
+                    props.busy ||
+                    (plot.observationAllowance?.used ?? 0) >=
+                      (plot.observationAllowance?.limit ?? 2)
+                  }
+                  onClick={() =>
+                    void props.onObserve(value).catch(() => undefined)
+                  }
+                >
+                  {label}
+                </InkButton>
               ))}
             </div>
-
-            <div className="text-ink-secondary mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-current/10 pt-3 text-[11px]">
-              <span>访客采走一株，田中即真实减少一株；单茬最多开放约 20% 访采份额。</span>
-              <span>异变采用价值转换，不额外复制基础产量。</span>
-            </div>
-          </section>
-
-          <aside className="space-y-3">
-            <InkCard className="mb-0" padding="md">
-              <PanelTitle title="今日药田" meta={isSelf ? '我的灵圃' : '访友'} />
-              <div className="grid grid-cols-3 divide-x divide-current/10 text-center">
-                <Metric value={`${state.summary.planted}/6`} label="种植" />
-                <Metric value={String(state.summary.ready)} label="成熟" />
-                <Metric
-                  value={`${(state.summary.averageMutationChance * 100).toFixed(1)}%`}
-                  label="平均灵变"
-                />
-              </div>
-            </InkCard>
-
-            {isSelf ? (
-              <InkCard className="mb-0" padding="md">
-                <PanelTitle title="灵种匣" meta={`${state.seeds.length}类`} />
-                <div className="space-y-2">
-                  {state.seeds.length === 0 ? (
-                    <p className="text-ink-secondary text-xs">暂无灵种。</p>
-                  ) : (
-                    state.seeds.slice(0, 5).map((seed) => (
-                      <div
-                        key={seed.materialId}
-                        className="flex items-center justify-between border-b border-dashed border-current/10 pb-2 text-xs last:border-0 last:pb-0"
-                      >
-                        <span>{seed.herbName} · {seed.seedQuality}</span>
-                        <span className="text-ink-secondary">×{seed.quantity}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </InkCard>
-            ) : null}
-
-            <InkCard className="mb-0" padding="md">
-              <PanelTitle title="访田记录" meta={`${state.logs.length}条`} />
-              <div className="space-y-2">
-                {state.logs.length === 0 ? (
-                  <p className="text-ink-secondary text-xs leading-6">
-                    今日田间清静，尚无人留下足迹。
-                  </p>
-                ) : (
-                  state.logs.slice(0, 5).map((log) => (
-                    <div
-                      key={log.id}
-                      className="border-b border-dashed border-current/10 pb-2 text-xs leading-5 last:border-0 last:pb-0"
-                    >
-                      {log.message}
-                    </div>
-                  ))
-                )}
-              </div>
-            </InkCard>
-
-            {isSelf ? (
-              <InkCard className="mb-0" padding="md">
-                <PanelTitle title="药田行动" meta="轻操作" />
-                <div className="grid grid-cols-2 gap-2">
-                  <InkButton
-                    variant="primary"
-                    disabled={garden.busy || state.summary.ready === 0}
-                    onClick={() => {
-                      void garden
-                        .harvestAll()
-                        .then((result) => {
-                          const total = result.results.reduce(
-                            (sum, item) =>
-                              sum + item.quantity + (item.mutation ? 1 : 0),
-                            0,
-                          );
-                          pushToast({
-                            message: `一键收获完成，共收入 ${total} 份灵药。`,
-                            tone: 'success',
-                          });
-                        })
-                        .catch(() => undefined);
-                    }}
-                  >
-                    一键收获
-                  </InkButton>
-                  <InkButton
-                    disabled={garden.busy}
-                    onClick={() => {
-                      const empty = state.plots.find(
-                        (plot) => plot.status === 'empty',
-                      );
-                      if (empty) showSeedPicker(empty.slot);
-                      else
-                        pushToast({
-                          message: '六块灵畦都已有灵植。',
-                          tone: 'warning',
-                        });
-                    }}
-                  >
-                    播种
-                  </InkButton>
-                </div>
-              </InkCard>
-            ) : null}
-
-            {isSelf ? (
-              <InkCard className="mb-0" padding="md">
-                <PanelTitle title="好友药田" meta="可回访" />
-                <div className="space-y-2">
-                  {state.friends.length === 0 ? (
-                    <p className="text-ink-secondary text-xs leading-6">
-                      好友名录尚空。结识道友后，可持访客令互访药田。
-                    </p>
-                  ) : (
-                    state.friends.slice(0, 8).map((friend) => (
-                      <button
-                        key={friend.cultivatorId}
-                        type="button"
-                        className="hover:bg-ink/5 flex w-full items-center justify-between border-b border-dashed border-current/10 py-1.5 text-left text-xs last:border-0"
-                        onClick={() => setVisitOwnerId(friend.cultivatorId)}
-                      >
-                        <span>
-                          {friend.name}
-                          <span className="text-ink-secondary ml-1">· {friend.realm}</span>
-                        </span>
-                        <span
-                          className={
-                            friend.readyPlots > 0
-                              ? 'text-crimson'
-                              : 'text-ink-secondary'
-                          }
-                        >
-                          {friend.readyPlots > 0
-                            ? `${friend.readyPlots}畦成熟`
-                            : friend.growingPlots > 0
-                              ? '生长中'
-                              : '空田'}
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </InkCard>
-            ) : null}
-          </aside>
-        </div>
-      </div>
-      <InkDialog dialog={dialog} onClose={() => setDialog(null)} />
-    </SectScene>
-  );
-}
-
-function HerbPlot({
-  plot,
-  now,
-  isSelf,
-  onClick,
-}: {
-  plot: HerbGardenPlotView;
-  now: number;
-  isSelf: boolean;
-  onClick: () => void;
-}) {
-  if (plot.status === 'empty') {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={!isSelf}
-        className="relative min-h-48 overflow-hidden border border-stone-900/20 bg-[repeating-linear-gradient(170deg,rgba(62,45,30,0.09)_0_2px,transparent_2px_22px),linear-gradient(150deg,rgba(132,105,72,0.48),rgba(102,82,58,0.52))] p-3 text-left disabled:cursor-default sm:min-h-52"
-      >
-        <span className="text-bgpaper/75 text-[10px] tracking-[0.15em]">
-          {SLOT_LABELS[plot.slot - 1]}
-        </span>
-        <span className="absolute inset-0 grid place-items-center text-center text-bgpaper/80">
-          <span>
-            <span className="block text-4xl font-light">＋</span>
-            <span className="mt-1 block text-xs tracking-[0.18em]">
-              {isSelf ? '播下灵种' : '空闲灵畦'}
-            </span>
-          </span>
-        </span>
-      </button>
-    );
-  }
-
-  const ready = plot.status === 'ready';
-  const mutation = Boolean(
-    ready && plot.mutationRank && plot.mutationRank !== plot.herbRank,
-  );
-  const progress = getGrowthProgress(plot, now);
-  const status = mutation
-    ? '灵机异动'
-    : ready
-      ? isSelf
-        ? '可收获'
-        : plot.canSteal
-          ? '可采一株'
-          : '已成熟'
-      : !isSelf && plot.canHelp
-        ? '可聚灵'
-        : '生长中';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="relative min-h-48 overflow-hidden border border-stone-900/25 bg-[repeating-linear-gradient(170deg,rgba(62,45,30,0.13)_0_2px,transparent_2px_22px),linear-gradient(150deg,rgba(125,96,62,0.72),rgba(91,73,51,0.75))] p-3 text-left transition-transform hover:-translate-y-0.5 sm:min-h-52"
-    >
-      <div className="flex items-start justify-between gap-2 text-[10px]">
-        <span className="text-bgpaper/75 tracking-[0.15em]">
-          {SLOT_LABELS[plot.slot - 1]}
-        </span>
-        <span className="border border-bgpaper/20 bg-bgpaper/80 px-2 py-0.5 text-stone-800">
-          {status}
-        </span>
-      </div>
-      <PlantGlyph element={plot.element} ready={ready} mutation={mutation} />
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-stone-950/85 via-stone-900/72 to-transparent px-3 pb-3 pt-9 text-bgpaper">
-        <div className="flex items-end justify-between gap-2">
-          <strong className="font-medium tracking-[0.08em]">{plot.herbName}</strong>
-          <span className="text-[10px] text-stone-200/80">
-            {plot.herbRank} · {plot.seedQuality}
-          </span>
-        </div>
-        <div className="mt-2 h-0.5 bg-white/15">
-          <div
-            className="h-full bg-lime-200/70"
-            style={{ width: `${Math.round(progress * 100)}%` }}
-          />
-        </div>
-        <div className="mt-1.5 flex justify-between gap-2 text-[10px] text-stone-200/85">
-          <span>{ready ? '已成熟' : formatRemaining(plot.readyAt, now)}</span>
-          <span>灵变 {((plot.mutationChance ?? 0) * 100).toFixed(1)}%</span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function PlantGlyph({
-  element,
-  ready,
-  mutation,
-}: {
-  element?: string;
-  ready: boolean;
-  mutation: boolean;
-}) {
-  const accent =
-    element === '火'
-      ? 'text-orange-200'
-      : element === '水' || element === '冰'
-        ? 'text-cyan-100'
-        : element === '雷'
-          ? 'text-amber-100'
-          : 'text-lime-100';
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-11 grid place-items-center">
-      <div
-        className={`relative text-center ${accent} ${
-          mutation ? 'drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]' : ''
-        }`}
-      >
-        {mutation ? (
-          <span className="absolute -left-8 -top-3 animate-pulse text-lg">✦</span>
-        ) : null}
-        <span className="block text-5xl leading-none sm:text-6xl">
-          {ready ? '♣' : '♧'}
-        </span>
-        <span className="mt-1 block text-[10px] tracking-[0.28em] text-bgpaper/70">
-          {ready ? '灵药已成' : '草木生发'}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function PlotDetail({
-  plot,
-  now,
-  isSelf,
-}: {
-  plot: HerbGardenPlotView;
-  now: number;
-  isSelf: boolean;
-}) {
-  const mutation = Boolean(
-    plot.status === 'ready' &&
-      plot.mutationRank &&
-      plot.mutationRank !== plot.herbRank,
-  );
-  return (
-    <div className="space-y-3 text-sm">
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-current/10 pb-3 text-xs">
-        <DetailLine label="灵药品阶" value={plot.herbRank ?? '—'} />
-        <DetailLine label="种子种质" value={plot.seedQuality ?? '—'} />
-        <DetailLine
-          label="成熟状态"
-          value={plot.status === 'ready' ? '已成熟' : formatRemaining(plot.readyAt, now)}
-        />
-        <DetailLine
-          label="当前药量"
-          value={`${plot.remainingYield ?? 0} / ${plot.baseYield ?? 0}株`}
-        />
-        <DetailLine
-          label="灵变概率"
-          value={`${((plot.mutationChance ?? 0) * 100).toFixed(2)}%`}
-        />
-        <DetailLine
-          label="留种概率"
-          value={`${((plot.seedReturnChance ?? 0) * 100).toFixed(0)}%`}
-        />
-      </div>
-
-      {mutation ? (
-        <div className="border-l-2 border-amber-700/50 bg-amber-800/5 px-3 py-2 text-xs leading-6">
-          <strong>天地灵机异动。</strong> 此株成熟时出现罕见灵变；结算会把一份普通产量转换为「{plot.mutationRank}」灵药，不额外复制基础数量。
-        </div>
-      ) : null}
-
-      {plot.modifiers?.length ? (
-        <div>
-          <p className="text-ink-secondary mb-2 text-xs tracking-[0.12em]">
-            本轮生效缘由
-          </p>
-          <div className="space-y-2">
-            {plot.modifiers.map((modifier, index) => (
-              <div
-                key={`${modifier.source}-${index}`}
-                className="border-l border-emerald-900/30 pl-3 text-xs leading-5"
-              >
-                <strong>{modifier.label}</strong>
-                <p className="text-ink-secondary">{modifier.detail}</p>
-              </div>
-            ))}
           </div>
+          <form
+            className="space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const value = question.trim();
+              if (!value) return;
+              void props
+                .onConsult(value)
+                .then(() => setQuestion(''))
+                .catch(() => undefined);
+            }}
+          >
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <label
+                htmlFor={`garden-question-${plot.plotId}`}
+                className="text-ink-secondary"
+              >
+                请教药园执事
+              </label>
+              <span className="text-ink-secondary">
+                {plot.questionAllowance?.used ?? 0}/
+                {plot.questionAllowance?.limit ?? 2}
+              </span>
+            </div>
+            <textarea
+              id={`garden-question-${plot.plotId}`}
+              value={question}
+              maxLength={120}
+              rows={2}
+              placeholder="例：这株灵植似乎更喜湿润土性吗？"
+              onChange={(event) => setQuestion(event.target.value)}
+              className="border-ink/15 bg-bgpaper/70 focus-visible:outline-crimson w-full resize-y border px-3 py-2 text-sm leading-6 focus-visible:outline-2"
+            />
+            <InkButton
+              type="submit"
+              variant="secondary"
+              disabled={
+                props.busy ||
+                question.trim().length < 2 ||
+                (plot.questionAllowance?.used ?? 0) >=
+                  (plot.questionAllowance?.limit ?? 2)
+              }
+            >
+              送出问话
+            </InkButton>
+          </form>
+          <p className="text-ink-secondary text-xs leading-5">
+            执事只依据你已发现的征兆作答；养护方法、消耗与收获仍由固定规则结算。
+          </p>
         </div>
       ) : null}
-
-      {!isSelf ? (
-        <p className="text-ink-secondary border-t border-current/10 pt-3 text-xs leading-6">
-          本茬访客已采 {plot.stolenCount ?? 0}/{plot.stealLimit ?? 0} 株；每位好友每茬最多采一株，帮助聚灵最多接受三位道友。
-        </p>
+      {plot.history?.length ? (
+        <CultivationJournal history={plot.history} />
       ) : null}
-    </div>
+    </NpcConversation>
   );
 }
 
-function SeedChoice({
-  seed,
-  disabled,
-  onPlant,
+function CultivationJournal({
+  history,
 }: {
-  seed: HerbGardenSeedStack;
-  disabled: boolean;
-  onPlant: () => Promise<void>;
+  history: NonNullable<HerbGardenPlotView['history']>;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dashed border-current/10 pb-2 last:border-0">
-      <div>
-        <p className="text-sm">{seed.herbName} · {seed.seedQuality}</p>
-        <p className="text-ink-secondary mt-1 text-xs">
-          {seed.herbRank} · {seed.element}属 · 持有 ×{seed.quantity} · 药圃 Lv.{seed.minGardenLevel}+
-        </p>
+    <div className="border-ink/10 mt-5 border-t pt-4">
+      <p className="text-ink-secondary mb-2 text-xs">培育札记</p>
+      <div className="space-y-3">
+        {history.map((record) => {
+          if (record.kind === 'observation') {
+            return (
+              <div
+                key={record.recordId}
+                className="border-ink/10 border-b pb-3 last:border-0"
+              >
+                <p className="text-sm">
+                  {STAGE_NAMES[record.stage]} · {record.observationName}
+                </p>
+                <p className="mt-1 text-xs leading-5">{record.narrative}</p>
+              </div>
+            );
+          }
+          if (record.kind === 'consultation') {
+            return (
+              <div
+                key={record.recordId}
+                className="border-ink/10 border-b pb-3 last:border-0"
+              >
+                <p className="text-sm">
+                  {STAGE_NAMES[record.stage]} · 请教执事
+                </p>
+                <p className="text-ink-secondary mt-1 text-xs leading-5">
+                  问：{record.question}
+                </p>
+                <p className="mt-1 text-xs leading-5">答：{record.reply}</p>
+              </div>
+            );
+          }
+          return (
+            <div
+              key={record.recordId}
+              className="border-ink/10 border-b pb-3 last:border-0"
+            >
+              <p className="text-sm">
+                {STAGE_NAMES[record.stage]} · {record.actionName}
+              </p>
+              <p className="text-ink-secondary mt-1 text-xs leading-5">
+                {record.discoveredHint}
+              </p>
+              <p className="mt-1 text-xs leading-5">{record.narrative}</p>
+            </div>
+          );
+        })}
       </div>
-      <InkButton
-        variant="primary"
-        disabled={disabled}
-        onClick={() => void onPlant()}
+    </div>
+  );
+}
+
+function SeedList({ state }: { state: HerbGardenState }) {
+  return state.seeds.length ? (
+    <div className="border-ink/10 border-t">
+      {state.seeds.map((seed) => (
+        <div key={seed.materialId} className="border-ink/10 border-b py-3">
+          <div className="flex justify-between gap-4 text-sm">
+            <span>
+              {seed.name} · {seed.rank}
+            </span>
+            <span className="text-ink-secondary">余 {seed.quantity}</span>
+          </div>
+          <p className="text-ink-secondary mt-1 text-xs leading-5">
+            {seed.description ?? '种性征兆尚未记入谱录。'}
+          </p>
+          {seed.lockedReason ? (
+            <p className="text-crimson mt-1 text-xs">{seed.lockedReason}</p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  ) : (
+    <p className="text-ink-secondary text-sm leading-7">
+      灵种匣目前为空。可从副本、每日历练、坊市或宗门宝库取得种子。
+    </p>
+  );
+}
+
+function GardenLogs({ state }: { state: HerbGardenState }) {
+  return state.logs.length ? (
+    <div className="border-ink/10 border-t">
+      {state.logs.map((log) => (
+        <div key={log.id} className="border-ink/10 border-b py-3">
+          <p className="text-sm leading-6">{log.message}</p>
+          <p className="text-ink-secondary mt-1 text-xs">
+            {new Date(log.createdAt).toLocaleString('zh-CN')}
+          </p>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <p className="text-ink-secondary text-sm">田间近日清静。</p>
+  );
+}
+
+function FriendList({
+  state,
+  onVisit,
+}: {
+  state: HerbGardenState;
+  onVisit(cultivatorId: string): void;
+}) {
+  return state.friends.length ? (
+    <div className="border-ink/10 border-t">
+      {state.friends.map((friend) => (
+        <button
+          key={friend.cultivatorId}
+          type="button"
+          onClick={() => onVisit(friend.cultivatorId)}
+          className="border-ink/10 hover:bg-ink/[0.035] flex w-full justify-between border-b py-3 text-left text-sm transition-colors"
+        >
+          <span>
+            {friend.name} · {friend.realm}
+          </span>
+          <span
+            className={
+              friend.readyPlots ? 'text-crimson' : 'text-ink-secondary'
+            }
+          >
+            {friend.readyPlots
+              ? `${friend.readyPlots} 畦成熟`
+              : friend.growingPlots
+                ? `${friend.growingPlots} 畦生长中`
+                : '田间空置'}
+          </span>
+        </button>
+      ))}
+    </div>
+  ) : (
+    <p className="text-ink-secondary text-sm">结识道友后即可互访灵田。</p>
+  );
+}
+
+function QuietSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string; disabled?: boolean }>;
+  onChange(value: string): void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-ink-secondary mb-2 block text-xs">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="border-ink/15 bg-bgpaper/70 focus-visible:outline-crimson w-full border px-3 py-2 text-sm focus-visible:outline-2"
       >
-        播种
-      </InkButton>
-    </div>
+        {!options.length ? <option value="">暂无可选项</option> : null}
+        {options.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+            disabled={option.disabled}
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
-function GardenTag({ children }: { children: ReactNode }) {
-  return (
-    <span className="border border-emerald-950/15 bg-bgpaper/40 px-2 py-1 text-emerald-950/70">
-      {children}
-    </span>
-  );
+function costLabel(method: CultivationMethodDefinition): string {
+  const cost = method.cost;
+  if (cost.kind === 'time') return '不耗资源';
+  if (cost.kind === 'qi') return `${cost.amount} 天地灵气`;
+  if (cost.kind === 'spirit_stones') return `${cost.amount} 灵石`;
+  if (cost.kind === 'mp') return `${cost.amount} 法力`;
+  const material = `${cost.amount} 份${materialTypeLabel(cost.materialType)}`;
+  return cost.spiritStones
+    ? `${material}，${cost.spiritStones} 灵石`
+    : material;
 }
 
-function PanelTitle({ title, meta }: { title: string; meta: string }) {
-  return (
-    <div className="mb-3 flex items-center justify-between border-b border-current/10 pb-2">
-      <strong className="text-sm tracking-[0.1em]">{title}</strong>
-      <span className="text-ink-secondary text-[10px]">{meta}</span>
-    </div>
-  );
+function materialTypeLabel(type: Exclude<MaterialType, 'seed'>): string {
+  const labels: Partial<Record<MaterialType, string>> = {
+    herb: '药材',
+    ore: '矿石',
+    monster: '妖兽材料',
+    aux: '辅材',
+    tcdb: '天材地宝',
+    gongfa_manual: '功法典籍',
+    skill_manual: '神通典籍',
+  };
+  return labels[type] ?? '材料';
 }
 
-function Metric({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="px-1">
-      <strong className="block text-base font-medium text-emerald-950/75">{value}</strong>
-      <span className="text-ink-secondary text-[10px]">{label}</span>
-    </div>
-  );
+function plotStatusText(plot: HerbGardenPlotView): string {
+  if (plot.status === 'empty') return '空畦';
+  if (plot.status === 'ready') return '成熟';
+  if (plot.status === 'awaiting_action') return '待择法';
+  return STAGE_NAMES[plot.stage ?? 'germination'];
 }
 
-function DetailLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-ink-secondary">{label}</span>
-      <strong className="font-medium">{value}</strong>
-    </div>
-  );
-}
-
-function getGrowthProgress(plot: HerbGardenPlotView, now: number): number {
-  if (plot.status === 'ready') return 1;
-  const plantedAt = plot.plantedAt ? new Date(plot.plantedAt).getTime() : now;
-  const readyAt = plot.readyAt ? new Date(plot.readyAt).getTime() : now;
-  if (readyAt <= plantedAt) return 1;
-  return Math.max(0, Math.min(1, (now - plantedAt) / (readyAt - plantedAt)));
-}
-
-function formatRemaining(readyAt: string | undefined, now: number): string {
-  if (!readyAt) return '—';
-  const remaining = Math.max(0, new Date(readyAt).getTime() - now);
-  const minutes = Math.ceil(remaining / 60_000);
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return hours > 0 ? `剩余 ${hours}时${rest}分` : `剩余 ${rest}分`;
+function formatRemaining(ms: number): string {
+  const minutes = Math.max(0, Math.ceil(ms / 60_000));
+  if (minutes <= 0) return '片刻';
+  if (minutes < 60) return `${minutes} 分钟`;
+  return `${Math.floor(minutes / 60)} 时 ${minutes % 60} 分`;
 }
