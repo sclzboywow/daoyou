@@ -103,6 +103,15 @@ export function useHerbGarden(ownerId?: string) {
     [],
   );
 
+  const sow = useCallback(
+    (slot: number, seedMaterialId: string) =>
+      mutate<GardenResponse>('/api/herb-garden/sow', {
+        slot,
+        seedMaterialId,
+      }),
+    [mutate],
+  );
+
   const plant = useCallback(
     (
       slot: number,
@@ -197,6 +206,7 @@ export function useHerbGarden(ownerId?: string) {
     error,
     reload,
     retry: reload,
+    sow,
     plant,
     cultivate,
     observe,

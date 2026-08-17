@@ -13,6 +13,7 @@ import {
   plantHerb,
   stealFriendHerb,
 } from '@server/lib/services/HerbGardenService';
+import { sowHerbSimply } from '@server/lib/services/SimpleHerbGardenService';
 import {
   HERB_GARDEN_ACTION_VALUES,
   HERB_GARDEN_OBSERVATION_VALUES,
@@ -23,6 +24,10 @@ import { z } from 'zod';
 
 const router = new Hono<AppEnv>();
 
+const SowSchema = z.object({
+  slot: z.number().int().min(1).max(6),
+  seedMaterialId: z.string().uuid(),
+});
 const PlantSchema = z.object({
   slot: z.number().int().min(1).max(6),
   seedMaterialId: z.string().uuid(),
@@ -76,6 +81,19 @@ router.get('/visit/:ownerId', requireActiveCultivatorRef(), async (c) => {
     const ownerId = z.string().uuid().parse(c.req.param('ownerId'));
     const garden = await getHerbGardenState(cultivator.cultivatorId, ownerId);
     return c.json({ garden });
+  } catch (error) {
+    return handleError(c, error);
+  }
+});
+
+router.post('/sow', requireActiveCultivatorRef(), async (c) => {
+  const cultivator = c.get('activeCultivatorRef');
+  if (!cultivator) return c.json({ error: '未授权访问' }, 401);
+  try {
+    const input = SowSchema.parse(await c.req.json());
+    await sowHerbSimply(cultivator.cultivatorId, input);
+    const garden = await getHerbGardenState(cultivator.cultivatorId);
+    return c.json({ garden, message: '灵种已入土，之后静候成熟即可。' });
   } catch (error) {
     return handleError(c, error);
   }
