@@ -3,6 +3,7 @@ import type {
   MaterialType,
   Quality,
 } from '@shared/types/constants';
+import { SPIRIT_SEED_LIBRARY_CATALOG } from './spiritSeedCatalog';
 
 export interface FallbackMaterialPreset {
   name: string;
@@ -20,64 +21,7 @@ const EMPTY_PRESET: FallbackMaterialPreset = {
 };
 
 export const FALLBACK_MATERIAL_LIBRARY: Record<MaterialType, QualityPresets> = {
-  seed: {
-    凡品: [
-      {
-        name: '青芽灵种',
-        description: '气息微弱却完整的草木灵种，适合初次培育。',
-        element: '木',
-      },
-    ],
-    灵品: [
-      {
-        name: '晨露灵籽',
-        description: '表面凝有晨露微光，内蕴种性尚不可知。',
-        element: '水',
-      },
-    ],
-    玄品: [
-      {
-        name: '赤霞玄种',
-        description: '种壳浮现赤霞细纹，需经培育方知归属。',
-        element: '火',
-      },
-    ],
-    真品: [
-      {
-        name: '岩心道籽',
-        description: '沉稳如石的灵种，内里生机深藏不露。',
-        element: '土',
-      },
-    ],
-    地品: [
-      {
-        name: '风纹异种',
-        description: '风纹绕壳自行游走，来历与产物皆未可知。',
-        element: '风',
-      },
-    ],
-    天品: [
-      {
-        name: '雷髓天种',
-        description: '偶有雷芒自种壳跃出，蕴含罕见草木灵机。',
-        element: '雷',
-      },
-    ],
-    仙品: [
-      {
-        name: '太阴仙籽',
-        description: '寒光内敛，仿佛一呼一吸皆应天地节律。',
-        element: '冰',
-      },
-    ],
-    神品: [
-      {
-        name: '混元道种',
-        description: '种壳道纹天成，尚未入土便引得灵气环绕。',
-        element: '木',
-      },
-    ],
-  },
+  seed: SPIRIT_SEED_LIBRARY_CATALOG,
   herb: {
     凡品: [
       {
