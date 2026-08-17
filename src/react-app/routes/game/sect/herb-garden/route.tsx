@@ -867,7 +867,7 @@ function ObservationTools({
 function HarvestSummary({ plot }: { plot: HerbGardenPlotView }) {
   if (!plot.outcomePreview) return null;
   const cultivation =
-    plot.history?.filter((record) => record.kind !== 'observation' && record.kind !== 'consultation') ?? [];
+    plot.history?.filter(isCultivationJournalEntry) ?? [];
   const favorable = cultivation.filter(
     (record) =>
       record.assessment === 'resonant' || record.assessment === 'aligned',
@@ -983,6 +983,9 @@ function CultivationJournal({
                 <p className="mt-1 text-xs leading-5">答：{record.reply}</p>
               </div>
             );
+          }
+          if (!isCultivationJournalEntry(record)) {
+            return null;
           }
           const assessment = assessmentCopy(record.assessment);
           return (
@@ -1161,8 +1164,25 @@ function latestMethodAssessment(
   return record?.assessment;
 }
 
-function assessmentCopy(assessment: StageAssessment) {
-  return ASSESSMENT_COPY[assessment];
+function assessmentCopy(assessment?: StageAssessment | string | null) {
+  if (assessment && assessment in ASSESSMENT_COPY) {
+    return ASSESSMENT_COPY[assessment as StageAssessment];
+  }
+  return {
+    label: '· 未记',
+    detail: '这一阶段的反馈未能完整记入札记。',
+  };
+}
+
+function isCultivationJournalEntry(
+  record: HerbGardenJournalEntry,
+): record is HerbGardenStageRecord {
+  return (
+    record.kind !== 'observation' &&
+    record.kind !== 'consultation' &&
+    typeof record.assessment === 'string' &&
+    typeof record.actionName === 'string'
+  );
 }
 
 function methodEffectLabels(entry: GardenMethodOption): string[] {
@@ -1173,7 +1193,7 @@ function methodEffectLabels(entry: GardenMethodOption): string[] {
       treasure_return: ['尝试天材地宝', '品质与长势要求高'],
       natural_form: ['顺应隐藏种性', '不强定产物形态'],
     };
-    return labels[entry.id];
+    return labels[entry.id] ?? [];
   }
   return [
     ...new Set([

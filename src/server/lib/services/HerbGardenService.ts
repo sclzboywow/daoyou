@@ -39,6 +39,7 @@ import {
   type HerbGardenConsultationRecord,
   type HerbGardenFriendView,
   type HerbGardenHarvestResult,
+  type HerbGardenJournalEntry,
   type HerbGardenLogView,
   type HerbGardenObservationKind,
   type HerbGardenObservationRecord,
@@ -47,6 +48,7 @@ import {
   type HerbGardenState,
   type SpiritSeedDetails,
   type SpiritSeedSpec,
+  type StageAssessment,
   type StageRuleResolution,
 } from '@shared/contracts/herbGarden';
 import type {
@@ -169,6 +171,68 @@ function isCultivationRecord(
   entry: StoredJournalEntry,
 ): entry is StoredStageRecord {
   return !isObservationRecord(entry) && !isConsultationRecord(entry);
+}
+
+function legacyFitToAssessment(fit: unknown): StageAssessment {
+  const value = typeof fit === 'number' ? fit : Number(fit);
+  if (!Number.isFinite(value) || value === 0) return 'neutral';
+  if (value > 0) return 'aligned';
+  return 'conflict';
+}
+
+function normalizeJournalHistory(entries: unknown): HerbGardenJournalEntry[] {
+  if (!Array.isArray(entries)) return [];
+  const normalized: HerbGardenJournalEntry[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const raw = entry as Record<string, unknown>;
+    if (raw.kind === 'observation') {
+      normalized.push(entry as HerbGardenObservationRecord);
+      continue;
+    }
+    if (raw.kind === 'consultation') {
+      normalized.push(entry as HerbGardenConsultationRecord);
+      continue;
+    }
+    if (typeof raw.assessment === 'string' && typeof raw.actionId === 'string') {
+      normalized.push({
+        ...(entry as HerbGardenStageRecord),
+        kind: 'cultivation',
+      });
+      continue;
+    }
+    // 早期灵药圃札记：methodId/methodName/fit/feedback
+    if (
+      typeof raw.methodId === 'string' &&
+      typeof raw.methodName === 'string' &&
+      typeof raw.stage === 'string'
+    ) {
+      const feedback =
+        typeof raw.feedback === 'string'
+          ? raw.feedback
+          : '旧日札记未留下更多细节。';
+      normalized.push({
+        kind: 'cultivation',
+        recordId:
+          typeof raw.recordId === 'string'
+            ? raw.recordId
+            : `legacy:${raw.methodId}:${String(raw.resolvedAt ?? raw.stage)}`,
+        stage: raw.stage as ActiveHerbGardenStage,
+        actionId: raw.methodId as HerbGardenActionId,
+        actionName: raw.methodName,
+        assessment: legacyFitToAssessment(raw.fit),
+        manifestation: 'legacy_record',
+        discoveredHint: feedback,
+        narrative: feedback,
+        resolvedAt:
+          typeof raw.resolvedAt === 'string'
+            ? raw.resolvedAt
+            : new Date(0).toISOString(),
+        narrativeSource: 'fallback',
+      });
+    }
+  }
+  return normalized;
 }
 
 const OBSERVATION_NAMES: Record<HerbGardenObservationKind, string> = {
@@ -1672,24 +1736,22 @@ export async function getHerbGardenState(
       plantedAt: row.plantedAt.toISOString(),
       readyAt: row.readyAt.toISOString(),
       history: isSelf
-        ? ((row.stageHistory as StoredJournalEntry[] | null) ?? [])
+        ? normalizeJournalHistory(row.stageHistory)
         : undefined,
       observationAllowance: isSelf
         ? {
-            used: (
-              (row.stageHistory as StoredJournalEntry[] | null) ?? []
-            ).filter(
-              (entry) => isObservationRecord(entry) && entry.stage === stage,
+            used: normalizeJournalHistory(row.stageHistory).filter(
+              (entry) =>
+                entry.kind === 'observation' && entry.stage === stage,
             ).length,
             limit: HERB_GARDEN_MAX_OBSERVATIONS_PER_STAGE,
           }
         : undefined,
       questionAllowance: isSelf
         ? {
-            used: (
-              (row.stageHistory as StoredJournalEntry[] | null) ?? []
-            ).filter(
-              (entry) => isConsultationRecord(entry) && entry.stage === stage,
+            used: normalizeJournalHistory(row.stageHistory).filter(
+              (entry) =>
+                entry.kind === 'consultation' && entry.stage === stage,
             ).length,
             limit: HERB_GARDEN_MAX_QUESTIONS_PER_STAGE,
           }
