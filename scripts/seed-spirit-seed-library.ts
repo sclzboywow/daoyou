@@ -23,9 +23,10 @@ import type { Quality } from '@shared/types/constants';
 
 const dryRun = process.argv.includes('--dry-run');
 
-function buildEntries(): CreateItemLibraryEntry[] {
+async function main() {
   assertSpiritSeedCatalogCoverage(DAILY_MATERIAL_LIBRARY_TARGETS.seed);
-  return listSpiritSeedCatalogEntries().map(({ quality, index, itemId, preset }) => ({
+  const catalog = listSpiritSeedCatalogEntries();
+  const entries = catalog.map(({ quality, index, itemId, preset }) => ({
     itemId,
     type: 'material' as const,
     status: 'published' as const,
@@ -41,15 +42,11 @@ function buildEntries(): CreateItemLibraryEntry[] {
       catalogIndex: index,
       generatedAt: new Date().toISOString(),
     },
-  }));
-}
+  })) satisfies CreateItemLibraryEntry[];
 
-async function main() {
-  const entries = buildEntries();
-  const byQuality = entries.reduce(
+  const byQuality = catalog.reduce(
     (acc, entry) => {
-      const quality = entry.payload.rank as Quality;
-      acc[quality] = (acc[quality] ?? 0) + 1;
+      acc[entry.quality] = (acc[entry.quality] ?? 0) + 1;
       return acc;
     },
     {} as Partial<Record<Quality, number>>,
@@ -70,10 +67,10 @@ async function main() {
 
   if (dryRun) {
     console.log(
-      entries
+      catalog
         .map(
           (entry) =>
-            `${entry.itemId}\t${entry.payload.rank}\t${entry.payload.element}\t${entry.payload.name}`,
+            `${entry.itemId}\t${entry.quality}\t${entry.preset.element}\t${entry.preset.name}`,
         )
         .join('\n'),
     );
