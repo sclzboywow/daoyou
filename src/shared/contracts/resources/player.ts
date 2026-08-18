@@ -7,6 +7,7 @@ import {
   REALM_VALUES,
   SPIRITUAL_ROOT_GRADE_VALUES,
 } from '@shared/types/constants';
+import { FATE_EFFECT_TYPE_VALUES } from '@shared/types/cultivator';
 import type { TaskInstance } from '@shared/types/task';
 import { z } from 'zod';
 import type { PlayerResourceMap } from '../player';
@@ -133,19 +134,7 @@ const fateEffectEntrySchema = z
     effectId: z.string(),
     scope: z.enum(['daily', 'drawback']),
     polarity: z.enum(['boon', 'burden']),
-    effectType: z.enum([
-      'retreat_exp_multiplier',
-      'retreat_insight_multiplier',
-      'breakthrough_bonus',
-      'natural_recovery_multiplier',
-      'toxicity_penalty_multiplier',
-      'alchemy_spirit_stone_multiplier',
-      'refine_spirit_stone_multiplier',
-      'enlightenment_insight_multiplier',
-      'inn_cultivation_loss_multiplier',
-      'system_spirit_stone_multiplier',
-      'market_purchase_price_multiplier',
-    ]),
+    effectType: z.enum(FATE_EFFECT_TYPE_VALUES),
     value: z.number(),
     label: z.string(),
     description: z.string(),

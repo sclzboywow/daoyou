@@ -93,5 +93,23 @@ describe('fate context', () => {
     expect(context.alchemySpiritStoneReduction).toBe(0);
     expect(context.marketPurchasePriceReduction).toBe(0);
     expect(getMarketPurchasePriceMultiplier(context)).toBe(1);
+    expect(context.herbGrowthTimeMultiplier).toBe(1);
+    expect(context.herbYieldMultiplier).toBe(1);
+    expect(context.herbMutationBonus).toBe(0);
+    expect(context.herbSeedReturnBonus).toBe(0);
+  });
+
+  it('aggregates herb garden fate effects without dropping them', () => {
+    const context = evaluateFateContext([
+      fate('herb_growth_time_multiplier', 0.8),
+      fate('herb_yield_multiplier', 1.5),
+      fate('herb_mutation_bonus', 0.1),
+      fate('herb_seed_return_bonus', 0.2),
+    ]);
+
+    expect(context.herbGrowthTimeMultiplier).toBeCloseTo(0.8);
+    expect(context.herbYieldMultiplier).toBeCloseTo(1.5);
+    expect(context.herbMutationBonus).toBeCloseTo(0.1);
+    expect(context.herbSeedReturnBonus).toBeCloseTo(0.2);
   });
 });

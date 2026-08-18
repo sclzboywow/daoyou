@@ -89,22 +89,25 @@ export type FateEffectScope = 'daily' | 'drawback';
 
 export type FateEffectPolarity = 'boon' | 'burden';
 
-export type FateEffectType =
-  | 'retreat_exp_multiplier'
-  | 'retreat_insight_multiplier'
-  | 'breakthrough_bonus'
-  | 'natural_recovery_multiplier'
-  | 'toxicity_penalty_multiplier'
-  | 'alchemy_spirit_stone_multiplier'
-  | 'refine_spirit_stone_multiplier'
-  | 'enlightenment_insight_multiplier'
-  | 'inn_cultivation_loss_multiplier'
-  | 'system_spirit_stone_multiplier'
-  | 'market_purchase_price_multiplier'
-  | 'herb_growth_time_multiplier'
-  | 'herb_yield_multiplier'
-  | 'herb_mutation_bonus'
-  | 'herb_seed_return_bonus';
+export const FATE_EFFECT_TYPE_VALUES = [
+  'retreat_exp_multiplier',
+  'retreat_insight_multiplier',
+  'breakthrough_bonus',
+  'natural_recovery_multiplier',
+  'toxicity_penalty_multiplier',
+  'alchemy_spirit_stone_multiplier',
+  'refine_spirit_stone_multiplier',
+  'enlightenment_insight_multiplier',
+  'inn_cultivation_loss_multiplier',
+  'system_spirit_stone_multiplier',
+  'market_purchase_price_multiplier',
+  'herb_growth_time_multiplier',
+  'herb_yield_multiplier',
+  'herb_mutation_bonus',
+  'herb_seed_return_bonus',
+] as const;
+
+export type FateEffectType = (typeof FATE_EFFECT_TYPE_VALUES)[number];
 
 export interface FateEffectRollMeta {
   qualityAnchor: Quality;

@@ -32,6 +32,10 @@ export interface FateContext {
   systemSpiritStoneReduction: number;
   marketPurchasePriceMultiplier: number;
   marketPurchasePriceReduction: number;
+  herbGrowthTimeMultiplier: number;
+  herbYieldMultiplier: number;
+  herbMutationBonus: number;
+  herbSeedReturnBonus: number;
   summary: string;
 }
 
@@ -67,6 +71,10 @@ export function evaluateFateContext(fates: PreHeavenFate[]): FateContext {
   let innCultivationLossReduction = 0;
   let systemSpiritStoneReduction = 0;
   let marketPurchasePriceReduction = 0;
+  let herbGrowthTimeMultiplier = 1;
+  let herbYieldMultiplier = 1;
+  let herbMutationBonus = 0;
+  let herbSeedReturnBonus = 0;
 
   for (const fate of normalized) {
     for (const effect of fate.effects ?? []) {
@@ -103,6 +111,18 @@ export function evaluateFateContext(fates: PreHeavenFate[]): FateContext {
           break;
         case 'market_purchase_price_multiplier':
           marketPurchasePriceReduction += 1 - effect.value;
+          break;
+        case 'herb_growth_time_multiplier':
+          herbGrowthTimeMultiplier *= effect.value;
+          break;
+        case 'herb_yield_multiplier':
+          herbYieldMultiplier *= effect.value;
+          break;
+        case 'herb_mutation_bonus':
+          herbMutationBonus += effect.value;
+          break;
+        case 'herb_seed_return_bonus':
+          herbSeedReturnBonus += effect.value;
           break;
       }
     }
@@ -141,6 +161,10 @@ export function evaluateFateContext(fates: PreHeavenFate[]): FateContext {
     marketPurchasePriceMultiplier: clampNonNegativeMultiplier(
       marketPurchasePriceReduction,
     ),
+    herbGrowthTimeMultiplier,
+    herbYieldMultiplier,
+    herbMutationBonus,
+    herbSeedReturnBonus,
     summary: normalized
       .map((fate) => {
         const summary = summarizeEffects(fate.effects ?? []);
