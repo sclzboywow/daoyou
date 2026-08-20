@@ -200,16 +200,6 @@ export const TIANYAN_SECT_PRESENTATION: SectPresentationTheme = {
         'spirit_vein',
       ),
       hotspot(
-        'garden',
-        '长生圃',
-        '26%',
-        '15%',
-        '/game/sect/herb-garden',
-        'sect.herb_garden.view',
-        '草木长势 · 产出待开放',
-        'herb_garden',
-      ),
-      hotspot(
         'gate',
         '观象门',
         '50%',

@@ -196,16 +196,6 @@ export const YOUDU_SECT_PRESENTATION: SectPresentationTheme = {
         'spirit_vein',
       ),
       hotspot(
-        'garden',
-        '彼岸圃',
-        '70%',
-        '37%',
-        '/game/sect/herb-garden',
-        'sect.herb_garden.view',
-        '草木长势 · 产出待开放',
-        'herb_garden',
-      ),
-      hotspot(
         'gate',
         '无日关',
         '49%',

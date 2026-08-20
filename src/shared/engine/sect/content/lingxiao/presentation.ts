@@ -178,16 +178,7 @@ export const LINGXIAO_SECT_PRESENTATION: SectPresentationTheme = {
         top: '46%',
         note: '矿场巡视 · 灵石收益 · 采矿',
       },
-      {
-        id: 'garden',
-        label: '药田',
-        route: '/game/sect/herb-garden',
-        facility: 'herb_garden',
-        permission: 'sect.herb_garden.view',
-        left: '83%',
-        top: '75%',
-        note: '草木长势 · 产出待开放',
-      },
+
       {
         id: 'gate',
         label: '山门',

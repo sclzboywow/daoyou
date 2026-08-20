@@ -195,16 +195,6 @@ export const WUXIANG_SECT_PRESENTATION: SectPresentationTheme = {
         'spirit_vein',
       ),
       hotspot(
-        'garden',
-        '血莲池',
-        '70%',
-        '39%',
-        '/game/sect/herb-garden',
-        'sect.herb_garden.view',
-        '草木长势 · 产出待开放',
-        'herb_garden',
-      ),
-      hotspot(
         'gate',
         '不二门',
         '49%',

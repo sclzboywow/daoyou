@@ -122,7 +122,6 @@ export const gameDockGroups: GameNavGroup[] = [
       { id: 'sect-alchemy', sceneLabel: '宗门丹房' },
       { id: 'sect-refinery', sceneLabel: '宗门器坊' },
       { id: 'sect-spirit-vein', sceneLabel: '宗门灵脉' },
-      { id: 'sect-herb-garden', sceneLabel: '宗门药田' },
       { id: 'sect-cave', sceneLabel: '弟子居所' },
       { id: 'sect-gate', sceneLabel: '宗门山门' },
       { id: 'sect-gate-sweep', sceneLabel: '清扫山门' },

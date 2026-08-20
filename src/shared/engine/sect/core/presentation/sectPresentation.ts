@@ -247,16 +247,7 @@ const STANDARD_HOTSPOTS: readonly SectMapHotspot[] = [
     top: '0',
     note: '矿场巡视 · 灵石收益 · 采矿',
   },
-  {
-    id: 'garden',
-    label: '药田',
-    route: '/game/sect/herb-garden',
-    facility: 'herb_garden',
-    permission: 'sect.herb_garden.view',
-    left: '0',
-    top: '0',
-    note: '草木长势 · 产出待开放',
-  },
+
   {
     id: 'gate',
     label: '山门',
