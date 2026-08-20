@@ -5,6 +5,9 @@ export const APP_SETTING_KEYS = {
   communityQqGroupNumber: 'community_qq_group_number',
   authPageAnnouncement: 'auth_page_announcement',
   itemLibraryDailyMaterialGeneration: 'item_library_daily_material_generation',
+  websiteContentDraft: 'website_content_draft',
+  websiteContentPublished: 'website_content_published',
+  websiteContentHistory: 'website_content_history',
   afdianSponsorship: 'sponsorship_afdian_config_v1',
 } as const;
 
