@@ -218,19 +218,19 @@ export function ListItemModal({
     materialSortOrder: materialFilters.sortOrder,
   });
   // 凡品/灵品灵田种子不在玄品门槛内，单独拉取后与可上架材料合并展示
+  const materialRankFilter = materialFilters.rank;
   const includeBelowMinSpiritSeeds =
     activeType === 'material' &&
-    (materialFilters.rank === 'all' ||
-      (materialFilters.rank !== 'all' &&
-        AUCTION_BELOW_MIN_QUALITIES.includes(materialFilters.rank))) &&
+    (materialRankFilter === 'all' ||
+      AUCTION_BELOW_MIN_QUALITIES.includes(materialRankFilter)) &&
     (materialFilters.type === 'all' || materialFilters.type === 'aux');
   const spiritSeedInventory = useMaterialInventoryResource({
     pageSize: 50,
     enabled: Boolean(cultivator?.id) && includeBelowMinSpiritSeeds,
     materialRanks:
-      materialFilters.rank === 'all'
+      materialRankFilter === 'all'
         ? AUCTION_BELOW_MIN_QUALITIES
-        : [materialFilters.rank],
+        : [materialRankFilter],
     materialTypes: ['aux'],
     materialElements:
       materialFilters.element === 'all' ? undefined : [materialFilters.element],
