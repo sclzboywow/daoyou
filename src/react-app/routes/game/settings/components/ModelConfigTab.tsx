@@ -1,7 +1,12 @@
 import { InkButton } from '@app/components/ui/InkButton';
 import { InkInput } from '@app/components/ui/InkInput';
 import { InkSelect } from '@app/components/ui/InkSelect';
-import { findLlmProvider, LLM_PROVIDERS } from '@shared/config/llmProviders';
+import { LLM_STORAGE_KEY, readStoredLlmConfig } from '@app/lib/llmConfig';
+import {
+  LLM_PROVIDER_DEFAULT_MODELS,
+  LlmByokConfigSchema,
+  type LlmProviderId,
+} from '@shared/config/llm';
 import { useState } from 'react';
 import {
   SettingsMessage,
@@ -9,32 +14,19 @@ import {
   settingsLabelClass,
 } from './SettingsFields';
 
-const STORAGE_KEY = 'daoyou_llm_config';
-const DEFAULT_PROVIDER = LLM_PROVIDERS[0].id;
-
-function readStoredConfig() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as Record<string, string>;
-  } catch {
-    // ignore invalid local config
-  }
-  return null;
-}
+const PROVIDER_LABELS: Record<LlmProviderId, string> = {
+  deepseek: 'DeepSeek',
+  alibaba: '阿里云百炼（Qwen）',
+};
 
 export function ModelConfigTab() {
-  const stored = readStoredConfig();
-  const defaultProvider = findLlmProvider(stored?.provider || DEFAULT_PROVIDER)
-    ? stored?.provider || DEFAULT_PROVIDER
-    : DEFAULT_PROVIDER;
-  const fallbackProvider = findLlmProvider(defaultProvider) ?? LLM_PROVIDERS[0];
-  const [provider, setProvider] = useState(defaultProvider);
-  const [apiKey, setApiKey] = useState(stored?.apiKey || '');
-  const [model, setModel] = useState(
-    stored?.model || fallbackProvider.model || '',
+  const stored = readStoredLlmConfig();
+  const [provider, setProvider] = useState<LlmProviderId>(
+    stored?.provider ?? 'alibaba',
   );
-  const [fastModel, setFastModel] = useState(
-    stored?.fastModel || fallbackProvider.fastModel || '',
+  const [apiKey, setApiKey] = useState(stored?.apiKey ?? '');
+  const [model, setModel] = useState(
+    stored?.model ?? LLM_PROVIDER_DEFAULT_MODELS.alibaba,
   );
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{
@@ -43,33 +35,28 @@ export function ModelConfigTab() {
   } | null>(null);
   const [hasConfig, setHasConfig] = useState(!!stored);
 
-  const currentProvider = findLlmProvider(provider);
-  const canSubmit = provider && apiKey && model && fastModel && !loading;
+  const canSubmit = apiKey.trim() && model.trim() && !loading;
 
   const handleProviderChange = (value: string) => {
-    setProvider(value);
-    const next = findLlmProvider(value);
-    if (next) {
-      setModel(next.model);
-      setFastModel(next.fastModel);
-    }
+    const next = value as LlmProviderId;
+    setProvider(next);
+    setModel(LLM_PROVIDER_DEFAULT_MODELS[next]);
   };
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
 
+    const parsed = LlmByokConfigSchema.safeParse({ provider, apiKey, model });
+    if (!parsed.success) {
+      setMessage({ type: 'error', text: '配置格式无效' });
+      return;
+    }
+
     setLoading(true);
     setMessage(null);
 
     try {
-      const config = {
-        provider,
-        apiKey,
-        baseUrl: currentProvider?.baseUrl || '',
-        model,
-        fastModel,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+      localStorage.setItem(LLM_STORAGE_KEY, JSON.stringify(parsed.data));
       setHasConfig(true);
       setMessage({ type: 'success', text: '配置已保存到浏览器本地。' });
     } catch {
@@ -80,12 +67,10 @@ export function ModelConfigTab() {
   };
 
   const handleClear = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    const defaults = LLM_PROVIDERS[0];
-    setProvider(defaults.id);
+    localStorage.removeItem(LLM_STORAGE_KEY);
+    setProvider('alibaba');
     setApiKey('');
-    setModel(defaults.model);
-    setFastModel(defaults.fastModel);
+    setModel(LLM_PROVIDER_DEFAULT_MODELS.alibaba);
     setHasConfig(false);
     setMessage({
       type: 'success',
@@ -96,17 +81,13 @@ export function ModelConfigTab() {
   return (
     <div className="space-y-5">
       <InkSelect
-        label="服务商"
+        label="供应商"
         value={provider}
         onChange={handleProviderChange}
-        size="sm"
         labelClassName={settingsLabelClass}
       >
-        {LLM_PROVIDERS.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.label}
-          </option>
-        ))}
+        <option value="deepseek">{PROVIDER_LABELS.deepseek}</option>
+        <option value="alibaba">{PROVIDER_LABELS.alibaba}</option>
       </InkSelect>
 
       <InkInput
@@ -119,30 +100,11 @@ export function ModelConfigTab() {
         labelClassName={settingsLabelClass}
       />
 
-      <div className="flex flex-col gap-1">
-        <span className={settingsLabelClass}>Base URL</span>
-        <span className="border-ink/10 text-ink-secondary bg-ink/5 border border-dashed px-2 py-2 font-mono text-sm select-all">
-          {currentProvider?.baseUrl || '—'}
-        </span>
-        <span className="text-ink-secondary text-xs leading-5">
-          由所选服务商自动确定，不支持自定义输入
-        </span>
-      </div>
-
       <InkInput
-        label="普通模型"
-        placeholder="如 deepseek-chat"
+        label="模型"
+        placeholder={LLM_PROVIDER_DEFAULT_MODELS[provider]}
         value={model}
         onChange={setModel}
-        size="sm"
-        labelClassName={settingsLabelClass}
-      />
-
-      <InkInput
-        label="Fast 模型"
-        placeholder="如 deepseek-chat"
-        value={fastModel}
-        onChange={setFastModel}
         size="sm"
         labelClassName={settingsLabelClass}
       />
@@ -175,7 +137,8 @@ export function ModelConfigTab() {
 
       <SettingsSection>
         <p className="text-ink-secondary text-sm leading-6">
-          配置保存在浏览器 localStorage 中，仅当前设备生效，更换浏览器或清除缓存后需要重新配置。
+          支持 DeepSeek 与阿里云百炼（Qwen）。配置保存在浏览器 localStorage
+          中，仅当前设备生效，更换浏览器或清除缓存后需要重新配置。
           <br />
           API Key
           仅在前端本地存储，服务端通过请求头获取并调用，不会在服务器持久化保存。

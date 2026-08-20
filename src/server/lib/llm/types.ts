@@ -1,3 +1,5 @@
+import type { LlmProviderId } from '@shared/config/llm';
+
 export type LlmSceneId =
   | 'alchemy-formula-analysis'
   | 'alchemy-improvised-copy'
@@ -18,13 +20,6 @@ export type LlmSceneId =
   | 'material-generation'
   | 'material-semantic-enrichment'
   | 'product-naming'
-  | 'spirit-seed-generation'
-  | 'spirit-seed-stage-assessment'
-  | 'spirit-plant-outcome-naming'
-  | 'spirit-plant-observation'
-  | 'spirit-plant-consultation'
-  | 'spirit-field-interpret'
-  | 'spirit-field-narrative'
   | 'yield-story';
 
 export type LlmStructuredFailureKind =
@@ -43,18 +38,9 @@ export interface LlmCallAttemptMetrics {
   finishReason?: string;
 }
 
-export type LlmMetricsProvider =
-  | 'deepseek'
-  | 'ark'
-  | 'kimi'
-  | 'alibaba'
-  | 'openrouter'
-  | 'openai-compatible'
-  | (string & {});
-
 export interface LlmCallMetrics {
   sceneId: LlmSceneId;
-  provider: LlmMetricsProvider;
+  provider: LlmProviderId;
   model: string;
   systemChars: number;
   userChars: number;

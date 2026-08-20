@@ -232,6 +232,13 @@
       "when": 1786608971546,
       "tag": "0032_smart_harpoon",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786931826016,
+      "tag": "0033_damp_karnak",
+      "breakpoints": true
     }
   ]
 }

@@ -1,12 +1,9 @@
-import { createAlibaba } from '@ai-sdk/alibaba';
-import { createDeepSeek } from '@ai-sdk/deepseek';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { getCurrentContext } from '@server/lib/http/context';
 import { recordLlmCallMetric } from '@server/lib/llm/metricsStore';
+import { LLM_PROVIDERS } from '@server/lib/llm/providers';
 import type {
   LlmCallAttemptMetrics,
   LlmCallMetrics,
-  LlmMetricsProvider,
   LlmSceneId,
   LlmStructuredFailureKind,
 } from '@server/lib/llm/types';
@@ -14,7 +11,13 @@ import {
   stableCompactStringify,
   truncateText,
 } from '@server/utils/llmPayload';
-import { DEEPSEEK_DEFAULT_MODEL } from '@shared/config/deepseek';
+import type { LlmByokConfig, LlmProviderId } from '@shared/config/llm';
+import {
+  pickHighestWeightLlmRoute,
+  pickLlmRouteByUserHash,
+  resolveServerLlmRoutes,
+  type LlmRoute,
+} from '@shared/config/llmRouting';
 import {
   generateText,
   JSONParseError,
@@ -51,6 +54,46 @@ function logLlmDebug(
   );
 }
 
+function createLlmDebugFetch(sceneId: LlmSceneId, model: string): typeof fetch {
+  return Object.assign(
+    async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      logLlmDebug(
+        'REQUEST',
+        sceneId,
+        model,
+        typeof init?.body === 'string' ? init.body : String(init?.body ?? ''),
+      );
+
+      try {
+        const response = await globalThis.fetch(input, init);
+        void response
+          .clone()
+          .text()
+          .then((body) => {
+            logLlmDebug(
+              `RESPONSE status=${response.status}`,
+              sceneId,
+              model,
+              body,
+            );
+          })
+          .catch((error) => {
+            logLlmDebug('RESPONSE_READ_ERROR', sceneId, model, String(error));
+          });
+        return response;
+      } catch (error) {
+        logLlmDebug('REQUEST_ERROR', sceneId, model, String(error));
+        throw error;
+      }
+    },
+    // Bun's fetch type requires this property; AI SDK only invokes the function.
+    { preconnect: () => undefined },
+  );
+}
+
 const STRUCTURED_RETRY_OUTPUT_CHARS = 8_000;
 const STRUCTURED_RETRY_MAX_OUTPUT_TOKENS = 16_384;
 
@@ -83,7 +126,7 @@ export interface AiArrayOptions<ELEMENT, RESULT = ELEMENT[]>
 
 type MetricContext = {
   sceneId: LlmSceneId;
-  provider: LlmMetricsProvider;
+  provider: LlmProviderId;
   model: string;
   systemChars: number;
   userChars: number;
@@ -92,8 +135,8 @@ type MetricContext = {
 
 type ResolvedModel = {
   model: LanguageModel;
+  provider: LlmProviderId;
   modelName: string;
-  providerName: LlmMetricsProvider;
 };
 
 type StructuredFailureDetails = {
@@ -108,7 +151,7 @@ type StructuredGenerationAttempt = {
   maxOutputTokens?: number;
 };
 
-function getRequestConfig() {
+function getRequestConfig(): LlmByokConfig | undefined {
   try {
     return getCurrentContext().get('llmConfig');
   } catch {
@@ -116,133 +159,57 @@ function getRequestConfig() {
   }
 }
 
-function getChosenProvider(): LlmMetricsProvider {
-  return (process.env.PROVIDER_CHOOSE?.trim() ||
-    'openai-compatible') as LlmMetricsProvider;
+function getRequestUserId(): string | undefined {
+  try {
+    return getCurrentContext().get('user')?.id;
+  } catch {
+    return undefined;
+  }
 }
 
-function getArkRandomModel(): string {
-  const models = (process.env.ARK_MODEL_USE ?? '').split(',').filter(Boolean);
-  if (models.length === 0) {
-    throw new Error('ARK_MODEL_USE is required when PROVIDER_CHOOSE=ark');
-  }
-  return models[Math.floor(Math.random() * models.length)]!;
-}
-
-function requireEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is required for the selected LLM provider`);
-  }
-  return value;
-}
-
-/**
- * Server-side provider factory driven by PROVIDER_CHOOSE.
- * Request-context BYOK DeepSeek is handled in resolveModel before this runs.
- */
-function getProvider(providerName: LlmMetricsProvider) {
-  if (providerName === 'ark') {
-    return createDeepSeek({
-      baseURL: process.env.ARK_BASE_URL,
-      apiKey: process.env.ARK_API_KEY,
-    });
-  }
-  if (providerName === 'kimi') {
-    return createDeepSeek({
-      apiKey: process.env.KIMI_API_KEY,
-      baseURL: process.env.KIMI_BASE_URL,
-    });
-  }
-  if (providerName === 'openrouter') {
-    return createOpenRouter({
-      apiKey: process.env.OPENROUTER_API_KEY,
-    });
-  }
-  if (providerName === 'deepseek') {
-    return createDeepSeek({
-      apiKey: process.env.DEEPSEEK_API_KEY,
-      baseURL: process.env.DEEPSEEK_BASE_URL,
-    });
-  }
-  return createDeepSeek({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: process.env.OPENAI_BASE_URL,
+function listConfiguredServerRoutes(): LlmRoute[] {
+  return resolveServerLlmRoutes({
+    providerSpec: process.env.LLM_PROVIDER,
+    availableProviders: {
+      alibaba: Boolean(process.env.ALIBABA_API_KEY?.trim()),
+      deepseek: Boolean(process.env.DEEPSEEK_API_KEY?.trim()),
+    },
   });
 }
 
-function resolveModel(): ResolvedModel {
+function resolveServerRoute(): LlmRoute {
+  const routes = listConfiguredServerRoutes();
+  if (routes.length === 1) {
+    return routes[0];
+  }
+
+  const userId = getRequestUserId();
+  return userId
+    ? pickLlmRouteByUserHash(routes, userId)
+    : pickHighestWeightLlmRoute(routes);
+}
+
+function resolveModel(sceneId: LlmSceneId): ResolvedModel {
   const requestConfig = getRequestConfig();
+  const route = requestConfig
+    ? {
+        provider: requestConfig.provider,
+        model: requestConfig.model,
+      }
+    : resolveServerRoute();
+  const providerId = route.provider;
+  const def = LLM_PROVIDERS[providerId];
+  const modelName = route.model;
+  const debugFetch = LLM_DEBUG_ENABLED
+    ? createLlmDebugFetch(sceneId, modelName)
+    : undefined;
+  const apiKey =
+    requestConfig?.apiKey ?? process.env[def.apiKeyEnv]?.trim();
 
-  // Upstream BYOK: request-context DeepSeek only (apiKey + model).
-  if (requestConfig) {
-    const modelName = requestConfig.model;
-    return {
-      model: createDeepSeek({ apiKey: requestConfig.apiKey })(modelName),
-      modelName,
-      providerName: 'deepseek',
-    };
-  }
-
-  const providerName = getChosenProvider();
-
-  if (providerName === 'ark') {
-    const modelName = getArkRandomModel();
-    return {
-      model: getProvider(providerName)(modelName),
-      modelName,
-      providerName,
-    };
-  }
-
-  if (providerName === 'kimi') {
-    const modelName = requireEnv('KIMI_MODEL_USE');
-    return {
-      model: getProvider(providerName)(modelName),
-      modelName,
-      providerName,
-    };
-  }
-
-  if (providerName === 'alibaba') {
-    const modelName = requireEnv('ALIBABA_MODEL_USE');
-    const alibabaProvider = createAlibaba({
-      apiKey: process.env.ALIBABA_API_KEY,
-      baseURL: process.env.ALIBABA_BASE_URL,
-    });
-    return {
-      model: alibabaProvider.languageModel(modelName),
-      modelName,
-      providerName,
-    };
-  }
-
-  if (providerName === 'openrouter') {
-    const modelName = requireEnv('OPENROUTER_MODEL_USE');
-    return {
-      model: getProvider(providerName)(modelName),
-      modelName,
-      providerName,
-    };
-  }
-
-  if (providerName === 'deepseek') {
-    const modelName =
-      process.env.DEEPSEEK_MODEL_USE?.trim() ||
-      process.env.DEEPSEEK_MODEL?.trim() ||
-      DEEPSEEK_DEFAULT_MODEL;
-    return {
-      model: getProvider(providerName)(modelName),
-      modelName,
-      providerName,
-    };
-  }
-
-  const modelName = requireEnv('OPENAI_MODEL');
   return {
-    model: getProvider(providerName)(modelName),
+    model: def.create({ apiKey, fetch: debugFetch })(modelName),
+    provider: providerId,
     modelName,
-    providerName: 'openai-compatible',
   };
 }
 
@@ -334,8 +301,8 @@ function recordMetrics(
 
 function createMetricContext(
   options: AiTextOptions,
+  provider: LlmProviderId,
   model: string,
-  provider: LlmMetricsProvider,
   schemaChars = 0,
 ): MetricContext {
   return {
@@ -505,8 +472,8 @@ function getStructuredRetryMaxOutputTokens(
 }
 
 export async function generateAiText(options: AiTextOptions) {
-  const { model, modelName, providerName } = resolveModel();
-  const metrics = createMetricContext(options, modelName, providerName);
+  const { model, modelName, provider } = resolveModel(options.sceneId);
+  const metrics = createMetricContext(options, provider, modelName);
 
   try {
     const result = await generateText({
@@ -529,8 +496,8 @@ export async function generateAiText(options: AiTextOptions) {
 }
 
 export function streamAiText(options: AiTextOptions) {
-  const { model, modelName, providerName } = resolveModel();
-  const metrics = createMetricContext(options, modelName, providerName);
+  const { model, modelName, provider } = resolveModel(options.sceneId);
+  const metrics = createMetricContext(options, provider, modelName);
   let terminalMetricRecorded = false;
 
   const recordTerminalMetric = (
@@ -681,11 +648,11 @@ async function generateStructured<
 export async function generateAiObject<GENERATED, RESULT = GENERATED>(
   options: AiObjectOptions<GENERATED, RESULT>,
 ) {
-  const { model, modelName, providerName } = resolveModel();
+  const { model, modelName, provider } = resolveModel(options.sceneId);
   const metrics = createMetricContext(
     options,
+    provider,
     modelName,
-    providerName,
     getSchemaChars(options.schema),
   );
   const output = Output.object({
@@ -720,11 +687,11 @@ export async function generateAiObject<GENERATED, RESULT = GENERATED>(
 export async function generateAiArray<ELEMENT, RESULT = ELEMENT[]>(
   options: AiArrayOptions<ELEMENT, RESULT>,
 ) {
-  const { model, modelName, providerName } = resolveModel();
+  const { model, modelName, provider } = resolveModel(options.sceneId);
   const metrics = createMetricContext(
     options,
+    provider,
     modelName,
-    providerName,
     getSchemaChars(z.array(options.elementSchema)),
   );
   const output = Output.array({

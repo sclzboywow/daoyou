@@ -8,6 +8,9 @@ import {
   runResourceReplayCleanupJob,
   runRankRewardsJob,
   runTowerEnemySetRefreshJob,
+  runSponsorshipCleanupJob,
+  runSponsorshipReconcileJob,
+  runSponsorshipAdminDigestJob,
 } from '@server/lib/jobs/internalCron';
 import type { AppEnv } from '@server/lib/hono/types';
 import { Hono } from 'hono';
@@ -95,6 +98,22 @@ router.get('/expired-data-cleanup', (c) =>
 
 router.get('/material-library-daily-generation', (c) =>
   handleCronRequest(c.req.raw, runMaterialLibraryDailyGenerationJob),
+);
+
+router.get('/sponsorship-reconcile', (c) =>
+  handleCronRequest(c.req.raw, () => runSponsorshipReconcileJob(false)),
+);
+
+router.get('/sponsorship-deep-reconcile', (c) =>
+  handleCronRequest(c.req.raw, () => runSponsorshipReconcileJob(true)),
+);
+
+router.get('/sponsorship-cleanup', (c) =>
+  handleCronRequest(c.req.raw, runSponsorshipCleanupJob),
+);
+
+router.get('/sponsorship-admin-digest', (c) =>
+  handleCronRequest(c.req.raw, runSponsorshipAdminDigestJob),
 );
 
 export default router;
