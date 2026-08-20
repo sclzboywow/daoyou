@@ -1,7 +1,10 @@
 import {
   calculateAuctionSettlement,
   getAuctionUnitPriceCap,
+  isAuctionListableMaterial,
+  isAuctionListableQuality,
 } from './auctionConfig';
+import { buildSpiritFieldSeedMaterial } from '@shared/engine/spirit-field/seedMaterial';
 
 describe('auctionConfig', () => {
   it('按单价超额累进计税并乘以成交数量', () => {
@@ -26,5 +29,18 @@ describe('auctionConfig', () => {
     const quote = calculateAuctionSettlement(unitPrice, 40);
     expect(unitPrice).toBe(800_000);
     expect(quote.grossAmount).toBe(32_000_000);
+  });
+
+  it('灵田种子可突破玄品门槛寄售，普通低品材料仍不可', () => {
+    const seed = buildSpiritFieldSeedMaterial('cui-ya-cao');
+    expect(seed).not.toBeNull();
+    expect(isAuctionListableQuality(seed!.rank)).toBe(false);
+    expect(isAuctionListableMaterial(seed!)).toBe(true);
+    expect(
+      isAuctionListableMaterial({
+        rank: '凡品',
+        details: {},
+      }),
+    ).toBe(false);
   });
 });

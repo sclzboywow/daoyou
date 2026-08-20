@@ -23,6 +23,8 @@ export type LlmSceneId =
   | 'spirit-plant-outcome-naming'
   | 'spirit-plant-observation'
   | 'spirit-plant-consultation'
+  | 'spirit-field-interpret'
+  | 'spirit-field-narrative'
   | 'yield-story';
 
 export type LlmStructuredFailureKind =

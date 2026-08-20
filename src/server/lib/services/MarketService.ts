@@ -22,6 +22,10 @@ import {
 } from '@shared/engine/material/creation/config';
 import { getFallbackMaterialPreset } from '@shared/engine/material/creation/fallbackPresets';
 import { MARKET_PRESET_POOL } from '@shared/engine/material/creation/marketPresets';
+import {
+  buildSpiritFieldSeedMaterial,
+  pickSpiritFieldMarketSeedPlants,
+} from '@shared/engine/spirit-field';
 import { SpiritSeedGenerator } from '@shared/engine/material/creation/SpiritSeedGenerator';
 import {
   evaluateFateContext,
@@ -882,6 +886,57 @@ async function generateFromMaterialLibrary(
 /**
  * 统一生成入口：所有市场先走持久材料库；common / treasure 不足时使用预设兜底。
  */
+
+/**
+ * 在普通坊市层固定挂出可播种灵种；保留 spiritFieldSeed details，购买后可直接下田。
+ * 黑市不注入，避免神秘层剥离 details。
+ */
+function injectSpiritFieldSeedListings(
+  listings: InternalMarketListing[],
+  nodeId: string,
+  layer: MarketLayer,
+  profile: RegionProfile,
+  layerConfig: ResolvedLayerConfig,
+): InternalMarketListing[] {
+  const plants = pickSpiritFieldMarketSeedPlants({
+    layer,
+    rankRange: layerConfig.rankRange,
+  });
+  if (plants.length === 0) return listings;
+
+  const seedListings: InternalMarketListing[] = [];
+  for (const plant of plants) {
+    const material = buildSpiritFieldSeedMaterial(plant.id);
+    if (!material) continue;
+    seedListings.push({
+      id: crypto.randomUUID(),
+      nodeId,
+      layer,
+      name: material.name,
+      type: material.type,
+      rank: material.rank,
+      element: material.element,
+      description: material.description,
+      details: material.details,
+      quantity: 1,
+      price: computePrice(
+        layer,
+        material.rank,
+        material.type,
+        profile.priceModifier,
+      ),
+    });
+  }
+
+  if (seedListings.length === 0) return listings;
+
+  const keepCount = Math.max(0, layerConfig.count - seedListings.length);
+  return [...listings.slice(0, keepCount), ...seedListings].slice(
+    0,
+    layerConfig.count,
+  );
+}
+
 async function generateListings(
   nodeId: string,
   layer: MarketLayer,
@@ -907,6 +962,14 @@ async function generateListings(
     });
     listings = [...listings, ...fallback];
   }
+
+  listings = injectSpiritFieldSeedListings(
+    listings,
+    nodeId,
+    layer,
+    profile,
+    layerConfig,
+  );
 
   // 黑市应用神秘层
   if (layer === 'black') {
