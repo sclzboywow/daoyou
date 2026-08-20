@@ -12,11 +12,38 @@ const STATE_FILE = `${STATE_DIR}/health-state.json`;
 const BACKUP_DIR = '/home/ubuntu/backups/daoyou/postgres';
 const ALERT_REPEAT_MS = 6 * 60 * 60 * 1000;
 const MAX_BACKUP_AGE_MS = 26 * 60 * 60 * 1000;
+const LLM_PROBE_TIMEOUT_MS = 15_000;
 
 interface MonitorState {
   status: 'healthy' | 'unhealthy';
   alertedAt?: string;
 }
+
+type LlmProbeRoute = {
+  provider: 'alibaba' | 'deepseek';
+  model: string;
+  apiKey: string;
+  baseUrl: string;
+};
+
+const QUOTA_PATTERNS = [
+  /AllocationQuota\.FreeTierOnly/i,
+  /AllocationQuota\.Arrearage/i,
+  /\bArrearage\b/i,
+  /FreeTierOnly/i,
+  /insufficient[_\s-]?balance/i,
+  /insufficient[_\s-]?quota/i,
+  /out of credits/i,
+  /run out of credits/i,
+  /quota[_\s-]?exceeded/i,
+  /余额不足/,
+  /欠费/,
+  /额度不足/,
+  /额度已用完/,
+  /免费额度/,
+  /账户余额/,
+  /billing/i,
+];
 
 async function inspectContainer(name: string): Promise<string | null> {
   const process = Bun.spawn([
@@ -85,6 +112,107 @@ async function sendAlert(subject: string, content: string): Promise<void> {
   );
 }
 
+function firstProviderEntry(raw: string | undefined): string | null {
+  if (!raw?.trim()) return null;
+  return raw.split(',')[0]?.trim().split(':')[0]?.trim() || null;
+}
+
+function resolveLlmProbeRoute(): LlmProbeRoute | null {
+  const alibabaKey = process.env.ALIBABA_API_KEY?.trim();
+  const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
+  const explicit = firstProviderEntry(process.env.LLM_PROVIDER);
+
+  const pickAlibaba = (): LlmProbeRoute | null => {
+    if (!alibabaKey) return null;
+    const model =
+      explicit?.includes('/') && explicit.startsWith('alibaba/')
+        ? explicit.slice('alibaba/'.length)
+        : 'qwen3.7-flash';
+    return {
+      provider: 'alibaba',
+      model: model || 'qwen3.7-flash',
+      apiKey: alibabaKey,
+      baseUrl: (
+        process.env.ALIBABA_BASE_URL?.trim() ||
+        'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      ).replace(/\/$/, ''),
+    };
+  };
+
+  const pickDeepseek = (): LlmProbeRoute | null => {
+    if (!deepseekKey) return null;
+    const model =
+      explicit?.includes('/') && explicit.startsWith('deepseek/')
+        ? explicit.slice('deepseek/'.length)
+        : process.env.DEEPSEEK_MODEL_FAST_USE?.trim() ||
+          process.env.DEEPSEEK_MODEL_USE?.trim() ||
+          'deepseek-v4-flash';
+    return {
+      provider: 'deepseek',
+      model: model || 'deepseek-v4-flash',
+      apiKey: deepseekKey,
+      baseUrl: (
+        process.env.DEEPSEEK_BASE_URL?.trim() || 'https://api.deepseek.com'
+      ).replace(/\/$/, ''),
+    };
+  };
+
+  if (explicit?.startsWith('alibaba')) return pickAlibaba();
+  if (explicit?.startsWith('deepseek')) return pickDeepseek();
+  return pickAlibaba() ?? pickDeepseek();
+}
+
+function isQuotaExhaustedPayload(status: number, body: string): boolean {
+  if (QUOTA_PATTERNS.some((pattern) => pattern.test(body))) {
+    return true;
+  }
+  // Provider-specific HTTP statuses commonly used for billing/quota denials.
+  if (status === 402 || status === 403) {
+    return /quota|balance|billing|arrearage|freetier|额度|余额|欠费/i.test(
+      body,
+    );
+  }
+  return false;
+}
+
+async function probeLlmQuota(): Promise<string | null> {
+  const route = resolveLlmProbeRoute();
+  if (!route) {
+    return 'LLM probe: no ALIBABA_API_KEY/DEEPSEEK_API_KEY configured';
+  }
+
+  try {
+    const response = await fetch(`${route.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${route.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: route.model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1,
+      }),
+      signal: AbortSignal.timeout(LLM_PROBE_TIMEOUT_MS),
+    });
+    const body = await response.text();
+    if (response.ok) return null;
+
+    if (isQuotaExhaustedPayload(response.status, body)) {
+      return `LLM额度耗尽/欠费: provider=${route.provider} model=${route.model} HTTP ${response.status}`;
+    }
+
+    // Auth/config issues are also actionable for ops mail, but keep wording distinct.
+    if (response.status === 401) {
+      return `LLM鉴权失败: provider=${route.provider} model=${route.model} HTTP 401`;
+    }
+
+    return `LLM探测失败: provider=${route.provider} model=${route.model} HTTP ${response.status}`;
+  } catch (error) {
+    return `LLM探测异常: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
 async function collectFailures(): Promise<string[]> {
   const failures: string[] = [];
   for (const container of EXPECTED_CONTAINERS) {
@@ -115,7 +243,18 @@ async function collectFailures(): Promise<string[]> {
       `PostgreSQL backup: latest dump is ${Math.floor(backupAgeMs / 3_600_000)} hours old`,
     );
   }
+
+  const llmFailure = await probeLlmQuota();
+  if (llmFailure) failures.push(llmFailure);
+
   return failures;
+}
+
+function buildAlertSubject(failures: string[]): string {
+  if (failures.some((failure) => failure.includes('LLM额度耗尽'))) {
+    return '【万界道友】LLM额度不足告警';
+  }
+  return '【万界道友】生产服务异常';
 }
 
 const failures = await collectFailures();
@@ -136,7 +275,7 @@ if (failures.length === 0) {
   if (previous?.status === 'unhealthy') {
     await sendAlert(
       '【万界道友】生产服务已恢复',
-      `检测时间：${now.toISOString()}\n所有容器、公开健康接口与数据库备份已恢复正常。`,
+      `检测时间：${now.toISOString()}\n所有容器、公开健康接口、数据库备份与 LLM 额度探测已恢复正常。`,
     );
   }
   await saveState({ status: 'healthy' });
@@ -153,13 +292,13 @@ const shouldAlert =
 
 if (shouldAlert) {
   await sendAlert(
-    '【万界道友】生产服务异常',
+    buildAlertSubject(failures),
     [
       `检测时间：${now.toISOString()}`,
       '异常项目：',
       ...failures.map((failure) => `- ${failure}`),
       '',
-      '请登录 yzdoc 服务器检查 Docker 状态与应用日志。',
+      '请登录 yzdoc 服务器检查 Docker 状态、应用日志，或到百炼/DeepSeek 控制台确认额度与账单。',
     ].join('\n'),
   );
 }
