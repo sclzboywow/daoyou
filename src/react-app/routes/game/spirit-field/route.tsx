@@ -610,7 +610,7 @@ export default function SpiritFieldPage() {
                 </>
               ) : (
                 <div className="space-y-3">
-                  <p className="text-sm leading-7 text-ink-secondary">成熟后有两种采法：精心采收偏重主药，广采百草会保留一株主药并尝试寻找伴生灵药。</p>
+                  <p className="text-sm leading-7 text-ink-secondary">成熟后有两种采法：精心采收偏向冲击更高品质，广采百草偏向总产量与返种。</p>
                   <div className="flex flex-wrap gap-2">
                     <InkButton onClick={() => void harvest('focused')} disabled={busy} variant="primary">
                       精心采收

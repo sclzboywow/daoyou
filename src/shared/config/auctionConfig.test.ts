@@ -4,7 +4,7 @@ import {
   isAuctionListableMaterial,
   isAuctionListableQuality,
 } from './auctionConfig';
-import { buildSpiritFieldSeedMaterial } from '@shared/engine/spirit-field/seedMaterial';
+import { buildSpiritFieldSeedMaterialFromPlant } from '@shared/engine/spirit-field/seedMaterial';
 
 describe('auctionConfig', () => {
   it('按单价超额累进计税并乘以成交数量', () => {
@@ -32,10 +32,22 @@ describe('auctionConfig', () => {
   });
 
   it('灵田种子可突破玄品门槛寄售，普通低品材料仍不可', () => {
-    const seed = buildSpiritFieldSeedMaterial('cui-ya-cao');
-    expect(seed).not.toBeNull();
-    expect(isAuctionListableQuality(seed!.rank)).toBe(false);
-    expect(isAuctionListableMaterial(seed!)).toBe(true);
+    const seed = buildSpiritFieldSeedMaterialFromPlant({
+      id: 'seed-test',
+      name: '青芽草',
+      seedName: '青芽草灵种',
+      quality: '凡品',
+      element: '木',
+      minRealm: '炼气',
+      baseGrowthMs: 12 * 60_000,
+      careSlots: 1,
+      careCooldownMs: 3 * 60_000,
+      description: '测试灵植。',
+      baseYieldMin: 4,
+      baseYieldMax: 6,
+    });
+    expect(isAuctionListableQuality(seed.rank)).toBe(false);
+    expect(isAuctionListableMaterial(seed)).toBe(true);
     expect(
       isAuctionListableMaterial({
         rank: '凡品',

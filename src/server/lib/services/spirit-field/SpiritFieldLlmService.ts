@@ -4,7 +4,7 @@ import {
   getCareQiCost,
   type SpiritFieldCarePlan,
   type SpiritFieldObservation,
-  type SpiritFieldPlantDefinition,
+  type SpiritFieldPlantSnapshot,
 } from '@shared/engine/spirit-field';
 import { ELEMENT_VALUES } from '@shared/types/constants';
 import { z } from 'zod';
@@ -15,6 +15,7 @@ const interpretationSchema = z.object({
     'moisten',
     'wood_nurture',
     'loosen_soil',
+    'fertilize',
     'observe',
     'wait',
   ]),
@@ -41,6 +42,9 @@ function fallbackInterpretation(message: string): SpiritFieldCarePlan {
   } else if (/水|灵泉|浇|润/.test(text)) {
     action = 'moisten';
     target = /叶/.test(text) ? 'leaf' : 'soil';
+  } else if (/肥|施肥|肥料|培肥/.test(text)) {
+    action = 'fertilize';
+    target = 'soil';
   } else if (/疏|松土|翻土/.test(text)) {
     action = 'loosen_soil';
     target = 'soil';
@@ -63,13 +67,15 @@ function fallbackInterpretation(message: string): SpiritFieldCarePlan {
         ? '以温和手段驱散根部周围的湿气，并尽量避开药根。'
         : action === 'moisten'
           ? '以少量水意或灵泉润养灵植，避免一次灌入过多。'
-          : action === 'loosen_soil'
-            ? '轻轻疏松根部周围土层，让水气与灵机重新流转。'
-            : action === 'observe'
-              ? '先细看灵植、土壤与灵气状态，不立即改变田中环境。'
-              : action === 'wait'
-                ? '暂时不做额外养护，让灵植继续自然生长。'
-                : '以相对温和的灵力持续温养灵植，重点照顾根系与灵机流转。',
+          : action === 'fertilize'
+            ? '向根部附近补充适量肥力，避免一次施入过多伤及根系。'
+            : action === 'loosen_soil'
+              ? '轻轻疏松根部周围土层，让水气与灵机重新流转。'
+              : action === 'observe'
+                ? '先细看灵植、土壤与灵气状态，不立即改变田中环境。'
+                : action === 'wait'
+                  ? '暂时不做额外养护，让灵植继续自然生长。'
+                  : '以相对温和的灵力持续温养灵植，重点照顾根系与灵机流转。',
     reason: '系统按你描述的动作、目标与灵力方式进行了归纳。',
     risk: '养护过度可能适得其反，执行时会按服务器规则限制实际效果。',
     qiCost: getCareQiCost(action),
@@ -78,7 +84,7 @@ function fallbackInterpretation(message: string): SpiritFieldCarePlan {
 
 export async function interpretSpiritFieldCare(input: {
   message: string;
-  plant: SpiritFieldPlantDefinition;
+  plant: SpiritFieldPlantSnapshot;
   observations: SpiritFieldObservation[];
   careCount: number;
   careSlots: number;

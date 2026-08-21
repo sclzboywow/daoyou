@@ -23,8 +23,8 @@ import {
 import { getFallbackMaterialPreset } from '@shared/engine/material/creation/fallbackPresets';
 import { MARKET_PRESET_POOL } from '@shared/engine/material/creation/marketPresets';
 import {
-  buildSpiritFieldSeedMaterial,
-  pickSpiritFieldMarketSeedPlants,
+  getSpiritFieldMarketSeedSlotCount,
+  SpiritSeedGenerator as SpiritFieldSeedGenerator,
 } from '@shared/engine/spirit-field';
 import { SpiritSeedGenerator } from '@shared/engine/material/creation/SpiritSeedGenerator';
 import {
@@ -888,47 +888,41 @@ async function generateFromMaterialLibrary(
  */
 
 /**
- * 在普通坊市层固定挂出可播种灵种；保留 spiritFieldSeed details，购买后可直接下田。
+ * 在普通坊市层固定挂出动态生成灵种；保留 spiritFieldSeed 快照，购买后可直接下田。
  * 黑市不注入，避免神秘层剥离 details。
  */
-function injectSpiritFieldSeedListings(
+async function injectSpiritFieldSeedListings(
   listings: InternalMarketListing[],
   nodeId: string,
   layer: MarketLayer,
   profile: RegionProfile,
   layerConfig: ResolvedLayerConfig,
-): InternalMarketListing[] {
-  const plants = pickSpiritFieldMarketSeedPlants({
-    layer,
+): Promise<InternalMarketListing[]> {
+  const slots = getSpiritFieldMarketSeedSlotCount(layer);
+  if (slots <= 0) return listings;
+
+  const seeds = await SpiritFieldSeedGenerator.generateRandom(slots, {
     rankRange: layerConfig.rankRange,
+    regionTags: getNodeRegionTags(nodeId),
   });
-  if (plants.length === 0) return listings;
-
-  const seedListings: InternalMarketListing[] = [];
-  for (const plant of plants) {
-    const material = buildSpiritFieldSeedMaterial(plant.id);
-    if (!material) continue;
-    seedListings.push({
-      id: crypto.randomUUID(),
-      nodeId,
+  const seedListings: InternalMarketListing[] = seeds.map((material) => ({
+    id: crypto.randomUUID(),
+    nodeId,
+    layer,
+    name: material.name,
+    type: material.type,
+    rank: material.rank,
+    element: material.element ?? null,
+    description: material.description ?? '',
+    details: material.details,
+    quantity: 1,
+    price: computePrice(
       layer,
-      name: material.name,
-      type: material.type,
-      rank: material.rank,
-      element: material.element,
-      description: material.description,
-      details: material.details,
-      quantity: 1,
-      price: computePrice(
-        layer,
-        material.rank,
-        material.type,
-        profile.priceModifier,
-      ),
-    });
-  }
-
-  if (seedListings.length === 0) return listings;
+      material.rank,
+      material.type,
+      profile.priceModifier,
+    ),
+  }));
 
   const keepCount = Math.max(0, layerConfig.count - seedListings.length);
   return [...listings.slice(0, keepCount), ...seedListings].slice(
@@ -963,7 +957,7 @@ async function generateListings(
     listings = [...listings, ...fallback];
   }
 
-  listings = injectSpiritFieldSeedListings(
+  listings = await injectSpiritFieldSeedListings(
     listings,
     nodeId,
     layer,
