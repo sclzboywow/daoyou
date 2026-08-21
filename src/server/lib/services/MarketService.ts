@@ -912,7 +912,7 @@ async function injectSpiritFieldSeedListings(
     name: material.name,
     type: material.type,
     rank: material.rank,
-    element: material.element ?? null,
+    element: material.element,
     description: material.description ?? '',
     details: material.details,
     quantity: 1,
