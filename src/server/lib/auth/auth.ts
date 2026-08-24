@@ -2,6 +2,7 @@ import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { i18n, type TranslationDictionary } from '@better-auth/i18n';
 import { betterAuth } from 'better-auth';
 import { admin } from 'better-auth/plugins/admin';
+import { bearer } from 'better-auth/plugins/bearer';
 import { emailOTP } from 'better-auth/plugins/email-otp';
 import { sendViaSmtp } from '../admin/smtp';
 import { db } from '../drizzle/db';
@@ -13,6 +14,7 @@ import {
 import { getAdminUserIds } from './adminAccess';
 import { getCookieDomainConfig } from './cookieDomain';
 import { BETTER_AUTH_SCHEMA_NAME, betterAuthSchema } from './schema';
+import { wechatMiniGameAuth } from './wechatMiniGameAuth';
 
 function getRequiredEnv(name: 'BETTER_AUTH_SECRET' | 'BETTER_AUTH_URL') {
   const value = process.env[name];
@@ -144,6 +146,8 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    bearer(),
+    wechatMiniGameAuth(),
     i18n({
       defaultLocale: 'zh',
       translations: {
