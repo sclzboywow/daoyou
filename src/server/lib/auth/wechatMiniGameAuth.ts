@@ -4,7 +4,6 @@ import { setSessionCookie } from 'better-auth/cookies';
 import { z } from 'zod';
 
 const WECHAT_PROVIDER_ID = 'wechat-mini-game';
-const WECHAT_ACCOUNT_ISSUER = `local:oauth:${encodeURIComponent(WECHAT_PROVIDER_ID)}`;
 
 const signInBodySchema = z.object({
   code: z.string().trim().min(1).max(256),
@@ -107,11 +106,16 @@ export function wechatMiniGameAuth() {
             ctx.body.code,
           );
           const accountId = `${appId}:${openId}`;
+          const findWechatAccount = () =>
+            ctx.context.adapter.findOne<{ userId: string }>({
+              model: 'account',
+              where: [
+                { field: 'accountId', value: accountId },
+                { field: 'providerId', value: WECHAT_PROVIDER_ID },
+              ],
+            });
 
-          let account = await ctx.context.internalAdapter.findAccountByKey({
-            accountId,
-            issuer: WECHAT_ACCOUNT_ISSUER,
-          });
+          let account = await findWechatAccount();
           let user = account
             ? await ctx.context.internalAdapter.findUserById(account.userId)
             : null;
@@ -125,18 +129,15 @@ export function wechatMiniGameAuth() {
                     emailVerified: true,
                     name: '微信道友',
                   },
-                  {
-                    accountId,
-                    issuer: WECHAT_ACCOUNT_ISSUER,
-                    providerId: WECHAT_PROVIDER_ID,
-                  },
+                  // Production still uses Better Auth's pre-issuer account
+                  // schema. The adapter ignores the newer type-only field.
+                  { accountId, providerId: WECHAT_PROVIDER_ID } as Parameters<
+                    typeof ctx.context.internalAdapter.createOAuthUser
+                  >[1],
                 );
               user = created.user;
             } catch {
-              account = await ctx.context.internalAdapter.findAccountByKey({
-                accountId,
-                issuer: WECHAT_ACCOUNT_ISSUER,
-              });
+              account = await findWechatAccount();
               user = account
                 ? await ctx.context.internalAdapter.findUserById(account.userId)
                 : null;
