@@ -29,12 +29,14 @@ export function unsafeRequestOriginGuard(): MiddlewareHandler<AppEnv> {
       return;
     }
 
+    const origin = context.req.header('origin');
+    const allowedOrigin = isAllowedWriteOrigin(origin);
     const secFetchSite = context.req.header('sec-fetch-site');
-    if (secFetchSite === 'cross-site') {
+    if (secFetchSite === 'cross-site' && !allowedOrigin) {
       return context.json({ success: false, error: 'Forbidden origin' }, 403);
     }
 
-    if (!isAllowedWriteOrigin(context.req.header('origin'))) {
+    if (!allowedOrigin) {
       return context.json({ success: false, error: 'Forbidden origin' }, 403);
     }
 

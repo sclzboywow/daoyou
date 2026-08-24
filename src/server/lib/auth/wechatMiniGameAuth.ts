@@ -4,6 +4,7 @@ import { setSessionCookie } from 'better-auth/cookies';
 import { z } from 'zod';
 
 const WECHAT_PROVIDER_ID = 'wechat-mini-game';
+const WECHAT_ACCOUNT_ISSUER = `local:oauth:${encodeURIComponent(WECHAT_PROVIDER_ID)}`;
 
 const signInBodySchema = z.object({
   code: z.string().trim().min(1).max(256),
@@ -107,11 +108,10 @@ export function wechatMiniGameAuth() {
           );
           const accountId = `${appId}:${openId}`;
 
-          let account =
-            await ctx.context.internalAdapter.findAccountByProviderId(
-              accountId,
-              WECHAT_PROVIDER_ID,
-            );
+          let account = await ctx.context.internalAdapter.findAccountByKey({
+            accountId,
+            issuer: WECHAT_ACCOUNT_ISSUER,
+          });
           let user = account
             ? await ctx.context.internalAdapter.findUserById(account.userId)
             : null;
@@ -127,16 +127,16 @@ export function wechatMiniGameAuth() {
                   },
                   {
                     accountId,
+                    issuer: WECHAT_ACCOUNT_ISSUER,
                     providerId: WECHAT_PROVIDER_ID,
                   },
                 );
               user = created.user;
             } catch {
-              account =
-                await ctx.context.internalAdapter.findAccountByProviderId(
-                  accountId,
-                  WECHAT_PROVIDER_ID,
-                );
+              account = await ctx.context.internalAdapter.findAccountByKey({
+                accountId,
+                issuer: WECHAT_ACCOUNT_ISSUER,
+              });
               user = account
                 ? await ctx.context.internalAdapter.findUserById(account.userId)
                 : null;

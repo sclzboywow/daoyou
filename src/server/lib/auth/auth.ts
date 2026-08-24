@@ -6,7 +6,7 @@ import { bearer } from 'better-auth/plugins/bearer';
 import { emailOTP } from 'better-auth/plugins/email-otp';
 import { sendViaSmtp } from '../admin/smtp';
 import { db } from '../drizzle/db';
-import { getPublicWebOrigins } from '../http/origins';
+import { getTrustedClientOrigins } from '../http/origins';
 import {
   markAccountDeletionCompleted,
   recordPendingAccountDeletion,
@@ -24,6 +24,20 @@ function getRequiredEnv(name: 'BETTER_AUTH_SECRET' | 'BETTER_AUTH_URL') {
   }
 
   return value;
+}
+
+function getGitHubProviderConfig() {
+  const clientId = process.env.GITHUB_CLIENT_ID;
+  const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return undefined;
+  }
+
+  return {
+    clientId,
+    clientSecret,
+  };
 }
 
 function fallbackDisplayName(email: string, name?: string | null) {
@@ -56,6 +70,7 @@ const zhAuthTranslations = {
   EMAIL_CAN_NOT_BE_UPDATED: '暂不支持修改邮箱',
   CREDENTIAL_ACCOUNT_NOT_FOUND: '未找到对应的密码登录记录',
   SESSION_EXPIRED: '会话已失效，请重新登录后再试',
+  SOCIAL_ACCOUNT_ALREADY_LINKED: '此 GitHub 账号已绑定其他用户',
   INVALID_CALLBACK_URL: '回传地址无效，请稍后重试',
   INVALID_REDIRECT_URL: '跳转地址无效，请稍后重试',
   INVALID_ERROR_CALLBACK_URL: '错误回传地址无效，请稍后重试',
@@ -74,7 +89,7 @@ export const authSchemaName = BETTER_AUTH_SCHEMA_NAME;
 export const auth = betterAuth({
   baseURL: getRequiredEnv('BETTER_AUTH_URL'),
   secret: getRequiredEnv('BETTER_AUTH_SECRET'),
-  trustedOrigins: getPublicWebOrigins(),
+  trustedOrigins: getTrustedClientOrigins(),
   database: drizzleAdapter(db, {
     provider: 'pg',
     schema: betterAuthSchema,
@@ -125,6 +140,16 @@ export const auth = betterAuth({
           '若这不是你的操作，可忽略本邮件。',
         ].join('\n'),
       );
+    },
+  },
+  socialProviders: {
+    ...(getGitHubProviderConfig() ? { github: getGitHubProviderConfig() } : {}),
+  },
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ['github'],
+      updateUserInfoOnLink: true,
     },
   },
   user: {

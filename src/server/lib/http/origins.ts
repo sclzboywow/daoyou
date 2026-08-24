@@ -26,8 +26,16 @@ function splitOrigins(value: string | undefined) {
     .filter((origin): origin is string => Boolean(origin));
 }
 
+export const WECHAT_MINI_GAME_ORIGINS = [
+  'https://servicewechat.com',
+] as const;
+
 export function getPublicWebOrigins() {
   return splitOrigins(process.env.PUBLIC_WEB_ORIGINS);
+}
+
+export function getTrustedClientOrigins() {
+  return [...getPublicWebOrigins(), ...WECHAT_MINI_GAME_ORIGINS];
 }
 
 export function isAllowedPublicWebOrigin(origin: string | undefined | null) {
@@ -36,7 +44,10 @@ export function isAllowedPublicWebOrigin(origin: string | undefined | null) {
   }
 
   const normalized = normalizeOrigin(origin);
-  return Boolean(normalized && getPublicWebOrigins().includes(normalized));
+  return Boolean(
+    normalized &&
+      getTrustedClientOrigins().includes(normalized),
+  );
 }
 
 export function resolveCorsOrigin(origin: string) {
