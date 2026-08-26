@@ -525,6 +525,35 @@ const OFFICIAL_REPUTATION_CONSUMABLES: OfficialShopItem[] = [
     price: 80,
     perUserLimit: 3,
   },
+  {
+    entry: officialEntry({
+      itemId: 'talisman_sect_transfer',
+      type: 'consumable',
+      status: 'published',
+      payload: {
+        name: '欺天符',
+        type: '符箓',
+        quality: '神品',
+        description:
+          '以欺瞒天道名录为核心的一纸禁符。催动后可无损改写当前宗门归属：六本心法等级保留，双道途解锁层数可顺承或对调，目标宗门节点与神通需重新选择。确认转宗成功后才会消耗。',
+        score: 120,
+        spec: {
+          kind: 'talisman',
+          scenario: 'sect_transfer',
+          sessionMode: 'consume_on_action',
+        },
+      },
+      editorConfig: {
+        kind: 'talisman',
+        scenario: 'sect_transfer',
+        sessionMode: 'consume_on_action',
+        source: 'official_reputation_shop',
+        officialBuildId: OFFICIAL_BUILD_ID,
+      },
+    }),
+    price: 350,
+    perUserLimit: 1,
+  },
 ];
 
 async function syncLibrary() {
