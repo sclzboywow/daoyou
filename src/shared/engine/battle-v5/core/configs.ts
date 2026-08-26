@@ -94,6 +94,7 @@ export interface ConditionConfig {
     | 'has_not_tag'
     | 'has_tag_on'
     | 'ability_has_tag'
+    | 'ability_has_any_tag'
     | 'ability_has_exact_tag'
     | 'ability_has_not_tag'
     | 'source_has_tag'
@@ -127,6 +128,7 @@ export interface ConditionConfig {
     | 'is_lethal';
   params: {
     tag?: string;
+    tags?: string[];
     id?: string;
     value?: number;
     // 条件作用域，默认 target。
@@ -596,6 +598,14 @@ export interface DamageImmunityParams {
 }
 
 /**
+ * 整个技能免疫参数定义。
+ * 该效果只在 SkillPreCastEvent 阶段拦截施法，不会只移除技能附带的某个 Buff。
+ */
+export interface SkillImmunityParams {
+  reason?: string;
+}
+
+/**
  * 重构后的辨识联合类型原子效果配置
  */
 export type EffectConfig = BaseEffectConfig &
@@ -636,6 +646,7 @@ export type EffectConfig = BaseEffectConfig &
     | { type: 'death_prevent'; params: DeathPreventParams }
     | { type: 'buff_immunity'; params: BuffImmunityParams }
     | { type: 'damage_immunity'; params: DamageImmunityParams }
+    | { type: 'skill_immunity'; params: SkillImmunityParams }
     | { type: 'skip_action'; params: SkipActionParams }
     | { type: 'queue_action'; params: QueueActionParams }
     | { type: 'resource_scaled_damage'; params: ResourceScaledDamageParams }
@@ -675,7 +686,7 @@ export interface ListenerGuardConfig {
    */
   requireOwnerAlive?: boolean;
   /**
-   * 是否允许濒死窗口触发（仅对 DamageTakenEvent 有意义）
+   * 是否允许濒死窗口触发（仅对 DamageSegmentAppliedEvent 有意义）
    */
   allowLethalWindow?: boolean;
   /**
@@ -686,10 +697,18 @@ export interface ListenerGuardConfig {
   skipSecondaryDamageSource?: boolean;
 }
 
-export interface ListenerTriggerBudgetConfig {
+export type ListenerTriggerGranularity =
+  | 'segment'
+  | 'hit'
+  | 'cast'
+  | 'action'
+  | 'round'
+  | 'battle'
+  | 'buff_lifetime';
+
+export interface ListenerTriggerPolicyConfig {
   maxTriggers: number;
-  reset: 'buff_lifetime' | 'action' | 'source_action' | 'round' | 'battle';
-  /** 多个唯一监听器共享同一触发预算时使用；缺省按监听器 ID 独立计数。 */
+  granularity: ListenerTriggerGranularity;
   group?: string;
 }
 
@@ -703,7 +722,7 @@ export interface ListenerConfig {
   id?: string;
   /**
    * 对应 CombatEvent['type']
-   * 例如：'RoundPreEvent' | 'DamageTakenEvent' | 'SkillCastEvent'
+   * 例如：'RoundPreEvent' | 'DamageSegmentAppliedEvent' | 'SkillCastEvent'
    */
   eventType: string;
   /**
@@ -722,8 +741,8 @@ export interface ListenerConfig {
    * 执行守卫
    */
   guard?: ListenerGuardConfig;
-  /** 限制监听器在指定生命周期窗口内的触发次数。 */
-  budget?: ListenerTriggerBudgetConfig;
+  /** 集中式触发 claim 策略。 */
+  triggerPolicy?: ListenerTriggerPolicyConfig;
   /** 在消费触发预算前判定的事件条件。 */
   conditions?: ConditionConfig[];
   /**
@@ -758,7 +777,7 @@ export interface BuffConfig {
   duration: number; // -1 为永久
   /** 持续时间递减单位；默认随宿主行动，周期状态可按回合递减。 */
   durationUnit?: 'owner_action' | 'round';
-  /** 内部计数/防重复 marker 可仅保留在调试日志。 */
+  /** 仅用于展示与调试的内部状态；触发幂等必须使用 triggerPolicy/TriggerLedger。 */
   logVisibility?: 'player' | 'debug';
   /** 状态栏可见性；缺省时沿用日志可见性以保持兼容。 */
   statusVisibility?: 'player' | 'hidden';

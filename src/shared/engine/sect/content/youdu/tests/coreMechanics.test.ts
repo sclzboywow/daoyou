@@ -1,7 +1,8 @@
 import { StackRule } from '@shared/engine/battle-v5/buffs/Buff';
+import { ActiveSkill } from '@shared/engine/battle-v5/abilities/ActiveSkill';
 import { EventBus } from '@shared/engine/battle-v5/core/EventBus';
 import type {
-  DamageRequestEvent,
+  DamageSegmentRequestedEvent,
   ResourceDrainEvent,
   RoundPostEvent,
 } from '@shared/engine/battle-v5/core/events';
@@ -14,6 +15,7 @@ import {
   AttributeType,
   AbilityType,
   BuffType,
+  DamageSource,
   DamageType,
   ModifierType,
 } from '@shared/engine/battle-v5/core/types';
@@ -25,6 +27,7 @@ import {
   type CombatResultCommittedEventV3,
 } from '@shared/engine/battle-v5/v3';
 import { Unit } from '@shared/engine/battle-v5/units/Unit';
+import { createHitResolution } from '@shared/engine/battle-v5/core/resolution';
 import { executeTestEffect } from '@shared/engine/battle-v5/tests/setup/executeTestEffect';
 import { GameplayTags } from '@shared/engine/shared/tag-domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,15 +60,30 @@ function config(abilityId: string, pathId?: YouduPathId, nodes: string[] = []) {
   }).config;
 }
 
+let testResolutionSequence = 0;
+
 function ability(abilityId: string, pathId?: YouduPathId, nodes: string[] = []) {
-  return AbilityFactory.create(config(abilityId, pathId, nodes));
+  const created = AbilityFactory.create(config(abilityId, pathId, nodes));
+  if (created instanceof ActiveSkill) {
+    const execute = created.execute.bind(created);
+    created.execute = (context) => execute({
+      ...context,
+      resolution: context.resolution ?? createHitResolution({
+        actionId: `${context.caster.id}:youdu-test:${++testResolutionSequence}`,
+        castId: `${created.id}:youdu-test:${testResolutionSequence}`,
+        caster: context.caster,
+        target: context.target,
+      }),
+    });
+  }
+  return created;
 }
 
 function installRuntime(owner: Unit, pathId?: YouduPathId, nodes: string[] = []): void {
   owner.combatResources.define({
     id: YOUDU_SOUL_FIRE,
     name: '魂火',
-    initial: 0,
+    initial: nodes.includes('tide-soul-lantern') ? 1 : 0,
     max: 3,
   });
   owner.abilities.addAbility(ability('youdu-runtime', pathId, nodes));
@@ -127,6 +145,39 @@ describe('幽都核心机制实际结算', () => {
     EventBus.instance.reset();
   });
 
+  it.each([
+    [
+      '招魂渡夜',
+      'tide' as const,
+      ['forgetful-river-tide', 'soul-severing-call', 'one-sigh'],
+    ],
+    [
+      '镇魄司命',
+      'decree' as const,
+      ['reveal-shadow', 'soul-severing-call', 'seize-soul'],
+    ],
+  ])('%s 固定四回合循环能铺到终结线并消费满魂火', (
+    _name,
+    pathId,
+    setupAbilityIds,
+  ) => {
+    const caster = unit(`four-round-${pathId}-caster`);
+    const target = unit(`four-round-${pathId}-target`);
+    installRuntime(caster, pathId);
+
+    for (const abilityId of setupAbilityIds) {
+      ability(abilityId, pathId).execute({ caster, target });
+    }
+
+    expect(erosion(target)?.getLayer()).toBe(4);
+    expect(caster.combatResources.getCurrent(YOUDU_SOUL_FIRE)).toBe(3);
+
+    ability('soul-shall-not-return', pathId).execute({ caster, target });
+
+    expect(erosion(target)).toBeUndefined();
+    expect(caster.combatResources.getCurrent(YOUDU_SOUL_FIRE)).toBe(0);
+  });
+
   it('蚀魂一次加层、非线性属性、逐层驱散与受治疗削弱统一生效', () => {
     const caster = unit('caster');
     const target = unit('target');
@@ -135,9 +186,15 @@ describe('幽都核心机制实际结算', () => {
     const baseMaxHp = target.getMaxHp();
     const sigh = ability('one-sigh');
     const sever = ability('soul-severing-call');
+    const setupResolution = createHitResolution({
+      actionId: 'youdu:test-action:initial-erosion',
+      castId: 'youdu:test-cast:initial-erosion',
+      caster,
+      target,
+    });
 
-    sigh.execute({ caster, target });
-    sever.execute({ caster, target });
+    sigh.execute({ caster, target, resolution: setupResolution });
+    sever.execute({ caster, target, resolution: setupResolution });
 
     expect(erosion(target)?.getLayer()).toBe(3);
     expect(target.attributes.getValue(AttributeType.MAGIC_ATK)).toBeCloseTo(baseMagicAttack * 0.92);
@@ -148,6 +205,175 @@ describe('幽都核心机制实际结算', () => {
     expect(target.heal(100)).toBe(70);
     expect(target.buffs.removeBuffDispel(YOUDU_SOUL_EROSION)).toBe(true);
     expect(erosion(target)?.getLayer()).toBe(2);
+  });
+
+  it('镇魄司命成功施加照影获得1魂火，减益免疫时不获得', () => {
+    const caster = unit('shadow-caster');
+    const target = unit('shadow-target');
+    installRuntime(caster, 'decree');
+
+    ability('reveal-shadow', 'decree').execute({ caster, target });
+    expect(caster.combatResources.getCurrent(YOUDU_SOUL_FIRE)).toBe(1);
+
+    const immuneCaster = unit('immune-shadow-caster');
+    const immuneTarget = unit('immune-shadow-target');
+    installRuntime(immuneCaster, 'decree');
+    addBuffImmunity(immuneTarget, [GameplayTags.BUFF.TYPE.DEBUFF]);
+
+    ability('reveal-shadow', 'decree').execute({
+      caster: immuneCaster,
+      target: immuneTarget,
+    });
+    expect(immuneCaster.combatResources.getCurrent(YOUDU_SOUL_FIRE)).toBe(0);
+  });
+
+  it('唤名成痕每回合只额外获得一次魂火', () => {
+    const system = new DamageSystem();
+    const nodes = ['tide-call-the-name'];
+    const caster = unit('call-caster');
+    const target = unit('call-target');
+    installRuntime(caster, 'tide', nodes);
+    ability('forgetful-river-tide', 'tide', nodes).execute({ caster, target });
+    caster.combatResources.set(YOUDU_SOUL_FIRE, 0);
+
+    ability('one-sigh', 'tide', nodes).execute({ caster, target });
+    expect(caster.combatResources.getCurrent(YOUDU_SOUL_FIRE)).toBe(2);
+
+    caster.combatResources.set(YOUDU_SOUL_FIRE, 0);
+    ability('one-sigh', 'tide', nodes).execute({ caster, target });
+    expect(caster.combatResources.getCurrent(YOUDU_SOUL_FIRE)).toBe(1);
+    system.destroy();
+  });
+
+  it('洗魂有价同一行动只惩罚一次驱散并产生1魂火', () => {
+    const nodes = ['tide-cleanse-toll'];
+    const caster = unit('cleanse-caster');
+    const target = unit('cleanse-target');
+    installRuntime(caster, 'tide', nodes);
+    const sigh = ability('one-sigh', 'tide', nodes);
+    for (let index = 0; index < 3; index += 1) sigh.execute({ caster, target });
+    caster.combatResources.set(YOUDU_SOUL_FIRE, 0);
+    const followUps: DamageSegmentRequestedEvent[] = [];
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
+      (event) => {
+        if (event.damageSource === DamageSource.FOLLOW_UP) followUps.push(event);
+      },
+      -1_000,
+    );
+
+    const resolution = createHitResolution({
+      actionId: 'youdu:cleanse-toll:action',
+      castId: 'youdu:cleanse-toll:cast',
+      caster: target,
+      target,
+    });
+    target.buffs.removeBuffDispel(YOUDU_SOUL_EROSION, {
+      source: target,
+      resolution,
+    });
+    target.buffs.removeBuffDispel(YOUDU_SOUL_EROSION, {
+      source: target,
+      resolution,
+    });
+
+    expect(followUps).toHaveLength(1);
+    expect(caster.combatResources.getCurrent(YOUDU_SOUL_FIRE)).toBe(1);
+  });
+
+  it('百鬼同哭对同一目标每三回合最多追加一次魂伤', () => {
+    const nodes = ['tide-hundred-ghosts'];
+    const caster = unit('hundred-caster');
+    const target = unit('hundred-target');
+    installRuntime(caster, 'tide', nodes);
+    setOverride(caster, AttributeType.CONTROL_HIT, 0);
+    setOverride(target, AttributeType.CONTROL_RESISTANCE, 1);
+    const sigh = ability('one-sigh', 'tide', nodes);
+    const followUps: DamageSegmentRequestedEvent[] = [];
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
+      (event) => {
+        if (
+          event.damageSource === DamageSource.FOLLOW_UP &&
+          event.damageType === DamageType.TRUE
+        ) followUps.push(event);
+      },
+      -1_000,
+    );
+
+    for (let index = 0; index < 5; index += 1) sigh.execute({ caster, target });
+    expect(followUps).toHaveLength(1);
+    expect(target.buffs.getAllBuffs().find((buff) =>
+      buff.id === 'sect.youdu.hundred-ghosts-cooldown')?.getDuration()).toBe(3);
+
+    target.buffs.removeBuffExpired(YOUDU_RETURNING_SOUL);
+    sigh.execute({ caster, target });
+    sigh.execute({ caster, target });
+    expect(followUps).toHaveLength(1);
+
+    const cooldown = target.buffs.getAllBuffs().find((buff) =>
+      buff.id === 'sect.youdu.hundred-ghosts-cooldown')!;
+    cooldown.tickDuration();
+    cooldown.tickDuration();
+    cooldown.tickDuration();
+    target.buffs.removeBuffExpired(cooldown.id);
+    target.buffs.removeBuffExpired(YOUDU_RETURNING_SOUL);
+    sigh.execute({ caster, target });
+    sigh.execute({ caster, target });
+    expect(followUps).toHaveLength(2);
+  });
+
+  it('魂梦相侵刷新忘川并追加一次不产魂火的魂伤', () => {
+    const nodes = ['tide-dream-invasion'];
+    const caster = unit('dream-caster');
+    const target = unit('dream-target');
+    installRuntime(caster, 'tide', nodes);
+    setOverride(caster, AttributeType.CONTROL_HIT, 0);
+    setOverride(target, AttributeType.CONTROL_RESISTANCE, 1);
+    const followUps: DamageSegmentRequestedEvent[] = [];
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
+      (event) => {
+        if (
+          event.damageSource === DamageSource.FOLLOW_UP &&
+          event.damageType === DamageType.TRUE
+        ) followUps.push(event);
+      },
+      -1_000,
+    );
+
+    ability('forgetful-river-tide', 'tide', nodes).execute({ caster, target });
+    ability('soul-severing-call', 'tide', nodes).execute({ caster, target });
+    ability('one-sigh', 'tide', nodes).execute({ caster, target });
+    caster.combatResources.set(YOUDU_SOUL_FIRE, 0);
+    ability('one-sigh', 'tide', nodes).execute({ caster, target });
+
+    expect(followUps).toHaveLength(1);
+    expect(followUps[0].baseDamage).toBeGreaterThan(0);
+    expect(caster.combatResources.getCurrent(YOUDU_SOUL_FIRE)).toBe(1);
+    expect(target.buffs.getAllBuffs().find((buff) =>
+      buff.id === YOUDU_FORGETFUL_RIVER)?.getDuration()).toBe(2);
+  });
+
+  it('魂刑有度同时覆盖失魂抵抗与控制免疫分支', () => {
+    const nodes = ['decree-punishment-measured'];
+    const runToFive = (caster: Unit, target: Unit) => {
+      const sigh = ability('one-sigh', 'decree', nodes);
+      for (let index = 0; index < 5; index += 1) sigh.execute({ caster, target });
+      return target.buffs.getAllBuffs().find((buff) =>
+        buff.id === 'sect.youdu.measured-punishment');
+    };
+
+    const resistCaster = unit('punishment-resist-caster');
+    const resistTarget = unit('punishment-resist-target');
+    setOverride(resistCaster, AttributeType.CONTROL_HIT, 0);
+    setOverride(resistTarget, AttributeType.CONTROL_RESISTANCE, 1);
+    expect(runToFive(resistCaster, resistTarget)?.getDuration()).toBe(2);
+
+    const immuneCaster = unit('punishment-immune-caster');
+    const immuneTarget = unit('punishment-immune-target');
+    addBuffImmunity(immuneTarget, [GameplayTags.BUFF.TYPE.CONTROL]);
+    expect(runToFive(immuneCaster, immuneTarget)?.getDuration()).toBe(2);
   });
 
   it('蚀魂五层完整曲线、满层刷新与全部清除均保持单一状态语义', () => {
@@ -484,9 +710,9 @@ describe('幽都核心机制实际结算', () => {
     ability('one-sigh', 'decree', nodes).execute({ caster, target });
     expect(erosion(target)?.getLayer()).toBe(2);
     const sever = ability('soul-severing-call', 'decree', nodes);
-    let soulRequest: DamageRequestEvent | undefined;
-    EventBus.instance.subscribe<DamageRequestEvent>(
-      'DamageRequestEvent',
+    let soulRequest: DamageSegmentRequestedEvent | undefined;
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
       (event) => {
         if (event.damageType === DamageType.TRUE) soulRequest = event;
       },
@@ -504,6 +730,7 @@ describe('幽都核心机制实际结算', () => {
       isResisted: false,
     });
     expect(erosion(target)?.getLayer()).toBe(2);
+    caster.combatResources.set(YOUDU_SOUL_FIRE, 0);
 
     EventBus.instance.publish({
       type: 'HitCheckEvent',
@@ -625,9 +852,9 @@ describe('幽都核心机制实际结算', () => {
   it('混合技能共享能力命中语义但发布术伤与魂伤两个独立伤害请求', () => {
     const caster = unit('caster');
     const target = unit('target');
-    const requests: DamageRequestEvent[] = [];
-    EventBus.instance.subscribe<DamageRequestEvent>(
-      'DamageRequestEvent',
+    const requests: DamageSegmentRequestedEvent[] = [];
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
       (event) => requests.push(event),
       -1_000,
     );
@@ -647,7 +874,7 @@ describe('幽都核心机制实际结算', () => {
     const caster = unit('caster');
     const target = unit('target');
     const deaths: CombatResultCommittedEventV3[] = [];
-    const requests: DamageRequestEvent[] = [];
+    const requests: DamageSegmentRequestedEvent[] = [];
     target.setHp(1);
     EventBus.instance.subscribe<CombatResultCommittedEventV3>(
       CombatV3EventType.RESULT_COMMITTED,
@@ -656,8 +883,8 @@ describe('幽都核心机制实际结算', () => {
       },
       -1_000,
     );
-    EventBus.instance.subscribe<DamageRequestEvent>(
-      'DamageRequestEvent',
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
       (event) => requests.push(event),
       -1_000,
     );
@@ -698,16 +925,16 @@ describe('幽都核心机制实际结算', () => {
         params: { value: { base: 10 }, damageType: DamageType.TRUE },
       }],
     });
-    let request: DamageRequestEvent | undefined;
-    EventBus.instance.subscribe<DamageRequestEvent>(
-      'DamageRequestEvent',
+    let request: DamageSegmentRequestedEvent | undefined;
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
       (event) => {
         if (event.ability === fake) request = event;
       },
       -1_000,
     );
 
-    fake.execute({ caster, target });
+    fake.execute({ caster, target, resolution: createHitResolution({ actionId: 'youdu:fake', castId: 'youdu:fake', caster, target }) });
 
     expect(request?.damageIncreasePctBucket ?? 0).toBe(0);
   });
@@ -742,9 +969,9 @@ describe('幽都核心机制实际结算', () => {
       (event) => drainEvents.push(event),
       -1_000,
     );
-    const requests: DamageRequestEvent[] = [];
-    EventBus.instance.subscribe<DamageRequestEvent>(
-      'DamageRequestEvent',
+    const requests: DamageSegmentRequestedEvent[] = [];
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
       (event) => requests.push(event),
       -1_000,
     );
@@ -765,9 +992,9 @@ describe('幽都核心机制实际结算', () => {
   it('忘川为单体行动前DOT，逐次读取施术者实时法攻且不额外加层', () => {
     const caster = unit('caster');
     const target = unit('target');
-    const requests: DamageRequestEvent[] = [];
-    EventBus.instance.subscribe<DamageRequestEvent>(
-      'DamageRequestEvent',
+    const requests: DamageSegmentRequestedEvent[] = [];
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
       (event) => requests.push(event),
       -1_000,
     );
@@ -778,10 +1005,10 @@ describe('幽都核心机制实际结算', () => {
 
     setOverride(caster, AttributeType.MAGIC_ATK, 100);
     beginRuntimeAction(target);
-    EventBus.instance.publish<RoundPostEvent>({ type: 'RoundPostEvent', timestamp: Date.now(), turn: 1 });
+    EventBus.instance.publish<RoundPostEvent>({ type: 'RoundPostEvent', resolution: createHitResolution({ actionId: 'youdu:round:1', castId: 'youdu:round:1', caster, target }), timestamp: Date.now(), turn: 1 });
     setOverride(caster, AttributeType.MAGIC_ATK, 200);
     beginRuntimeAction(target);
-    EventBus.instance.publish<RoundPostEvent>({ type: 'RoundPostEvent', timestamp: Date.now(), turn: 2 });
+    EventBus.instance.publish<RoundPostEvent>({ type: 'RoundPostEvent', resolution: createHitResolution({ actionId: 'youdu:round:2', castId: 'youdu:round:2', caster, target }), timestamp: Date.now(), turn: 2 });
 
     expect(requests.map((event) => event.baseDamage)).toEqual([14, 28]);
     expect(requests.every((event) => event.canCrit === false)).toBe(true);
@@ -805,10 +1032,10 @@ describe('幽都核心机制实际结算', () => {
 
     ability('soul-shall-not-return').execute({ caster, target });
 
-    const expected = Math.round(
+    const expectedWithoutSoulFire = Math.round(
       Math.round(caster.attributes.getValue(AttributeType.MAGIC_ATK) * 1.5059) * 1.08,
     );
-    expect(before - target.getCurrentHp()).toBe(expected);
+    expect(before - target.getCurrentHp()).toBeGreaterThan(expectedWithoutSoulFire);
     expect(target.buffs.getAllBuffIds()).not.toContain(YOUDU_SOUL_EROSION);
     expect(target.tags.hasTag(GameplayTags.STATUS.SECT.state('youdu', 'no-return'))).toBe(true);
     system.destroy();
@@ -819,9 +1046,9 @@ describe('幽都核心机制实际结算', () => {
     const target = unit('target');
     installRuntime(caster);
     caster.combatResources.set(YOUDU_SOUL_FIRE, 3);
-    let request: DamageRequestEvent | undefined;
-    EventBus.instance.subscribe<DamageRequestEvent>(
-      'DamageRequestEvent',
+    let request: DamageSegmentRequestedEvent | undefined;
+    EventBus.instance.subscribe<DamageSegmentRequestedEvent>(
+      'DamageSegmentRequestedEvent',
       (event) => {
         if (event.damageType === DamageType.TRUE) request = event;
       },

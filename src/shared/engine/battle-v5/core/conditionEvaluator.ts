@@ -3,7 +3,10 @@ import type { Ability } from '../abilities/Ability';
 import type { AbilityCastSnapshot } from '../abilities/Ability';
 import { Unit } from '../units/Unit';
 import { ConditionConfig } from './configs';
-import { DamageEvent, DamageRequestEvent, DamageTakenEvent } from './events';
+import {
+  DamageSegmentRequestedEvent,
+  DamageSegmentAppliedEvent,
+} from './events';
 import { BuffType, DamageSource, DamageType, type CombatEvent, type LogCauseRef } from './types';
 import { readRuntimeCounter } from './runtimeState';
 import { readAbilityMode } from './runtimeState';
@@ -95,7 +98,7 @@ function getDamageTypeFromTriggerEvent(triggerEvent: unknown): DamageType | unde
   if (!triggerEvent || typeof triggerEvent !== 'object') return undefined;
 
   const eventLike = triggerEvent as {
-    damageType?: DamageRequestEvent['damageType'] | DamageEvent['damageType'] | DamageTakenEvent['damageType'];
+    damageType?: DamageSegmentRequestedEvent['damageType'] | DamageSegmentAppliedEvent['damageType'];
   };
   return eventLike.damageType;
 }
@@ -171,6 +174,11 @@ export function evaluateCondition(
       const abilityTags = getAbilityTags(context);
       if (!abilityTags || !cond.params.tag) return false;
       return abilityTags.hasTag(cond.params.tag);
+    }
+    case 'ability_has_any_tag': {
+      const abilityTags = getAbilityTags(context);
+      const tags = cond.params.tags ?? [];
+      return !!abilityTags && tags.some((tag) => abilityTags.hasTag(tag));
     }
     case 'ability_has_exact_tag': {
       const abilityTags = getAbilityTags(context);

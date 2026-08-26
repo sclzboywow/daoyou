@@ -7,9 +7,16 @@ import {
   SkillCastEvent,
   SkillInterruptEvent,
   SkillPreCastEvent,
+  AbilityCastStartedEvent,
+  AbilityCastSettledEvent,
+  HitSettledEvent,
 } from '../core/events';
 import { CombatResultEmitterV3 } from '../v3/CombatResultEmitterV3';
 import { combatCarrierFromAbilityV3 } from '../v3/origin';
+import {
+  consumeDamageSegmentCount,
+  createHitResolution,
+} from '../core/resolution';
 
 /**
  * ActionExecutionSystem - 行动执行系统
@@ -54,7 +61,7 @@ export class ActionExecutionSystem {
       throw new Error('SkillPreCastEvent has no V3 trace');
     }
     // 检查是否被打断
-    if (event.isInterrupted && event.interruptPolicy !== 'uninterruptible') {
+    if (event.isImmune || (event.isInterrupted && event.interruptPolicy !== 'uninterruptible')) {
       event.ability.cancelPreparedCast();
       const interruptedOrigin = {
         kind: 'owned' as const,
@@ -68,10 +75,11 @@ export class ActionExecutionSystem {
         },
         () => {
           new CombatResultEmitterV3().commit(
-            event.caster,
+            event.isImmune ? event.target : event.caster,
             {
               type: 'defense',
-              defense: 'interrupt',
+              defense: event.isImmune ? 'skill_immune' : 'interrupt',
+              detail: event.isImmune ? event.immunityReason : undefined,
             },
             { origin: interruptedOrigin, parentTrace: eventTrace },
           );
@@ -81,7 +89,9 @@ export class ActionExecutionSystem {
             caster: event.caster,
             target: event.target,
             ability: event.ability,
-            reason: '施法被打断',
+            reason: event.isImmune
+              ? `${event.immunityReason ?? '技能免疫'}：技能被免疫`
+              : '施法被打断',
           });
           if (event.queuedActionState) {
             new CombatResultEmitterV3().commit(
@@ -106,7 +116,9 @@ export class ActionExecutionSystem {
               remainingActions: 0,
               sourceAbility: event.queuedActionState.sourceAbility,
               ability: { id: event.ability.id, name: event.ability.name },
-              reason: '施法被打断',
+              reason: event.isImmune
+                ? `${event.immunityReason ?? '技能免疫'}：技能被免疫`
+                : '施法被打断',
             });
           }
         },
@@ -150,6 +162,12 @@ export class ActionExecutionSystem {
       sequence.ability = { id: ability.id, name: ability.name };
     }
     const castEvents = targets.map((castTarget) => {
+      const resolution = createHitResolution({
+        actionId: `${event.caster.id}:action:${event.caster.runtime.states.getUnitState(event.caster).actionSequence}`,
+        castId: `${event.caster.id}:cast:${eventTrace.eventId}`,
+        caster: event.caster,
+        target: castTarget,
+      });
       const castEvent: SkillCastEvent = {
         type: 'SkillCastEvent',
         timestamp: event.caster.runtime.clock.now(),
@@ -158,7 +176,16 @@ export class ActionExecutionSystem {
         ability,
         interruptPolicy: event.interruptPolicy,
         hitPolicy: event.hitPolicy,
+        resolution,
       };
+      this.eventBus.publish<AbilityCastStartedEvent>({
+        type: 'AbilityCastStartedEvent',
+        timestamp: event.caster.runtime.clock.now(),
+        caster: event.caster,
+        target: castTarget,
+        ability,
+        resolution,
+      });
       return this.eventBus.runInCausalContext(
         { origin, trace: eventTrace },
         () => this.eventBus.publish(castEvent),
@@ -200,14 +227,51 @@ export class ActionExecutionSystem {
           castEvents.map((castEvent) => ({
             target: castEvent.target,
             shouldApplyEffects: castEvent.isHit !== false,
+            resolution: castEvent.resolution,
           })),
         );
+        for (const castEvent of castEvents) {
+          const resolution = castEvent.resolution;
+          if (!resolution) continue;
+          this.eventBus.publish<HitSettledEvent>({
+            type: 'HitSettledEvent',
+            timestamp: event.caster.runtime.clock.now(),
+            caster: event.caster,
+            target: castEvent.target,
+            ability,
+            segmentCount: consumeDamageSegmentCount(resolution),
+            resolution,
+          });
+        }
       } else {
         const castEvent = castEvents[0];
         ability.execute({
           caster: event.caster,
           target,
           shouldApplyEffects: castEvent?.isHit !== false,
+        });
+        const resolution = castEvent?.resolution;
+        if (resolution) {
+          this.eventBus.publish<HitSettledEvent>({
+            type: 'HitSettledEvent',
+            timestamp: event.caster.runtime.clock.now(),
+            caster: event.caster,
+            target: castEvent.target,
+            ability,
+            segmentCount: consumeDamageSegmentCount(resolution),
+            resolution,
+          });
+        }
+      }
+      const primaryResolution = castEvents[0]?.resolution;
+      if (primaryResolution) {
+        this.eventBus.publish<AbilityCastSettledEvent>({
+          type: 'AbilityCastSettledEvent',
+          timestamp: event.caster.runtime.clock.now(),
+          caster: event.caster,
+          target: primaryResolution.target,
+          ability,
+          resolution: primaryResolution,
         });
       }
     });

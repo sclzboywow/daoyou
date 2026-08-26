@@ -35,7 +35,6 @@ export const GameplayTags = {
       BLEEDING: 'Status.Bleeding',
       CHILLED: 'Status.Chilled',
       SHOCKED: 'Status.Shocked',
-      BODY_BURN_BLOOD_TRIGGERED: 'Status.BodyCultivation.BurnBloodTriggered',
       BODY_ORGANS_SKILL_REFUNDED: 'Status.BodyCultivation.OrgansSkillRefunded',
     },
     SECT: {
@@ -74,6 +73,7 @@ export const GameplayTags = {
       CONTROL: 'Ability.Function.Control',
       HEAL: 'Ability.Function.Heal',
       BUFF: 'Ability.Function.Buff',
+      DEBUFF: 'Ability.Function.Debuff',
     },
     CHANNEL: {
       ROOT: 'Ability.Channel',
@@ -93,6 +93,7 @@ export const GameplayTags = {
       ARTIFACT: 'Ability.Kind.Artifact',
       GONGFA: 'Ability.Kind.GongFa',
       SECT: 'Ability.Kind.Sect',
+      BASIC: 'Ability.Kind.Basic',
     },
     SECT: {
       ROOT: 'Ability.Sect',
@@ -190,9 +191,10 @@ export const GameplayTags = {
   EVENT: {
     ACTION_PRE: 'ActionPreEvent',
     ACTION_POST: 'ActionPostEvent',
-    DAMAGE_TAKEN: 'DamageTakenEvent',
-    DAMAGE_REQUEST: 'DamageRequestEvent',
-    DAMAGE: 'DamageEvent',
+    DAMAGE_TAKEN: 'DamageSegmentAppliedEvent',
+    DAMAGE_REQUEST: 'DamageSegmentRequestedEvent',
+    DAMAGE: 'DamageSegmentRequestedEvent',
+    SHIELD_BREAK: 'ShieldBreakEvent',
     ROUND_PRE: 'RoundPreEvent',
     ROUND_POST: 'RoundPostEvent',
     ROUND_START: 'RoundStartEvent',
