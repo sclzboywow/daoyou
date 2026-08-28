@@ -213,11 +213,26 @@ docker exec daoyou-web nginx -t
 docker exec daoyou-web test -f /usr/share/nginx/html/index.html
 docker exec daoyou-web test -f /usr/share/nginx/site/index.html
 docker exec daoyou-web test -f /usr/share/nginx/html/icons/icon-192.png
-curl -fsS -o /dev/null https://yzdoc.cn/
-curl -fsS -o /dev/null https://yzdoc.cn/login
-curl -fsS -o /dev/null https://yzdoc.cn/game
-curl -fsS -o /dev/null https://yzdoc.cn/icons/icon-192.png
-curl -fsS -o /dev/null https://yzdoc.cn/api/health-check
+
+# nginx may briefly refuse connections while the web container binds ports
+wait_http_ok() {
+  local url="$1"
+  local i
+  for i in $(seq 1 30); do
+    if curl -fsS -o /dev/null --max-time 5 "$url"; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for $url" >&2
+  return 1
+}
+
+wait_http_ok https://yzdoc.cn/
+wait_http_ok https://yzdoc.cn/login
+wait_http_ok https://yzdoc.cn/game
+wait_http_ok https://yzdoc.cn/icons/icon-192.png
+wait_http_ok https://yzdoc.cn/api/health-check
 curl -fsS 'https://yzdoc.cn/socket.io/?EIO=4&transport=polling' | grep -q '^0'
 
 cp -a "$RELEASE_DIR/release.json" "$RUNTIME_DIR/current-release.json"
