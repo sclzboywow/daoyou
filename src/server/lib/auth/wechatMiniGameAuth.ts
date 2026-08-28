@@ -129,11 +129,12 @@ export function wechatMiniGameAuth() {
                     emailVerified: true,
                     name: '微信道友',
                   },
-                  // Production still uses Better Auth's pre-issuer account
-                  // schema. The adapter ignores the newer type-only field.
-                  { accountId, providerId: WECHAT_PROVIDER_ID } as Parameters<
-                    typeof ctx.context.internalAdapter.createOAuthUser
-                  >[1],
+                  {
+                    accountId,
+                    providerId: WECHAT_PROVIDER_ID,
+                    // Better Auth 1.7 scopes accounts by issuer + accountId.
+                    issuer: `local:oauth:${encodeURIComponent(WECHAT_PROVIDER_ID)}`,
+                  },
                 );
               user = created.user;
             } catch {

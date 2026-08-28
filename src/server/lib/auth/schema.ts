@@ -6,6 +6,7 @@ import {
   pgSchema,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -62,6 +63,8 @@ export const authAccounts = authSchema.table(
     id: uuid('id')
       .default(sql`pg_catalog.gen_random_uuid()`)
       .primaryKey(),
+    // Better Auth 1.7 scopes external identities by (issuer, accountId).
+    issuer: text('issuer').notNull(),
     accountId: text('accountId').notNull(),
     providerId: text('providerId').notNull(),
     userId: uuid('userId').notNull(),
@@ -82,6 +85,10 @@ export const authAccounts = authSchema.table(
       foreignColumns: [authUsers.id],
     }).onDelete('cascade'),
     index('account_userId_idx').on(table.userId),
+    uniqueIndex('account_issuer_accountId_uidx').on(
+      table.issuer,
+      table.accountId,
+    ),
   ],
 );
 
