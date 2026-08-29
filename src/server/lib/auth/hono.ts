@@ -8,6 +8,7 @@ import {
 import { db } from '@server/lib/drizzle/db';
 import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
+import { verifyWechatMiniGameLoginCode } from './wechatMiniGameAuth';
 
 const CAPTCHA_ACTION_BY_PATH = new Map<string, AltchaAction>([
   ['/api/auth/sign-in/email', 'sign-in'],
@@ -52,6 +53,19 @@ async function validateCaptcha(context: Context): Promise<Response | null> {
     return null;
   }
 
+  const wechatLoginCode = context.req.header('x-wechat-login-code')?.trim();
+  if (
+    wechatLoginCode &&
+    (context.req.path === '/api/auth/sign-in/email' ||
+      context.req.path === '/api/auth/email-otp/send-verification-otp')
+  ) {
+    try {
+      await verifyWechatMiniGameLoginCode(wechatLoginCode);
+      return null;
+    } catch {
+      return authError('微信登录凭证无效或已过期，请重试');
+    }
+  }
   if (!isAltchaServerEnabled()) {
     return authError('人机验证服务未配置', 503);
   }

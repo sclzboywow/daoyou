@@ -77,6 +77,24 @@ async function exchangeWechatCode(
   return parsed.data.openid;
 }
 
+/**
+ * Consume a wx.login code as proof that an auth request originated from the
+ * configured mini game. WeChat codes are short-lived and single-use, so this
+ * can replace the browser-only ALTCHA step without weakening ordinary Web
+ * email authentication.
+ */
+export async function verifyWechatMiniGameLoginCode(code: string): Promise<void> {
+  const parsed = signInBodySchema.safeParse({ code });
+  if (!parsed.success) {
+    throw APIError.from('BAD_REQUEST', {
+      code: 'WECHAT_LOGIN_CODE_INVALID',
+      message: '微信登录凭证无效或已过期，请重试',
+    });
+  }
+  const { appId, appSecret } = requiredWechatConfig();
+  await exchangeWechatCode(appId, appSecret, parsed.data.code);
+}
+
 function syntheticWechatEmail(
   appId: string,
   openId: string,
