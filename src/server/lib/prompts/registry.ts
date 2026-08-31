@@ -16,6 +16,10 @@ import identityReshapePrompt from '@server/prompts/identity-reshape.md?raw';
 import lifespanExhaustedPrompt from '@server/prompts/lifespan-exhausted.md?raw';
 import materialGenerationPrompt from '@server/prompts/material-generation.md?raw';
 import spiritSeedGenerationPrompt from '@server/prompts/spirit-seed-generation.md?raw';
+import spiritSeedStageAssessmentPrompt from '@server/prompts/spirit-seed-stage-assessment.md?raw';
+import spiritPlantOutcomeNamingPrompt from '@server/prompts/spirit-plant-outcome-naming.md?raw';
+import spiritPlantObservationPrompt from '@server/prompts/spirit-plant-observation.md?raw';
+import spiritPlantConsultationPrompt from '@server/prompts/spirit-plant-consultation.md?raw';
 import materialSemanticEnrichmentPrompt from '@server/prompts/material-semantic-enrichment.md?raw';
 import productNamingPrompt from '@server/prompts/product-naming.md?raw';
 import spiritFieldStageJudgmentPrompt from '@server/prompts/spirit-field-stage-judgment.md?raw';
@@ -55,6 +59,10 @@ const bundledPromptSources: Record<string, string> = {
   'lifespan-exhausted.md': lifespanExhaustedPrompt,
   'material-generation.md': materialGenerationPrompt,
   'spirit-seed-generation.md': spiritSeedGenerationPrompt,
+  'spirit-seed-stage-assessment.md': spiritSeedStageAssessmentPrompt,
+  'spirit-plant-outcome-naming.md': spiritPlantOutcomeNamingPrompt,
+  'spirit-plant-observation.md': spiritPlantObservationPrompt,
+  'spirit-plant-consultation.md': spiritPlantConsultationPrompt,
   'material-semantic-enrichment.md': materialSemanticEnrichmentPrompt,
   'product-naming.md': productNamingPrompt,
   'spirit-field-stage-judgment.md': spiritFieldStageJudgmentPrompt,

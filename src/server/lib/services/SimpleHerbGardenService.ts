@@ -172,13 +172,7 @@ function createSimpleOutcome(
         quotaCategory:
           settled.family === 'cultivation' ? 'cultivation' : 'none',
       },
-      cultivationMeta: {
-        source: 'herb_garden',
-        element: seed.element,
-        tags: ['灵田'],
-        sourceSeedName: seed.name,
-        manifestationTags: outcome.cultivation.manifestationTags,
-      },
+      source: { kind: 'spirit_field', version: 1 },
     };
   }
   return outcome;

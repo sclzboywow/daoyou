@@ -992,15 +992,7 @@ export async function cultivatePlot(
             quotaCategory:
               settled.family === 'cultivation' ? 'cultivation' : 'none',
           },
-          cultivationMeta: {
-            source: 'herb_garden',
-            element: snapshot.element,
-            tags: ['灵田'],
-            sourceSeedName: snapshot.name,
-            manifestationTags: history
-              .filter(isCultivationRecord)
-              .map((entry) => entry.manifestation),
-          },
+          source: { kind: 'spirit_field', version: 1 },
         };
       }
     }
@@ -1217,13 +1209,7 @@ async function awardOutcome(
         quotaCategory:
           settled.family === 'cultivation' ? 'cultivation' : 'none',
       },
-      cultivationMeta: {
-        source: 'herb_garden',
-        element,
-        tags: ['灵田'],
-        sourceSeedName: outcome.cultivation.sourceSeedName,
-        manifestationTags: outcome.cultivation.manifestationTags,
-      },
+      source: { kind: 'spirit_field', version: 1 },
     };
     const value = Math.max(20, (QUALITY_ORDER.indexOf(outcome.rank) + 1) * 35);
     const [existing] = await tx

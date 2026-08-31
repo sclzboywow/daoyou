@@ -25,7 +25,6 @@ import feedbackRouter from '@server/routes/api/feedback.router';
 import friendsRouter from '@server/routes/api/friends.router';
 import generateCharacterRouter from '@server/routes/api/generate-character.router';
 import generateFatesRouter from '@server/routes/api/generate-fates.router';
-import spiritFieldRouter from '@server/routes/api/spirit-field.router';
 import identityReshapeRouter from '@server/routes/api/identity-reshape.router';
 import manualDrawRouter from '@server/routes/api/manual-draw.router';
 import marketRouter from '@server/routes/api/market.router';
