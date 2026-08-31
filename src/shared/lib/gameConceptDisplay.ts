@@ -190,10 +190,6 @@ export const GAME_CONCEPT_DISPLAY_MAP = {
     label: '特殊辅料',
     icon: '💧',
   },
-  material_seed: {
-    label: '灵种',
-    icon: '🌱',
-  },
   material_gongfa_manual: {
     label: '功法典籍',
     icon: '📖',
@@ -858,7 +854,6 @@ export const MATERIAL_TYPE_DISPLAY_MAP: Record<
   monster: getConceptInfo('material_monster'),
   tcdb: getConceptInfo('material_tcdb'),
   aux: getConceptInfo('material_aux'),
-  seed: getConceptInfo('material_seed'),
   gongfa_manual: getConceptInfo('material_gongfa_manual'),
   skill_manual: getConceptInfo('material_skill_manual'),
 };

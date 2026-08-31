@@ -18,7 +18,6 @@ const TYPE_TAGS: Record<Material['type'], string> = {
   monster: CreationTags.MATERIAL.TYPE_MONSTER,
   tcdb: CreationTags.MATERIAL.TYPE_SPECIAL,
   aux: CreationTags.MATERIAL.TYPE_AUXILIARY,
-  seed: CreationTags.MATERIAL.TYPE_HERB,
   gongfa_manual: CreationTags.MATERIAL.TYPE_GONGFA_MANUAL,
   skill_manual: CreationTags.MATERIAL.TYPE_SKILL_MANUAL,
 };
