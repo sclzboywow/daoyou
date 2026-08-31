@@ -75,9 +75,9 @@ export const gameDockGroups: GameNavGroup[] = [
       },
       {
         id: 'spirit-field',
-        sceneLabel: '灵田',
+        sceneLabel: '洞府灵田',
         href: '/game/spirit-field',
-        expandedDockLabel: '🌱 灵田',
+        expandedDockLabel: '🌱 洞府灵田',
       },
       {
         id: 'enlightenment',
@@ -123,6 +123,7 @@ export const gameDockGroups: GameNavGroup[] = [
       { id: 'sect-alchemy', sceneLabel: '宗门丹房' },
       { id: 'sect-refinery', sceneLabel: '宗门器坊' },
       { id: 'sect-spirit-vein', sceneLabel: '宗门灵脉' },
+      { id: 'sect-herb-garden', sceneLabel: '宗门药田' },
       { id: 'sect-cave', sceneLabel: '弟子居所' },
       { id: 'sect-gate', sceneLabel: '宗门山门' },
       { id: 'sect-gate-sweep', sceneLabel: '清扫山门' },
@@ -260,12 +261,6 @@ export const gameDockGroups: GameNavGroup[] = [
         sceneLabel: '道友传音',
         href: '/game/mail',
         coreDockLabel: '道友传音',
-      },
-      {
-        id: 'activities',
-        sceneLabel: '仙盟活动',
-        href: '/game/activities',
-        expandedDockLabel: '🎁 仙盟活动',
       },
       {
         id: 'world-chat',

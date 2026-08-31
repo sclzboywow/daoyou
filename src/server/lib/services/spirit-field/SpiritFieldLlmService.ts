@@ -1,163 +1,79 @@
 import { renderPrompt } from '@server/lib/prompts';
 import { generateAiObject } from '@server/utils/aiClient';
-import {
-  getCareQiCost,
-  type SpiritFieldCarePlan,
-  type SpiritFieldObservation,
-  type SpiritFieldPlantSnapshot,
-} from '@shared/engine/spirit-field';
-import { ELEMENT_VALUES } from '@shared/types/constants';
+import { SPIRIT_FIELD_METHOD_MAP, getAffinityScore, type SpiritFieldCultivationMethod, type SpiritFieldHarvestSettlement, type SpiritFieldPlantSnapshot, type SpiritFieldStageHistory, type SpiritFieldStageJudgment } from '@shared/engine/spirit-field';
 import { z } from 'zod';
 
-const interpretationSchema = z.object({
-  action: z.enum([
-    'dry_soil',
-    'moisten',
-    'wood_nurture',
-    'loosen_soil',
-    'fertilize',
-    'observe',
-    'wait',
-  ]),
-  element: z.enum(ELEMENT_VALUES).optional(),
-  intensity: z.enum(['light', 'moderate']),
-  target: z.enum(['soil', 'root', 'leaf', 'whole']),
-  summary: z.string().trim().min(1).max(160),
-  reason: z.string().trim().min(1).max(160),
-  risk: z.string().trim().min(1).max(160),
-});
+const judgmentSchema = z.object({
+  affinity: z.enum(['excellent', 'good', 'neutral', 'strained']),
+  feedback: z.string().trim().min(20).max(160),
+}).strict();
+const finalIdentitySchema = z.object({
+  name: z.string().trim().min(2).max(12),
+  description: z.string().trim().min(24).max(180),
+}).strict();
 
-const narrativeSchema = z.object({
-  narrative: z.string().trim().min(20).max(220),
-});
-
-function fallbackInterpretation(message: string): SpiritFieldCarePlan {
-  const text = message.trim();
-  const element = ELEMENT_VALUES.find((candidate) => text.includes(candidate));
-  let action: SpiritFieldCarePlan['action'] = 'wood_nurture';
-  let target: SpiritFieldCarePlan['target'] = 'whole';
-  if (/烘|火|祛湿|干燥/.test(text)) {
-    action = 'dry_soil';
-    target = 'soil';
-  } else if (/水|灵泉|浇|润/.test(text)) {
-    action = 'moisten';
-    target = /叶/.test(text) ? 'leaf' : 'soil';
-  } else if (/肥|施肥|肥料|培肥/.test(text)) {
-    action = 'fertilize';
-    target = 'soil';
-  } else if (/疏|松土|翻土/.test(text)) {
-    action = 'loosen_soil';
-    target = 'soil';
-  } else if (/看|观察|检查|感知/.test(text)) {
-    action = 'observe';
-    target = 'whole';
-  } else if (/不管|等待|等等|先放着/.test(text)) {
-    action = 'wait';
-    target = 'whole';
-  } else if (/根/.test(text)) {
-    target = 'root';
-  }
-  return {
-    action,
-    element,
-    intensity: /猛烈|大量|全力|强行/.test(text) ? 'moderate' : 'light',
-    target,
-    summary:
-      action === 'dry_soil'
-        ? '以温和手段驱散根部周围的湿气，并尽量避开药根。'
-        : action === 'moisten'
-          ? '以少量水意或灵泉润养灵植，避免一次灌入过多。'
-          : action === 'fertilize'
-            ? '向根部附近补充适量肥力，避免一次施入过多伤及根系。'
-            : action === 'loosen_soil'
-              ? '轻轻疏松根部周围土层，让水气与灵机重新流转。'
-              : action === 'observe'
-                ? '先细看灵植、土壤与灵气状态，不立即改变田中环境。'
-                : action === 'wait'
-                  ? '暂时不做额外养护，让灵植继续自然生长。'
-                  : '以相对温和的灵力持续温养灵植，重点照顾根系与灵机流转。',
-    reason: '系统按你描述的动作、目标与灵力方式进行了归纳。',
-    risk: '养护过度可能适得其反，执行时会按服务器规则限制实际效果。',
-    qiCost: getCareQiCost(action),
-  };
+function fallbackJudgment(plant: SpiritFieldPlantSnapshot, method: SpiritFieldCultivationMethod): SpiritFieldStageJudgment {
+  const name = SPIRIT_FIELD_METHOD_MAP[method].name;
+  if (plant.preferredMethods.includes(method)) return { affinity: 'excellent', feedback: `这枚灵种对${name}显出清晰回应，种壳与根脉间的灵机彼此接续，生长走势变得格外顺畅。` };
+  if (plant.avoidedMethods.includes(method)) return { affinity: 'strained', feedback: `${name}触动了灵植不甚相合的一面，所幸根本生机未损，只是这一阶段的灵机运转略显滞涩。` };
+  return { affinity: 'neutral', feedback: `${name}稳稳落入田中，灵植并未显出强烈偏好，却也将这股外力逐步纳入自身生长。` };
 }
 
-export async function interpretSpiritFieldCare(input: {
-  message: string;
-  plant: SpiritFieldPlantSnapshot;
-  observations: SpiritFieldObservation[];
-  careCount: number;
-  careSlots: number;
-  abortSignal?: AbortSignal;
-}): Promise<SpiritFieldCarePlan> {
-  const fallback = fallbackInterpretation(input.message);
-  const { system, user } = renderPrompt('spirit-field-interpret', {
-    payloadJson: JSON.stringify({
-      playerMessage: input.message,
-      plant: {
-        name: input.plant.name,
-        quality: input.plant.quality,
-        element: input.plant.element,
-        description: input.plant.description,
-      },
-      observations: input.observations.map((entry) => ({
-        label: entry.label,
-        text: entry.text,
-      })),
-      care: { used: input.careCount, total: input.careSlots },
-    }),
-  });
-  const timeoutSignal = AbortSignal.timeout(10_000);
-  const abortSignal = input.abortSignal
-    ? AbortSignal.any([input.abortSignal, timeoutSignal])
-    : timeoutSignal;
+function leaksInternalRules(text: string, plant: SpiritFieldPlantSnapshot): boolean {
+  const hiddenTokens = [
+    ...plant.preferredMethods,
+    ...plant.avoidedMethods,
+    ...plant.preferredHabitats,
+    ...plant.avoidedHabitats,
+    ...plant.growthTraits,
+    ...plant.useTags,
+    ...plant.outcomeBiases,
+    ...plant.creationTags,
+    'excellent',
+    'good',
+    'neutral',
+    'strained',
+  ];
+  return (
+    hiddenTokens.some((token) => text.includes(token)) ||
+    /偏好|忌讳|内部(?:规则|标签)|产物倾向|概率|分数|评分/.test(text)
+  );
+}
+
+function inventsProductEffects(text: string): boolean {
+  return /服(?:下|用|食)|延寿|突破|洗髓|炼体|恢复(?:气血|法力)|增加(?:修为|感悟)|丹毒|\d|%|％/.test(text);
+}
+
+export async function judgeSpiritFieldStage(input: { plant: SpiritFieldPlantSnapshot; method: SpiritFieldCultivationMethod; history: SpiritFieldStageHistory[]; resourceName?: string; abortSignal?: AbortSignal }): Promise<SpiritFieldStageJudgment> {
+  const fallback = fallbackJudgment(input.plant, input.method);
+  const { system, user } = renderPrompt('spirit-field-stage-judgment', { payloadJson: JSON.stringify({ seed: input.plant, method: SPIRIT_FIELD_METHOD_MAP[input.method], history: input.history, resourceName: input.resourceName ?? null }) });
   try {
-    const response = await generateAiObject({
-      system,
-      prompt: user,
-      schema: interpretationSchema,
-      name: 'SpiritFieldCareInterpretation',
-      sceneId: 'spirit-field-interpret',
-      abortSignal,
-      maxOutputTokens: 600,
-    });
-    return {
-      ...response.output,
-      qiCost: getCareQiCost(response.output.action),
-    };
+    const response = await generateAiObject({ system, prompt: user, schema: judgmentSchema, name: 'SpiritFieldStageJudgment', sceneId: 'spirit-field-stage-judgment', abortSignal: input.abortSignal ? AbortSignal.any([input.abortSignal, AbortSignal.timeout(12_000)]) : AbortSignal.timeout(12_000), maxOutputTokens: 480 });
+    return leaksInternalRules(response.output.feedback, input.plant)
+      ? fallback
+      : response.output;
   } catch (error) {
     if (input.abortSignal?.aborted) throw error;
-    console.warn('[spirit-field] interpretation LLM fallback', { error });
+    console.warn('[spirit-field] stage judgment fallback', { error });
     return fallback;
   }
 }
 
-export async function narrateSpiritFieldResult(input: {
-  kind: 'care' | 'harvest';
-  plantName: string;
-  facts: Record<string, unknown>;
-  fallback: string;
-}): Promise<string> {
-  const { system, user } = renderPrompt('spirit-field-narrative', {
-    payloadJson: JSON.stringify({
-      kind: input.kind,
-      plantName: input.plantName,
-      facts: input.facts,
-    }),
-  });
+export async function finalizeSpiritFieldIdentity(input: { plant: SpiritFieldPlantSnapshot; history: SpiritFieldStageHistory[]; settlement: SpiritFieldHarvestSettlement; abortSignal?: AbortSignal }): Promise<{ name: string; description: string }> {
+  const outcomeLabel = input.settlement.outcomeKind === 'herb' ? '灵草材料' : input.settlement.outcomeKind === 'tcdb' ? '天材地宝材料' : '可服用灵果';
+  const fallback = { name: input.settlement.outcomeKind === 'spirit_fruit' ? `${input.plant.element}纹灵果` : input.settlement.outcomeKind === 'tcdb' ? `${input.plant.element}蕴灵华` : `${input.plant.element}脉灵草`, description: `此物由${input.plant.seedName}历经萌芽、蕴灵与成型三度造化而成，最终凝作${outcomeLabel}，其形貌与灵韵仍留有培育手段的痕迹。` };
+  const { system, user } = renderPrompt('spirit-field-finalization', { payloadJson: JSON.stringify({ seed: input.plant, cultivationHistory: input.history, fixedSettlement: { ...input.settlement, outcomeLabel } }) });
   try {
-    const response = await generateAiObject({
-      system,
-      prompt: user,
-      schema: narrativeSchema,
-      name: 'SpiritFieldNarrative',
-      sceneId: 'spirit-field-narrative',
-      abortSignal: AbortSignal.timeout(8_000),
-      maxOutputTokens: 420,
-    });
-    return response.output.narrative;
+    const response = await generateAiObject({ system, prompt: user, schema: finalIdentitySchema, name: 'SpiritFieldFinalIdentity', sceneId: 'spirit-field-finalization', abortSignal: input.abortSignal ? AbortSignal.any([input.abortSignal, AbortSignal.timeout(12_000)]) : AbortSignal.timeout(12_000), maxOutputTokens: 520 });
+    return leaksInternalRules(response.output.description, input.plant) ||
+      inventsProductEffects(response.output.description)
+      ? fallback
+      : response.output;
   } catch (error) {
-    console.warn('[spirit-field] narrative LLM fallback', { error });
-    return input.fallback;
+    if (input.abortSignal?.aborted) throw error;
+    console.warn('[spirit-field] final identity fallback', { error });
+    return fallback;
   }
 }
+
+export function stageJudgmentScore(judgment: SpiritFieldStageJudgment): number { return getAffinityScore(judgment.affinity); }

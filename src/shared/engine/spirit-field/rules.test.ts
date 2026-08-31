@@ -1,89 +1,58 @@
 import { describe, expect, it } from 'vitest';
-import type { SpiritFieldPlantSnapshot } from './types';
-import {
-  calculateSpiritFieldGrowth,
-  calculateSpiritFieldHarvestQuantity,
-  createDefaultSpiritFieldPlots,
-  evaluateCareAction,
-  getSpiritFieldCareScore,
-  getSpiritFieldQualityUpgradeChance,
-  isSpiritFieldPlotUnlocked,
-} from '.';
+import { advanceSpiritFieldPlotToDecision, createDefaultSpiritFieldPlots, getCultivationResourceCost, getSpiritFieldPlotRuntime, getStageDurationMs, settleSpiritFieldHarvest } from '.';
+import type { SpiritFieldPlantSnapshot, SpiritFieldPlotState } from './types';
 
 const plant: SpiritFieldPlantSnapshot = {
-  id: 'test-plant',
-  name: '试验灵草',
-  seedName: '试验灵草灵种',
-  quality: '玄品',
-  element: '木',
-  minRealm: '金丹',
-  baseGrowthMs: 90 * 60_000,
-  careSlots: 3,
-  careCooldownMs: 10 * 60_000,
-  description: '测试用灵植。',
-  baseYieldMin: 3,
-  baseYieldMax: 5,
+  id: 'seed-test', seedName: '青纹眠籽', seedDescription: '青灰种壳上有木纹。', clueTexts: ['遇到温和灵机时微微发热', '似乎不喜血性浇灌'],
+  quality: '玄品', element: '木', minRealm: '金丹', growthForm: 'herb', harvestPart: 'leaf',
+  preferredMethods: ['seasonal_nurture', 'intrinsic_infusion', 'leaf_medicine'], avoidedMethods: ['monster_blood'],
+  preferredHabitats: ['shaded'], avoidedHabitats: ['volcanic'], growthTraits: ['qi-sensitive'],
+  useTags: ['alchemy'], outcomeBiases: ['herb'], creationTags: ['Material.Semantic.Wood', 'Material.Semantic.Alchemy'],
+  stageDurationMs: { germination: 1_000_000, nourishing: 1_000_000, forming: 1_000_000 }, baseYieldMin: 3, baseYieldMax: 5,
 };
 
-describe('spirit field rules', () => {
-  it('unlocks plots from realm and self harvest count', () => {
-    expect(isSpiritFieldPlotUnlocked({ plotIndex: 0, realm: '炼气', selfHarvestCount: 0 })).toBe(true);
-    expect(isSpiritFieldPlotUnlocked({ plotIndex: 1, realm: '筑基', selfHarvestCount: 49 })).toBe(false);
-    expect(isSpiritFieldPlotUnlocked({ plotIndex: 1, realm: '筑基', selfHarvestCount: 50 })).toBe(true);
+function completedPlot(scores: number[], formingMethod = 'natural_form'): SpiritFieldPlotState {
+  return {
+    ...createDefaultSpiritFieldPlots()[0]!, plantId: plant.id, plant, plantedAt: new Date(0).toISOString(), stageIndex: 2,
+    stageStartedAt: new Date(0).toISOString(), stageEndsAt: new Date(1).toISOString(),
+    history: scores.map((score, index) => ({ stage: ['germination', 'nourishing', 'forming'][index] as 'germination' | 'nourishing' | 'forming', method: (index === 2 ? formingMethod : index === 1 ? 'rest_nurture' : 'seasonal_nurture') as never, affinity: score >= 85 ? 'excellent' : score < 48 ? 'strained' : 'neutral', score, feedback: '测试反馈', completedAt: new Date(0).toISOString() })),
+  };
+}
+
+describe('spirit field three-stage rules', () => {
+  it('stops at every decision node instead of growing through unattended stages', () => {
+    const plot = { ...createDefaultSpiritFieldPlots()[0]!, plantId: plant.id, plant, plantedAt: new Date(0).toISOString(), stageStartedAt: new Date(0).toISOString(), stageEndsAt: new Date(1).toISOString() };
+    expect(getSpiritFieldPlotRuntime(plot, 2).status).toBe('awaiting_cultivation');
+    const advanced = advanceSpiritFieldPlotToDecision(plot, 2);
+    expect(advanced.stageIndex).toBe(1);
+    expect(advanced.stageStartedAt).toBeNull();
+    expect(getSpiritFieldPlotRuntime(advanced, 99_999).status).toBe('awaiting_cultivation');
   });
 
-  it('field speed bonus accelerates natural growth with a persisted plant snapshot', () => {
-    const plots = createDefaultSpiritFieldPlots();
-    plots[0] = {
-      ...plots[0]!,
-      plantId: plant.id,
-      plant,
-      plantedAt: new Date(0).toISOString(),
-    };
-    const slow = calculateSpiritFieldGrowth({ plot: plots[0]!, fieldLevel: 0, nowMs: 45 * 60_000 });
-    const fast = calculateSpiritFieldGrowth({ plot: plots[0]!, fieldLevel: 4, nowMs: 45 * 60_000 });
-    expect(fast.progress).toBeGreaterThan(slow.progress);
+  it('opens every plot in the first release', () => {
+    expect(createDefaultSpiritFieldPlots()).toHaveLength(6);
   });
 
-  it('care grade contributes both growth acceleration and harvest score', () => {
-    expect(evaluateCareAction('moisture_high', 'dry_soil')).toEqual({
-      grade: 'excellent',
-      boostPercent: 0.06,
-      careScore: 100,
-    });
-    expect(evaluateCareAction('weak_growth', 'fertilize').grade).toBe('excellent');
-    expect(evaluateCareAction('moisture_high', 'moisten').careScore).toBe(35);
+  it('scales deterministic qi and spirit-stone costs by seed quality', () => {
+    expect(getCultivationResourceCost('qi_growth', '天品').amount).toBeGreaterThan(getCultivationResourceCost('qi_growth', '凡品').amount);
+    expect(getCultivationResourceCost('aux_gather', '地品').spiritStones).toBeGreaterThan(getCultivationResourceCost('aux_gather', '凡品').spiritStones);
   });
 
-  it('good care produces more yield and a higher quality-upgrade chance', () => {
-    const low = createDefaultSpiritFieldPlots()[0]!;
-    low.plantId = plant.id;
-    low.plant = plant;
-    low.plantedAt = new Date(0).toISOString();
-    low.careScoreTotal = 35;
-    low.careScoreCount = 1;
+  it('makes 天地灵气 cultivation deterministically faster', () => {
+    expect(getStageDurationMs(plant, 'qi_sprout', 'neutral')).toBe(750_000);
+    expect(getStageDurationMs(plant, 'seasonal_nurture', 'neutral')).toBe(1_000_000);
+  });
 
-    const high = { ...low, careScoreTotal: 100, careScoreCount: 1 };
-    expect(getSpiritFieldCareScore(high)).toBe(100);
-    expect(
-      calculateSpiritFieldHarvestQuantity({
-        plot: high,
-        fieldLevel: 3,
-        mode: 'broad',
-        seed: 'same',
-      }),
-    ).toBeGreaterThan(
-      calculateSpiritFieldHarvestQuantity({
-        plot: low,
-        fieldLevel: 3,
-        mode: 'focused',
-        seed: 'same',
-      }),
-    );
-    expect(
-      getSpiritFieldQualityUpgradeChance({ careScore: 100, fieldLevel: 3, mode: 'focused' }),
-    ).toBeGreaterThan(
-      getSpiritFieldQualityUpgradeChance({ careScore: 35, fieldLevel: 3, mode: 'focused' }),
-    );
+  it('uses cultivation history to settle one legal irreversible form', () => {
+    const herb = settleSpiritFieldHarvest(completedPlot([100, 100, 100], 'leaf_medicine'), 'fixed-seed');
+    expect(['herb', 'tcdb', 'spirit_fruit']).toContain(herb.outcomeKind);
+    expect(herb.quantity).toBeGreaterThan(0);
+    expect(herb.score).toBe(100);
+  });
+
+  it('never produces total failure and quality changes by at most one step', () => {
+    const result = settleSpiritFieldHarvest(completedPlot([38, 38, 38]), 'degraded-seed');
+    expect(result.quantity).toBeGreaterThan(0);
+    expect(['灵品', '玄品']).toContain(result.quality);
   });
 });

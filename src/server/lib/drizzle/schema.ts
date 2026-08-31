@@ -121,11 +121,9 @@ export const spiritFields = pgTable(
     cultivatorId: uuid('cultivator_id')
       .references(() => cultivators.id, { onDelete: 'cascade' })
       .notNull(),
-    level: integer('level').notNull().default(0),
     selfHarvestCount: integer('self_harvest_count').notNull().default(0),
     totalCareCount: integer('total_care_count').notNull().default(0),
     starterClaimed: boolean('starter_claimed').notNull().default(false),
-    proficiency: integer('proficiency').notNull().default(0),
     plots: jsonb('plots')
       .$type<SpiritFieldPlotState[]>()
       .notNull()

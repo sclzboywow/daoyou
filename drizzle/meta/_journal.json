@@ -253,6 +253,13 @@
       "when": 1787400000000,
       "tag": "0035_sect_lifetime_contribution",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788147338303,
+      "tag": "0036_spirit_fields_align_official",
+      "breakpoints": true
     }
   ]
 }

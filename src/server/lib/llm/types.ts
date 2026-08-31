@@ -21,12 +21,8 @@ export type LlmSceneId =
   | 'material-semantic-enrichment'
   | 'product-naming'
   | 'spirit-seed-generation'
-  | 'spirit-seed-stage-assessment'
-  | 'spirit-plant-outcome-naming'
-  | 'spirit-plant-observation'
-  | 'spirit-plant-consultation'
-  | 'spirit-field-interpret'
-  | 'spirit-field-narrative'
+  | 'spirit-field-stage-judgment'
+  | 'spirit-field-finalization'
   | 'yield-story';
 
 export type LlmStructuredFailureKind =

@@ -17,7 +17,7 @@ import {
   createDefaultBodyCultivationState,
   normalizeBodyCultivationState,
 } from '@shared/lib/bodyCultivation/normalize';
-import { isPillConsumable } from '@shared/lib/consumables';
+import { isPillConsumable, isSpiritFruitConsumable } from '@shared/lib/consumables';
 import {
   CULTIVATION_BOOST_STATUS_KEY,
   getCultivationBoostPercent,
@@ -649,15 +649,34 @@ export const PillOperationExecutor = {
     consumable: Consumable,
     now: Date = new Date(),
   ): PillExecutionResult {
-    if (!isPillConsumable(consumable)) {
-      throw new Error('该消耗品并非丹药，无法按丹药协议执行。');
-    }
+    const isSpiritFruit = isSpiritFruitConsumable(consumable);
+    const effectConsumable: Consumable & { spec: PillSpec } = isPillConsumable(consumable)
+      ? consumable
+      : isSpiritFruitConsumable(consumable)
+        ? {
+            ...consumable,
+            type: '丹药',
+            spec: {
+              kind: 'pill',
+              family: consumable.spec.family,
+              operations: consumable.spec.operations.filter(
+                (operation) =>
+                  operation.type !== 'change_gauge' || operation.delta <= 0,
+              ),
+              consumeRules: { scene: 'out_of_battle_only', quotaCategory: 'none' },
+              alchemyMeta: {
+                source: 'improvised', sourceMaterials: [], stability: 100,
+                toxicityRating: 0, tags: ['spirit-fruit'], version: 4,
+              },
+            },
+          }
+        : (() => { throw new Error('该消耗品并非丹药或灵果，无法按药效协议执行。'); })();
 
-    if (consumable.spec.consumeRules.scene !== 'out_of_battle_only') {
+    if (effectConsumable.spec.consumeRules.scene !== 'out_of_battle_only') {
       throw new Error('该丹药当前不可在背包内直接服用。');
     }
 
-    assertPillQualityAllowed(cultivator, consumable);
+    assertPillQualityAllowed(cultivator, effectConsumable);
 
     const nextCultivator = cloneCultivator(cultivator);
     let nextCondition = ConditionService.tickNaturalRecovery(
@@ -667,18 +686,20 @@ export const PillOperationExecutor = {
     );
     const trackLevelUps: TrackLevelUpResult[] = [];
 
-    const quotaCategory = getEffectiveQuotaCategory(consumable.spec);
+    const quotaCategory = isSpiritFruit
+      ? 'none'
+      : getEffectiveQuotaCategory(effectConsumable.spec);
     if (
       nextCondition.gauges.pillToxicity >= PILL_TOXICITY_CAP &&
-      getNetPillToxicityDelta(consumable.spec) > 0
+      getNetPillToxicityDelta(effectConsumable.spec) > 0
     ) {
       throw new Error(PILL_TOXICITY_BLOCK_MESSAGE);
     }
-    assertBodyCultivationPillTrackCaps(nextCondition, consumable.spec);
+    assertBodyCultivationPillTrackCaps(nextCondition, effectConsumable.spec);
     assertMarrowWashPillTrackCaps(
       nextCultivator,
       nextCondition,
-      consumable.spec,
+      effectConsumable.spec,
     );
 
     if (quotaCategory === 'long_term') {
@@ -721,7 +742,7 @@ export const PillOperationExecutor = {
       };
     }
 
-    for (const operation of sortOperations(consumable.spec.operations)) {
+    for (const operation of sortOperations(effectConsumable.spec.operations)) {
       switch (operation.type) {
         case 'restore_resource':
           nextCondition = applyRestoreResourceOperation(
@@ -791,20 +812,22 @@ export const PillOperationExecutor = {
 
     nextCondition = ConditionService.normalizeCondition(
       nextCultivator,
-      {
-        ...nextCondition,
-        timestamps: {
-          ...nextCondition.timestamps,
-          lastPillAt: now.toISOString(),
-        },
-      },
+      isSpiritFruit
+        ? nextCondition
+        : {
+            ...nextCondition,
+            timestamps: {
+              ...nextCondition.timestamps,
+              lastPillAt: now.toISOString(),
+            },
+          },
       now,
     );
     nextCultivator.condition = nextCondition;
 
     return {
       cultivator: nextCultivator,
-      consumed: consumable,
+      consumed: effectConsumable,
       trackLevelUps,
     };
   },

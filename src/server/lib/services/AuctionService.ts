@@ -27,6 +27,7 @@ import * as schema from '../drizzle/schema';
 import { mapConsumableRow } from './consumablePersistence';
 import { toArtifactFromProduct } from './creationProductArtifactSupport';
 import { mapMaterialRow } from './cultivator/CultivatorInventoryRepository';
+import { sanitizeMaterialForClient } from './materialDetailsPrivacy';
 import {
   assertFriend,
   FriendServiceError,
@@ -176,7 +177,7 @@ export async function getAuctionItemSnapshot(
           ),
         )
         .limit(1);
-      return material ? mapMaterialRow(material) : null;
+      return material ? mapMaterialRow(material, { includeSeedSpec: true }) : null;
     }
     case 'artifact': {
       const artifact = await getArtifactProductSnapshot(
@@ -582,7 +583,10 @@ export async function listItem(
         inventoryChanges.push({
           kind: 'materials',
           operation: 'upsert',
-          item: { ...current, quantity: current.quantity - quantity },
+          item: sanitizeMaterialForClient({
+            ...current,
+            quantity: current.quantity - quantity,
+          }),
         });
       }
     } else {

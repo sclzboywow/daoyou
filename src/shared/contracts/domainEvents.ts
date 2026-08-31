@@ -99,7 +99,7 @@ export const DomainEventDataSchemas = {
       action: z.enum(SPIRIT_FIELD_CARE_ACTIONS),
       plantName: z.string().min(1).max(100),
       seedQuality: z.enum(QUALITY_VALUES),
-      careGrade: z.enum(['excellent', 'good', 'poor']),
+      careGrade: z.enum(['excellent', 'good', 'neutral', 'strained']),
       careScore: z.number().int().min(0).max(100),
       qiCost: z.number().int().min(0).max(100),
     })
@@ -110,13 +110,12 @@ export const DomainEventDataSchemas = {
       spiritFieldId: z.uuid(),
       plotIndex: z.number().int().min(0).max(5),
       requestId: z.string().min(8).max(128),
-      mode: z.enum(['focused', 'broad']),
+      outcomeKind: z.enum(['herb', 'tcdb', 'spirit_fruit']),
       plantName: z.string().min(1).max(100),
       seedQuality: z.enum(QUALITY_VALUES),
       highestQuality: z.enum(QUALITY_VALUES),
       careScore: z.number().int().min(0).max(100),
-      herbQuantity: z.number().int().positive().max(10_000),
-      seedReturned: z.number().int().nonnegative().max(100),
+      quantity: z.number().int().positive().max(10_000),
     })
     .strict(),
   'spirit-field.upgraded': z

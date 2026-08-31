@@ -1,9 +1,4 @@
-import type {
-  ElementType,
-  MaterialType,
-  Quality,
-} from '@shared/types/constants';
-import { SPIRIT_SEED_LIBRARY_CATALOG } from './spiritSeedCatalog';
+import type { ElementType, MaterialType, Quality } from '@shared/types/constants';
 
 export interface FallbackMaterialPreset {
   name: string;
@@ -21,7 +16,16 @@ const EMPTY_PRESET: FallbackMaterialPreset = {
 };
 
 export const FALLBACK_MATERIAL_LIBRARY: Record<MaterialType, QualityPresets> = {
-  seed: SPIRIT_SEED_LIBRARY_CATALOG,
+  seed: {
+    凡品: [EMPTY_PRESET],
+    灵品: [EMPTY_PRESET],
+    玄品: [EMPTY_PRESET],
+    真品: [EMPTY_PRESET],
+    地品: [EMPTY_PRESET],
+    天品: [EMPTY_PRESET],
+    仙品: [EMPTY_PRESET],
+    神品: [EMPTY_PRESET],
+  },
   herb: {
     凡品: [
       {

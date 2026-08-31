@@ -10,11 +10,9 @@ import { eq, sql } from 'drizzle-orm';
 export interface SpiritFieldRecord {
   id: string;
   cultivatorId: string;
-  level: number;
   selfHarvestCount: number;
   totalCareCount: number;
   starterClaimed: boolean;
-  proficiency: number;
   plots: SpiritFieldPlotState[];
   version: number;
 }
@@ -23,11 +21,9 @@ function mapRow(row: typeof spiritFields.$inferSelect): SpiritFieldRecord {
   return {
     id: row.id,
     cultivatorId: row.cultivatorId,
-    level: row.level,
     selfHarvestCount: row.selfHarvestCount,
     totalCareCount: row.totalCareCount,
     starterClaimed: row.starterClaimed,
-    proficiency: row.proficiency,
     plots: normalizeSpiritFieldPlots(row.plots),
     version: row.version,
   };
@@ -60,11 +56,9 @@ export async function updateSpiritField(
   patch: Partial<
     Pick<
       SpiritFieldRecord,
-      | 'level'
       | 'selfHarvestCount'
       | 'totalCareCount'
       | 'starterClaimed'
-      | 'proficiency'
       | 'plots'
     >
   >,

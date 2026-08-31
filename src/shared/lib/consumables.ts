@@ -7,9 +7,9 @@ import type {
   GainProgressOperation,
   IncreaseLifespanOperation,
   PillSpec,
+  SpiritFruitSpec,
   RemoveStatusOperation,
   RestoreResourceOperation,
-  SpiritFruitSpec,
   TalismanSpec,
 } from '@shared/types/consumable';
 import type { Consumable } from '@shared/types/cultivator';
@@ -165,12 +165,13 @@ export function buildConsumableStackKey(
             family: spec.family,
             operations: spec.operations,
             consumeRules: spec.consumeRules,
+            source: spec.source,
           }
         : {
-            scenario: spec.scenario,
-            sessionMode: spec.sessionMode,
-            notes: spec.notes,
-          }),
+          scenario: spec.scenario,
+          sessionMode: spec.sessionMode,
+          notes: spec.notes,
+        }),
     name: consumable.name,
     quality: consumable.quality ?? '凡品',
     type: consumable.type,

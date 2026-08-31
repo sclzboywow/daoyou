@@ -3,4 +3,5 @@ export * from './marketOfferings';
 export * from './rules';
 export * from './seedMaterial';
 export * from './SpiritSeedGenerator';
+export * from './spiritFruit';
 export * from './types';
