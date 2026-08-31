@@ -8,8 +8,9 @@ import type { FeatureCommandResult } from './CommandExecutors';
 /** 官方灵田表已去掉 proficiency；进度投影保留 no-op，避免旧消费者报错。 */
 export async function projectSpiritFieldProgressionDomainEvent(
   event: DomainEventEnvelope,
-  _tx: DbTransaction,
+  tx: DbTransaction,
 ): Promise<FeatureCommandResult<{ status: 'applied' | 'ignored'; gained?: number }>> {
+  void tx;
   if (
     isDomainEventType(event, 'spirit-field.sown') ||
     isDomainEventType(event, 'spirit-field.care.performed') ||
