@@ -103,7 +103,6 @@ apiRouter.route('/feedback', feedbackRouter);
 apiRouter.route('/friends', friendsRouter);
 apiRouter.route('/generate-character', generateCharacterRouter);
 apiRouter.route('/generate-fates', generateFatesRouter);
-apiRouter.route('/spirit-field', spiritFieldRouter);
 apiRouter.route('/manual-draw', manualDrawRouter);
 apiRouter.route('/market', marketRouter);
 apiRouter.route('/rankings', rankingsRouter);
