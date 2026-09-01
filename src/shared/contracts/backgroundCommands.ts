@@ -16,6 +16,7 @@ export const BACKGROUND_COMMAND_TYPES = [
   'sponsorship.deep-reconcile',
   'sponsorship.cleanup',
   'sponsorship.admin-digest',
+  'wechat.open-abilities.maintain',
 ] as const;
 
 export type BackgroundCommandType = (typeof BACKGROUND_COMMAND_TYPES)[number];
@@ -80,6 +81,11 @@ export const BACKGROUND_COMMAND_DEFINITIONS = {
     version: 1,
     subject: `${BACKGROUND_COMMAND_SUBJECT_PREFIX}.sponsorship-admin-digest.v1`,
     scheduleBucketMs: 24 * 60 * 60_000,
+  },
+  'wechat.open-abilities.maintain': {
+    version: 1,
+    subject: `${BACKGROUND_COMMAND_SUBJECT_PREFIX}.wechat-open-abilities-maintain.v1`,
+    scheduleBucketMs: 2 * 60_000,
   },
 } as const satisfies Record<
   BackgroundCommandType,

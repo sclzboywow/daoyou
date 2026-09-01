@@ -885,6 +885,126 @@ export const mails = pgTable(
   ],
 );
 
+export type WechatSubscriptionIntentStatus =
+  | 'pending'
+  | 'sending'
+  | 'sent'
+  | 'cancelled'
+  | 'failed';
+
+export const wechatSubscriptionIntents = pgTable(
+  'wanjiedaoyou_wechat_subscription_intents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    cultivatorId: uuid('cultivator_id')
+      .references(() => cultivators.id, { onDelete: 'cascade' })
+      .notNull(),
+    kind: varchar('kind', { length: 32 }).$type<'qi_full'>().notNull(),
+    templateId: varchar('template_id', { length: 128 }).notNull(),
+    targetAt: timestamp('target_at').notNull(),
+    status: varchar('status', { length: 20 })
+      .$type<WechatSubscriptionIntentStatus>()
+      .notNull()
+      .default('pending'),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    lastAttemptAt: timestamp('last_attempt_at'),
+    sentAt: timestamp('sent_at'),
+    failureCode: varchar('failure_code', { length: 64 }),
+    failureMessage: text('failure_message'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('wechat_subscription_intents_due_idx').on(
+      table.status,
+      table.targetAt,
+    ),
+    index('wechat_subscription_intents_cultivator_idx').on(
+      table.cultivatorId,
+      table.status,
+    ),
+    uniqueIndex('wechat_subscription_intents_active_uidx')
+      .on(table.cultivatorId, table.kind)
+      .where(sql`${table.status} IN ('pending', 'sending')`),
+  ],
+);
+
+export type WechatShareGiftStatus =
+  | 'active'
+  | 'completed'
+  | 'expired'
+  | 'cancelled';
+
+export const wechatShareGifts = pgTable(
+  'wanjiedaoyou_wechat_share_gifts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    senderUserId: uuid('sender_user_id').notNull(),
+    senderCultivatorId: uuid('sender_cultivator_id')
+      .references(() => cultivators.id, { onDelete: 'cascade' })
+      .notNull(),
+    senderName: varchar('sender_name', { length: 100 }).notNull(),
+    kind: varchar('kind', { length: 32 })
+      .$type<'fate_blessing'>()
+      .notNull()
+      .default('fate_blessing'),
+    status: varchar('status', { length: 20 })
+      .$type<WechatShareGiftStatus>()
+      .notNull()
+      .default('active'),
+    maxClaims: integer('max_claims').notNull().default(1),
+    claimedCount: integer('claimed_count').notNull().default(0),
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('wechat_share_gifts_sender_created_idx').on(
+      table.senderCultivatorId,
+      table.createdAt,
+    ),
+    index('wechat_share_gifts_status_expires_idx').on(
+      table.status,
+      table.expiresAt,
+    ),
+  ],
+);
+
+export const wechatShareGiftClaims = pgTable(
+  'wanjiedaoyou_wechat_share_gift_claims',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    giftId: uuid('gift_id')
+      .references(() => wechatShareGifts.id, { onDelete: 'cascade' })
+      .notNull(),
+    receiverUserId: uuid('receiver_user_id').notNull(),
+    receiverCultivatorId: uuid('receiver_cultivator_id')
+      .references(() => cultivators.id, { onDelete: 'cascade' })
+      .notNull(),
+    rewardMailId: uuid('reward_mail_id').references(() => mails.id, {
+      onDelete: 'set null',
+    }),
+    claimedAt: timestamp('claimed_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('wechat_share_gift_claims_gift_receiver_uidx').on(
+      table.giftId,
+      table.receiverCultivatorId,
+    ),
+    index('wechat_share_gift_claims_receiver_claimed_idx').on(
+      table.receiverCultivatorId,
+      table.claimedAt,
+    ),
+  ],
+);
+
 // 好友名录：双向好友会写入两条记录，便于按当前角色快速查询
 export const cultivatorFriends = pgTable(
   'wanjiedaoyou_cultivator_friends',

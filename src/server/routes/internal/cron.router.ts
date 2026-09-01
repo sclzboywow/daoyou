@@ -11,6 +11,7 @@ import {
   runSponsorshipCleanupJob,
   runSponsorshipReconcileJob,
   runSponsorshipAdminDigestJob,
+  runWechatOpenAbilitiesMaintenanceJob,
 } from '@server/lib/jobs/internalCron';
 import type { AppEnv } from '@server/lib/hono/types';
 import { Hono } from 'hono';
@@ -114,6 +115,10 @@ router.get('/sponsorship-cleanup', (c) =>
 
 router.get('/sponsorship-admin-digest', (c) =>
   handleCronRequest(c.req.raw, runSponsorshipAdminDigestJob),
+);
+
+router.get('/wechat-open-abilities', (c) =>
+  handleCronRequest(c.req.raw, runWechatOpenAbilitiesMaintenanceJob),
 );
 
 export default router;

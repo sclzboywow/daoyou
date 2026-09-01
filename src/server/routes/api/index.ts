@@ -39,6 +39,7 @@ import spiritFieldRouter from '@server/routes/api/spirit-field.router';
 import tasksRouter from '@server/routes/api/tasks.router';
 import towerRouter from '@server/routes/api/tower.router';
 import websiteContentRouter from '@server/routes/api/website-content.router';
+import wechatOpenAbilitiesRouter from '@server/routes/api/wechat-open-abilities.router';
 import worldChatRouter from '@server/routes/api/world-chat.router';
 import playerRouter from '@server/routes/player.router';
 import { Hono } from 'hono';
@@ -116,6 +117,7 @@ apiRouter.route('/sponsorship', sponsorshipRouter);
 apiRouter.route('/spirit-field', spiritFieldRouter);
 apiRouter.route('/v2/products', productsRouter);
 apiRouter.route('/website-content', websiteContentRouter);
+apiRouter.route('/wechat', wechatOpenAbilitiesRouter);
 apiRouter.route('/world-chat', worldChatRouter);
 
 export default apiRouter;

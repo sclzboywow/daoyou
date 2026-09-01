@@ -260,6 +260,13 @@
       "when": 1788147338303,
       "tag": "0036_spirit_fields_align_official",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788169877173,
+      "tag": "0037_wechat_open_abilities",
+      "breakpoints": true
     }
   ]
 }

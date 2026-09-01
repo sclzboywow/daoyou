@@ -34,6 +34,7 @@ import {
   retryPendingSponsorshipWork,
   sendSponsorshipAdminDigest,
 } from '@server/lib/services/SponsorshipApplicationService';
+import { runWechatOpenAbilityMaintenance } from '@server/lib/services/WechatOpenAbilityService';
 import { getSponsorshipProvider } from '@server/lib/sponsorship/providerRegistry';
 import { towerEnemySetService } from '@server/lib/tower/enemySets';
 import { RANKING_REWARDS, REALM_VALUES } from '@shared/types/constants';
@@ -65,6 +66,18 @@ export type CronJobResult = {
   skipped: boolean;
   reason?: string;
 };
+
+
+export async function runWechatOpenAbilitiesMaintenanceJob(): Promise<CronJobResult> {
+  return withJobLock('wechat-open-abilities-maintain', async () => {
+    const result = await runWechatOpenAbilityMaintenance();
+    return {
+      success: true,
+      processed: result.processed,
+      skipped: false,
+    };
+  });
+}
 
 export async function runSponsorshipReconcileJob(
   deep = false,

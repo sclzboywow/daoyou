@@ -17,6 +17,7 @@ import {
   runSponsorshipCleanupJob,
   runSponsorshipReconcileJob,
   runTowerEnemySetRefreshJob,
+  runWechatOpenAbilitiesMaintenanceJob,
 } from '../jobs/internalCron';
 import {
   BACKGROUND_COMMAND_CONSUMER,
@@ -53,6 +54,7 @@ const handlers = {
   'sponsorship.deep-reconcile': () => runSponsorshipReconcileJob(true),
   'sponsorship.cleanup': () => runSponsorshipCleanupJob(),
   'sponsorship.admin-digest': () => runSponsorshipAdminDigestJob(),
+  'wechat.open-abilities.maintain': () => runWechatOpenAbilitiesMaintenanceJob(),
 } satisfies Record<
   BackgroundCommandType,
   (command: BackgroundCommandEnvelope) => Promise<unknown>

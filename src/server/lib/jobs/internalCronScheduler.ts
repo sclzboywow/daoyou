@@ -18,6 +18,7 @@ const SPONSORSHIP_RECONCILE_SCHEDULE = '*/10 * * * *';
 const SPONSORSHIP_DEEP_RECONCILE_SCHEDULE = '15 19 * * *';
 const SPONSORSHIP_CLEANUP_SCHEDULE = '30 19 * * *';
 const SPONSORSHIP_ADMIN_DIGEST_SCHEDULE = '0 1 * * *';
+const WECHAT_OPEN_ABILITIES_SCHEDULE = '*/2 * * * *';
 
 let schedulerRegistered = false;
 let scheduledTasks: Bun.CronJob[] = [];
@@ -85,6 +86,9 @@ export function registerInternalCronJobs(
     Bun.cron(SPONSORSHIP_ADMIN_DIGEST_SCHEDULE, () =>
       runScheduledJob('sponsorship.admin-digest'),
     ),
+    Bun.cron(WECHAT_OPEN_ABILITIES_SCHEDULE, () =>
+      runScheduledJob('wechat.open-abilities.maintain'),
+    ),
   ];
   schedulerRegistered = true;
 
@@ -105,6 +109,7 @@ export function registerInternalCronJobs(
     sponsorshipDeepReconcileUtc: SPONSORSHIP_DEEP_RECONCILE_SCHEDULE,
     sponsorshipCleanupUtc: SPONSORSHIP_CLEANUP_SCHEDULE,
     sponsorshipAdminDigestUtc: SPONSORSHIP_ADMIN_DIGEST_SCHEDULE,
+    wechatOpenAbilities: WECHAT_OPEN_ABILITIES_SCHEDULE,
   });
 
   return scheduledTasks;
