@@ -724,3 +724,51 @@ describe('multi-scope resource contracts', () => {
     });
   });
 });
+describe('player.profile fate schema', () => {
+  test('accepts herb garden fate effect types', () => {
+    const parsed = RESOURCE_DATA_SCHEMAS['player.profile'].safeParse({
+      cultivator: {
+        name: '测',
+        gender: '男',
+        realm: '炼气',
+        realm_stage: '初期',
+        age: 18,
+        lifespan: 100,
+        attributes: {
+          vitality: 1,
+          strength: 1,
+          spirit: 1,
+          endurance: 1,
+          speed: 1,
+          willpower: 1,
+        },
+        spiritual_roots: [],
+        pre_heaven_fates: [
+          {
+            name: '灵田气运',
+            effects: [
+              {
+                id: 'herb-seed-return',
+                effectId: 'herb_seed_return_bonus',
+                scope: 'daily',
+                polarity: 'boon',
+                effectType: 'herb_seed_return_bonus',
+                value: 0.2,
+                label: '还种',
+                description: '收获时更易返还灵种。',
+                rollMeta: {
+                  qualityAnchor: '灵品',
+                  minValue: 0.1,
+                  maxValue: 0.3,
+                  rolledPercentile: 0.5,
+                  roundingStep: 0.01,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(parsed.success).toBe(true);
+  });
+});
