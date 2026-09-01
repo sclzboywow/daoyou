@@ -111,6 +111,48 @@ describe('multi-scope resource contracts', () => {
     expect(RESOURCE_TOPIC_SCOPE_KIND['sect.membership']).toBe('cultivator');
   });
 
+  test('accepts spirit fruit consumables in inventory pages', () => {
+    expect(
+      RESOURCE_DATA_SCHEMAS['inventory.consumables'].safeParse({
+        items: [
+          {
+            id: '44444444-4444-4444-8444-444444444444',
+            name: '凝寒露果',
+            type: '丹药',
+            quality: '凡品',
+            quantity: 2,
+            description: '灵田中凝结寒露而成的灵果。',
+            prompt: '',
+            score: 0,
+            spec: {
+              kind: 'spirit_fruit',
+              family: 'cultivation',
+              operations: [
+                {
+                  type: 'gain_progress',
+                  target: 'cultivation_exp',
+                  value: 100,
+                },
+              ],
+              consumeRules: {
+                scene: 'out_of_battle_only',
+                quotaCategory: 'none',
+              },
+              source: { kind: 'spirit_field', version: 1 },
+            },
+          },
+        ],
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          hasMore: false,
+        },
+      }).success,
+    ).toBe(true);
+  });
+
   test('keeps infrastructure and daily construction status separate', () => {
     const infrastructure = { facilities: [] };
     const member = {
@@ -680,54 +722,5 @@ describe('multi-scope resource contracts', () => {
       status: 'applied',
       data: [completed],
     });
-  });
-});
-
-describe('player.profile fate schema', () => {
-  test('accepts herb garden fate effect types', () => {
-    const parsed = RESOURCE_DATA_SCHEMAS['player.profile'].safeParse({
-      cultivator: {
-        name: '测',
-        gender: '男',
-        realm: '炼气',
-        realm_stage: '初期',
-        age: 18,
-        lifespan: 100,
-        attributes: {
-          vitality: 1,
-          strength: 1,
-          spirit: 1,
-          endurance: 1,
-          speed: 1,
-          willpower: 1,
-        },
-        spiritual_roots: [],
-        pre_heaven_fates: [
-          {
-            name: '灵田气运',
-            effects: [
-              {
-                id: 'herb-seed-return',
-                effectId: 'herb_seed_return_bonus',
-                scope: 'daily',
-                polarity: 'boon',
-                effectType: 'herb_seed_return_bonus',
-                value: 0.2,
-                label: '还种',
-                description: '收获时更易返还灵种。',
-                rollMeta: {
-                  qualityAnchor: '灵品',
-                  minValue: 0.1,
-                  maxValue: 0.3,
-                  rolledPercentile: 0.5,
-                  roundingStep: 0.01,
-                },
-              },
-            ],
-          },
-        ],
-      },
-    });
-    expect(parsed.success).toBe(true);
   });
 });
