@@ -1,13 +1,13 @@
 import type { MarketLayer } from '@shared/types/market';
 
-/** 每层固定留给灵种的货架位；黑市不挂（神秘层会丢掉 details）。 */
-export const SPIRIT_FIELD_MARKET_SEED_SLOTS: Record<MarketLayer, number> = {
-  common: 2,
-  treasure: 2,
-  heaven: 1,
-  black: 0,
-};
-
-export function getSpiritFieldMarketSeedSlotCount(layer: MarketLayer): number {
-  return SPIRIT_FIELD_MARKET_SEED_SLOTS[layer] ?? 0;
+/** 根据节点配置把货架比例换算为灵种数量；普通坊市未配置时不强制注入。 */
+export function getSpiritFieldMarketSeedSlotCount(
+  layer: MarketLayer,
+  listingCount: number,
+  ratios?: Partial<Record<MarketLayer, number>>,
+): number {
+  if (layer === 'black') return 0;
+  const count = Math.max(0, Math.floor(listingCount));
+  const ratio = Math.max(0, Math.min(1, ratios?.[layer] ?? 0));
+  return Math.min(count, Math.round(count * ratio));
 }

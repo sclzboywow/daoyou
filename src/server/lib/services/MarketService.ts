@@ -833,10 +833,7 @@ async function generateFromMaterialLibrary(
   return listings.slice(0, layerConfig.count);
 }
 
-/**
- * 在非黑市层固定挂出动态生成灵种；保留 details.seedSpec 快照，购买后可直接下田。
- * 黑市不注入，避免神秘层剥离 details。
- */
+/** 按节点配置注入动态灵种；普通坊市不再固定占位，黑市始终不注入。 */
 async function injectSpiritFieldSeedListings(
   listings: InternalMarketListing[],
   nodeId: string,
@@ -844,7 +841,11 @@ async function injectSpiritFieldSeedListings(
   profile: RegionProfile,
   layerConfig: ResolvedLayerConfig,
 ): Promise<InternalMarketListing[]> {
-  const slots = getSpiritFieldMarketSeedSlotCount(layer);
+  const slots = getSpiritFieldMarketSeedSlotCount(
+    layer,
+    layerConfig.count,
+    getMarketConfigByNodeId(nodeId)?.seed_ratio,
+  );
   if (slots <= 0) return listings;
 
   const seeds = await SpiritSeedGenerator.generateRandom(slots, {

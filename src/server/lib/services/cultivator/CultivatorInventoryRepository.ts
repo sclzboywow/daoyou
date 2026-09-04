@@ -165,7 +165,7 @@ export async function getPaginatedInventoryByType<T extends InventoryType>(
     materialElements?: ElementType[];
     materialSortBy?: MaterialInventorySortBy;
     materialSortOrder?: MaterialInventorySortOrder;
-    consumableKind?: 'pill' | 'spirit_fruit' | 'talisman';
+    consumableKind?: 'pill' | 'spirit_fruit' | 'talisman' | 'tradable';
   },
   q: DbExecutor | DbTransaction = getExecutor(),
 ): Promise<PaginatedInventoryResult<T>> {
@@ -219,12 +219,21 @@ export async function getPaginatedInventoryByType<T extends InventoryType>(
   }
 
   if (options.type === 'consumables') {
-    const consumableWhere = options.consumableKind
-      ? and(
+    const consumableWhere = (() => {
+      if (options.consumableKind === 'tradable') {
+        return and(
+          eq(schema.consumables.cultivatorId, cultivatorId),
+          sql`${schema.consumables.spec}->>'kind' in ('pill', 'spirit_fruit')`,
+        );
+      }
+      if (options.consumableKind) {
+        return and(
           eq(schema.consumables.cultivatorId, cultivatorId),
           sql`${schema.consumables.spec}->>'kind' = ${options.consumableKind}`,
-        )
-      : eq(schema.consumables.cultivatorId, cultivatorId);
+        );
+      }
+      return eq(schema.consumables.cultivatorId, cultivatorId);
+    })();
     const countResult = await q
       .select({ count: sql<number>`count(*)` })
       .from(schema.consumables)
@@ -326,7 +335,9 @@ export async function getPaginatedInventoryByType<T extends InventoryType>(
 
   const totalPages = Math.ceil(total / pageSize);
   return {
-    items: pagedRows.map((row) => mapMaterialRow(row)) as InventoryItemByType[T][],
+    items: pagedRows.map((row) =>
+      mapMaterialRow(row),
+    ) as InventoryItemByType[T][],
     pagination: {
       page,
       pageSize,
