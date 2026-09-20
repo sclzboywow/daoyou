@@ -16,6 +16,22 @@ const subscribeSendSchema = z
   })
   .passthrough();
 
+const textSecurityResponseSchema = z
+  .object({
+    errcode: z.number().int().optional(),
+    errmsg: z.string().optional(),
+    trace_id: z.string().optional(),
+    result: z
+      .object({
+        suggest: z.enum(['pass', 'review', 'risky']),
+        label: z.number().int().optional(),
+      })
+      .optional(),
+  })
+  .passthrough();
+
+export type WechatTextSecurityScene = 1 | 2 | 3 | 4;
+
 type AccessTokenCache = {
   token: string;
   expiresAtMs: number;
@@ -30,6 +46,7 @@ export class WechatMiniGameApiError extends Error {
     readonly code: number | string,
   ) {
     super(message);
+    this.name = 'WechatMiniGameApiError';
   }
 }
 
@@ -37,7 +54,10 @@ function requiredWechatCredentials() {
   const appId = process.env.WECHAT_MINI_GAME_APP_ID?.trim();
   const appSecret = process.env.WECHAT_MINI_GAME_APP_SECRET?.trim();
   if (!appId || !appSecret) {
-    throw new WechatMiniGameApiError('微信小游戏服务尚未配置', 'NOT_CONFIGURED');
+    throw new WechatMiniGameApiError(
+      '微信小游戏服务尚未配置',
+      'NOT_CONFIGURED',
+    );
   }
   return { appId, appSecret };
 }
@@ -56,17 +76,29 @@ async function requestAccessToken(): Promise<string> {
       signal: AbortSignal.timeout(8_000),
     });
   } catch {
-    throw new WechatMiniGameApiError('微信 access_token 服务暂不可用', 'UNAVAILABLE');
+    throw new WechatMiniGameApiError(
+      '微信 access_token 服务暂不可用',
+      'UNAVAILABLE',
+    );
   }
   if (!response.ok) {
-    throw new WechatMiniGameApiError('微信 access_token 服务响应异常', response.status);
+    throw new WechatMiniGameApiError(
+      '微信 access_token 服务响应异常',
+      response.status,
+    );
   }
 
-  const parsed = accessTokenSchema.safeParse(await response.json().catch(() => null));
+  const parsed = accessTokenSchema.safeParse(
+    await response.json().catch(() => null),
+  );
   if (!parsed.success || parsed.data.errcode || !parsed.data.access_token) {
     throw new WechatMiniGameApiError(
-      parsed.success ? parsed.data.errmsg || '获取微信 access_token 失败' : '微信 access_token 响应格式异常',
-      parsed.success ? parsed.data.errcode ?? 'INVALID_RESPONSE' : 'INVALID_RESPONSE',
+      parsed.success
+        ? parsed.data.errmsg || '获取微信 access_token 失败'
+        : '微信 access_token 响应格式异常',
+      parsed.success
+        ? (parsed.data.errcode ?? 'INVALID_RESPONSE')
+        : 'INVALID_RESPONSE',
     );
   }
 
@@ -94,6 +126,82 @@ export function clearWechatMiniGameAccessTokenCache(): void {
   accessTokenCache = null;
 }
 
+export async function checkWechatMiniGameTextContent(input: {
+  openId: string;
+  content: string;
+  scene: WechatTextSecurityScene;
+}): Promise<{
+  suggest: 'pass' | 'review' | 'risky';
+  label?: number;
+  traceId?: string;
+}> {
+  const check = async (
+    retryAfterTokenInvalid: boolean,
+  ): Promise<{
+    suggest: 'pass' | 'review' | 'risky';
+    label?: number;
+    traceId?: string;
+  }> => {
+    const token = await getWechatMiniGameAccessToken();
+    const url = new URL('https://api.weixin.qq.com/wxa/msg_sec_check');
+    url.searchParams.set('access_token', token);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          content: input.content,
+          version: 2,
+          scene: input.scene,
+          openid: input.openId,
+        }),
+        signal: AbortSignal.timeout(8_000),
+      });
+    } catch {
+      throw new WechatMiniGameApiError(
+        '微信内容安全服务暂不可用',
+        'UNAVAILABLE',
+      );
+    }
+    if (!response.ok) {
+      throw new WechatMiniGameApiError(
+        '微信内容安全服务响应异常',
+        response.status,
+      );
+    }
+
+    const parsed = textSecurityResponseSchema.safeParse(
+      await response.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      throw new WechatMiniGameApiError(
+        '微信内容安全响应格式异常',
+        'INVALID_RESPONSE',
+      );
+    }
+    const errcode = parsed.data.errcode ?? 0;
+    if (errcode === 0 && parsed.data.result) {
+      return {
+        suggest: parsed.data.result.suggest,
+        label: parsed.data.result.label,
+        traceId: parsed.data.trace_id,
+      };
+    }
+    if (retryAfterTokenInvalid && [40001, 40014, 42001].includes(errcode)) {
+      clearWechatMiniGameAccessTokenCache();
+      return check(false);
+    }
+    throw new WechatMiniGameApiError(
+      parsed.data.errmsg || '微信内容安全检查失败',
+      errcode || 'INVALID_RESPONSE',
+    );
+  };
+
+  return check(true);
+}
+
 export async function sendWechatMiniGameSubscribeMessage(input: {
   openId: string;
   templateId: string;
@@ -102,7 +210,9 @@ export async function sendWechatMiniGameSubscribeMessage(input: {
 }): Promise<void> {
   const send = async (retryAfterTokenInvalid: boolean): Promise<void> => {
     const token = await getWechatMiniGameAccessToken();
-    const url = new URL('https://api.weixin.qq.com/cgi-bin/message/subscribe/send');
+    const url = new URL(
+      'https://api.weixin.qq.com/cgi-bin/message/subscribe/send',
+    );
     url.searchParams.set('access_token', token);
 
     let response: Response;
@@ -122,15 +232,26 @@ export async function sendWechatMiniGameSubscribeMessage(input: {
         signal: AbortSignal.timeout(8_000),
       });
     } catch {
-      throw new WechatMiniGameApiError('微信订阅消息服务暂不可用', 'UNAVAILABLE');
+      throw new WechatMiniGameApiError(
+        '微信订阅消息服务暂不可用',
+        'UNAVAILABLE',
+      );
     }
 
     if (!response.ok) {
-      throw new WechatMiniGameApiError('微信订阅消息服务响应异常', response.status);
+      throw new WechatMiniGameApiError(
+        '微信订阅消息服务响应异常',
+        response.status,
+      );
     }
-    const parsed = subscribeSendSchema.safeParse(await response.json().catch(() => null));
+    const parsed = subscribeSendSchema.safeParse(
+      await response.json().catch(() => null),
+    );
     if (!parsed.success) {
-      throw new WechatMiniGameApiError('微信订阅消息响应格式异常', 'INVALID_RESPONSE');
+      throw new WechatMiniGameApiError(
+        '微信订阅消息响应格式异常',
+        'INVALID_RESPONSE',
+      );
     }
     const errcode = parsed.data.errcode ?? 0;
     if (errcode === 0) return;

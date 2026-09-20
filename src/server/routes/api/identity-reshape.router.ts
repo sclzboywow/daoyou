@@ -4,6 +4,7 @@ import {
 } from '@server/lib/hono/middleware';
 import { jsonWithStatus } from '@server/lib/hono/response';
 import type { AppEnv } from '@server/lib/hono/types';
+import { ContentSafetyError } from '@server/lib/services/ContentSafetyService';
 import {
   abandonIdentityReshape,
   confirmIdentityReshape,
@@ -50,7 +51,10 @@ function respondError(c: Parameters<typeof jsonWithStatus>[0], error: unknown) {
       success: false,
       error: error instanceof Error ? error.message : '改天换地失败',
     },
-    error instanceof IdentityReshapeServiceError ? error.status : 400,
+    error instanceof IdentityReshapeServiceError ||
+      error instanceof ContentSafetyError
+      ? error.status
+      : 400,
   );
 }
 
@@ -100,14 +104,16 @@ router.post('/session', requireActiveCultivatorRef(), async (c) => {
 });
 
 router.patch('/session', requireActiveCultivatorRef(), async (c) => {
+  const user = c.get('user');
   const cultivator = c.get('activeCultivatorRef');
-  if (!cultivator)
-    return c.json({ success: false, error: '当前没有活跃角色' }, 404);
+  if (!user || !cultivator)
+    return c.json({ success: false, error: '未授权访问' }, 401);
   const parsed = DraftSchema.safeParse(await c.req.json());
   if (!parsed.success)
     return c.json({ success: false, error: '问答草稿格式错误' }, 400);
   try {
     const session = await saveIdentityReshapeDraft({
+      userId: user.id,
       cultivatorId: cultivator.cultivatorId,
       ...parsed.data,
     });
@@ -118,14 +124,16 @@ router.patch('/session', requireActiveCultivatorRef(), async (c) => {
 });
 
 router.post('/generate', requireActiveCultivatorRef(), async (c) => {
+  const user = c.get('user');
   const cultivator = c.get('activeCultivatorRef');
-  if (!cultivator)
-    return c.json({ success: false, error: '当前没有活跃角色' }, 404);
+  if (!user || !cultivator)
+    return c.json({ success: false, error: '未授权访问' }, 401);
   const parsed = GenerateSchema.safeParse(await c.req.json());
   if (!parsed.success)
     return c.json({ success: false, error: '请完成问答并填写身世描述' }, 400);
   try {
     const session = await generateIdentityReshape({
+      userId: user.id,
       cultivatorId: cultivator.cultivatorId,
       ...parsed.data,
     });

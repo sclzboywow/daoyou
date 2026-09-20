@@ -191,9 +191,6 @@ export async function readPlayerResources(args: {
       eq(cultivators.status, 'active'),
     ),
   });
-  const wantsOnlySession = args.keys.length === 1 && args.keys[0] === 'session';
-  if (!active && !wantsOnlySession) throw new Error('当前没有活跃角色');
-
   const resourceData: Partial<PlayerResourceMap> = {};
   const resourceReads: Array<() => Promise<void>> = [];
   if (args.keys.includes('session')) {

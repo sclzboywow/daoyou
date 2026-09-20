@@ -11,6 +11,7 @@ import internalRouter from '@server/routes/internal';
 import { LlmByokConfigSchema } from '@shared/config/llm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { ZodError } from 'zod';
 
 const app = new Hono<AppEnv>();
 
@@ -44,6 +45,22 @@ app.use('*', async (context, next) => {
   await next();
 });
 
+app.use(
+  '/api/account/links',
+  apiIpRateLimit({
+    bucket: 'account-links-read',
+    windowSeconds: 60,
+    maxRequests: 20,
+  }),
+);
+app.use(
+  '/api/auth/list-accounts',
+  apiIpRateLimit({
+    bucket: 'auth-list-accounts',
+    windowSeconds: 60,
+    maxRequests: 20,
+  }),
+);
 app.use('/api/*', apiIpRateLimit());
 app.all('/api/auth/*', handleAuthRequest);
 app.use('/api/*', jsonError());
@@ -52,9 +69,30 @@ app.use('/internal/*', jsonError());
 app.route('/api', apiRouter);
 app.route('/internal', internalRouter);
 
-app.notFound((c) => c.redirect('https://client.daoyou.org'));
+app.notFound((c) => {
+  const path = c.req.path;
+  if (
+    path === '/api' ||
+    path.startsWith('/api/') ||
+    path === '/internal' ||
+    path.startsWith('/internal/')
+  ) {
+    return c.json({ success: false, error: '接口不存在' }, 404);
+  }
+  return c.redirect('https://client.daoyou.org');
+});
 
 app.onError((error, c) => {
+  if (error instanceof ZodError) {
+    return c.json(
+      {
+        success: false,
+        error: error.issues[0]?.message ?? '请求参数无效',
+        details: error.issues,
+      },
+      400,
+    );
+  }
   const lockErrorResponse = redisLockErrorResponse(error);
   if (lockErrorResponse) {
     return lockErrorResponse;

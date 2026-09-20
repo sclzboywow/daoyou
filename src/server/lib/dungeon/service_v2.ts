@@ -41,6 +41,7 @@ import {
   isSatelliteNode,
   resolveDungeonMapConfig,
 } from '@shared/lib/game/mapSystem';
+import { applyRewardedBattleHeal } from '@shared/lib/rewardedAd';
 import type { CultivatorCondition } from '@shared/types/condition';
 import {
   MaterialType,
@@ -151,6 +152,7 @@ type DungeonSettlementOptions = {
 type DungeonFlowOptions = {
   deferPersistence?: boolean;
   lease?: RedisLeaseContext;
+  offerAdHeal?: boolean;
 };
 
 type DungeonPersistenceHooks = {
@@ -1061,6 +1063,13 @@ export class DungeonService {
   ) {
     const state = await this.getState(cultivatorId);
     if (!state) throw new Error('副本已失效');
+    if (state.status === 'PENDING_AD_HEAL') {
+      throw new DungeonFlowError(
+        DungeonFlowErrorCode.INVALID_STATE,
+        '先疗伤或退出本轮，才能继续探索。',
+        409,
+      );
+    }
     if (this.hasCommittedAction(state, actionId)) {
       return { actionId, state, isFinished: state.isFinished };
     }
@@ -1520,6 +1529,7 @@ export class DungeonService {
     const lastHistory = state.history[state.history.length - 1];
 
     // Update State
+    const finishedBattleId = state.activeBattleId;
     state.status = 'EXPLORING';
     delete state.activeBattleId;
 
@@ -1532,8 +1542,36 @@ export class DungeonService {
       await updateCultivator(cultivatorId, { condition: nextCondition });
     }
 
-    // 战斗失败处理：生成伤势状态
+    // 战斗失败处理：微信副本可先留下疗伤机会，网页仍立刻结算。
     if (!isWin) {
+      if (options.offerAdHeal) {
+        const outcomeText = `你终究是不敵 ${enemyName}，在其重击下狼狈遁走。尚有一次疗伤续战的机会。`;
+        if (lastHistory) lastHistory.outcome = outcomeText;
+        state.status = 'PENDING_AD_HEAL';
+        state.isFinished = false;
+        state.adHeal = { used: false, battleId: finishedBattleId };
+        if (!options.deferPersistence) {
+          await this.saveState(cultivatorId, state);
+          return { state, isFinished: false };
+        }
+        return {
+          state,
+          isFinished: false,
+          persist: async (tx) => {
+            await updateCultivator(
+              cultivatorId,
+              { condition: nextCondition },
+              tx,
+            );
+            await this.persistStateRecord(cultivatorId, state, undefined, tx);
+            return { condition: nextCondition };
+          },
+          afterCommit: async () => {
+            await this.saveRedisState(cultivatorId, state);
+          },
+        };
+      }
+
       const outcomeText = `你终究是不敵 ${enemyName}，在其重击下狼狈遁走，侮幸捡回一条命。但你已无力再战，只得退出副本。`;
       lastHistory.outcome = outcomeText;
 
@@ -1774,6 +1812,13 @@ export class DungeonService {
         404,
       );
     }
+    if (state.status === 'PENDING_AD_HEAL') {
+      throw new DungeonFlowError(
+        DungeonFlowErrorCode.INVALID_STATE,
+        '先疗伤或退出本轮，才能继续探索。',
+        409,
+      );
+    }
     if (state.status !== 'LOOTING') {
       throw new DungeonFlowError(
         DungeonFlowErrorCode.INVALID_STATE,
@@ -1877,6 +1922,13 @@ export class DungeonService {
         DungeonFlowErrorCode.NOT_FOUND,
         '副本已失效',
         404,
+      );
+    }
+    if (state.status === 'PENDING_AD_HEAL') {
+      throw new DungeonFlowError(
+        DungeonFlowErrorCode.INVALID_STATE,
+        '先疗伤或退出本轮，才能继续探索。',
+        409,
       );
     }
     if (state.status !== 'LOOTING') {
@@ -2825,6 +2877,137 @@ export class DungeonService {
     }
 
     throw new Error('未知的副本恢复动作');
+  }
+
+  async applyRewardedBattleHeal(cultivatorId: string, runId: string) {
+    return withRedisLock(
+      {
+        key: redisLockKeys.cultivatorMutation(cultivatorId),
+        context: 'rewarded-ad-battle-heal',
+        timeoutMs: 30_000,
+        retries: 0,
+      },
+      async () => {
+        const state = await this.getState(cultivatorId);
+        if (!state?.runId || state.runId !== runId) {
+          throw new DungeonFlowError(
+            DungeonFlowErrorCode.NOT_FOUND,
+            '找不到这一轮秘境。',
+            404,
+          );
+        }
+        if (state.adHeal?.used) {
+          return {
+            alreadyClaimed: true,
+            runId: state.runId,
+            hpCurrent: state.adHeal.hpCurrent ?? null,
+            hpMax: state.adHeal.hpMax ?? null,
+            mpCurrent: state.adHeal.mpCurrent ?? null,
+            mpMax: state.adHeal.mpMax ?? null,
+            state,
+          };
+        }
+        if (state.status !== 'PENDING_AD_HEAL' || state.isFinished) {
+          throw new DungeonFlowError(
+            DungeonFlowErrorCode.INVALID_STATE,
+            '这一轮不能疗伤。',
+            409,
+          );
+        }
+        const bundle = await loadCultivatorCombatInput(cultivatorId);
+        const condition = bundle?.cultivator.condition;
+        if (!condition) {
+          throw new DungeonFlowError(
+            DungeonFlowErrorCode.NOT_FOUND,
+            '未找到修真者气血。',
+            404,
+          );
+        }
+        const maxHp =
+          condition.resources.hp.max ?? condition.resources.hp.current;
+        const maxMp =
+          condition.resources.mp.max ?? condition.resources.mp.current;
+        const healedHp = applyRewardedBattleHeal(
+          condition.resources.hp.current,
+          maxHp,
+        );
+        const healedMp = applyRewardedBattleHeal(
+          condition.resources.mp.current,
+          maxMp,
+        );
+        const nextCondition: CultivatorCondition = {
+          ...condition,
+          resources: {
+            ...condition.resources,
+            hp: {
+              ...condition.resources.hp,
+              current: healedHp,
+              max: maxHp,
+            },
+            mp: {
+              ...condition.resources.mp,
+              current: healedMp,
+              max: maxMp,
+            },
+          },
+        };
+        state.adHeal = {
+          used: true,
+          battleId: state.adHeal?.battleId,
+          hpCurrent: healedHp,
+          hpMax: maxHp,
+          mpCurrent: healedMp,
+          mpMax: maxMp,
+        };
+        state.status = 'EXPLORING';
+        state.isFinished = false;
+        await getExecutor().transaction(async (tx) => {
+          await updateCultivator(cultivatorId, { condition: nextCondition }, tx);
+          await this.persistStateRecord(cultivatorId, state, undefined, tx);
+        });
+        await this.saveRedisState(cultivatorId, state);
+        return {
+          alreadyClaimed: false,
+          runId,
+          hpCurrent: healedHp,
+          hpMax: maxHp,
+          mpCurrent: healedMp,
+          mpMax: maxMp,
+          state,
+        };
+      },
+    );
+  }
+
+  async declineRewardedBattleHeal(cultivatorId: string, runId: string) {
+    return withRedisLock(
+      {
+        key: redisLockKeys.cultivatorMutation(cultivatorId),
+        context: 'rewarded-ad-battle-heal-decline',
+        timeoutMs: 120_000,
+        retries: 0,
+      },
+      async () => {
+        const state = await this.getState(cultivatorId);
+        if (!state?.runId || state.runId !== runId) {
+          throw new DungeonFlowError(
+            DungeonFlowErrorCode.NOT_FOUND,
+            '找不到这一轮秘境。',
+            404,
+          );
+        }
+        if (state.status !== 'PENDING_AD_HEAL' || state.adHeal?.used) {
+          throw new DungeonFlowError(
+            DungeonFlowErrorCode.INVALID_STATE,
+            '这一轮已经不能退出疗伤。',
+            409,
+          );
+        }
+        return this.settleDungeon(state, {
+          endDisposition: 'retreated_after_battle',
+        });
+      },
+    );
   }
 
   async quitDungeon(cultivatorId: string, options: DungeonFlowOptions = {}) {

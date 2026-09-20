@@ -17,6 +17,7 @@ type Tab = 'mine' | 'world' | 'support';
 type ClientConfig = {
   enabled: boolean;
   fulfillmentEnabled: boolean;
+  creatorUrl: string;
   tiers: Record<
     SponsorshipTierId,
     {
@@ -266,6 +267,22 @@ export default function MeritLedgerPage() {
             </div>
           )}
 
+          <section className="border-crimson/25 bg-crimson/[0.025] flex flex-col items-start justify-between gap-4 border-l-2 px-5 py-4 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-base font-medium">通过爱发电贡献功德</p>
+              <p className="text-ink-secondary mt-1 text-sm leading-6">
+                支持服务器、AI 服务与持续开发；功德不增加战力或游戏数值。
+              </p>
+            </div>
+            <InkButton
+              variant="outline"
+              className="shrink-0"
+              onClick={() => setTab('support')}
+            >
+              贡献功德
+            </InkButton>
+          </section>
+
           <label className="border-ink/15 flex items-start gap-3 border-y border-dashed py-4 text-sm leading-7">
             <input
               type="checkbox"
@@ -323,6 +340,20 @@ export default function MeritLedgerPage() {
 
       {tab === 'support' && (
         <div className="space-y-7">
+          {config?.creatorUrl ? (
+            <p className="border-ink/15 text-ink-secondary border-y border-dashed py-3 text-sm leading-7">
+              《万界道友》已入驻爱发电。你也可以直接
+              <a
+                className="text-crimson mx-1 underline underline-offset-4"
+                href={config.creatorUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                访问爱发电主页
+              </a>
+              了解支持方案。
+            </p>
+          ) : null}
           {pendingCheckoutUrl && (
             <p className="border-crimson/35 bg-crimson/[0.025] border-l-2 px-4 py-3 text-sm">
               支付窗口未打开？

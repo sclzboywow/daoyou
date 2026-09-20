@@ -456,6 +456,7 @@ export type DungeonRunStatus =
   | 'LOOTING'
   | 'SETTLING'
   | 'FINISHED'
+  | 'PENDING_AD_HEAL'
   | 'RECOVERABLE_ERROR';
 
 export type DungeonRecoverAction =
@@ -502,6 +503,14 @@ export interface DungeonState {
   status: DungeonRunStatus;
   statusReason?: string;
   activeBattleId?: string;
+  adHeal?: {
+    used: boolean;
+    battleId?: string;
+    hpCurrent?: number;
+    hpMax?: number;
+    mpCurrent?: number;
+    mpMax?: number;
+  };
   dangerScore: number;
   isFinished: boolean;
   currentOptions?: DungeonOption[];

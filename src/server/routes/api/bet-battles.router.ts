@@ -5,10 +5,11 @@ import {
 import { jsonWithStatus } from '@server/lib/hono/response';
 import type { AppEnv } from '@server/lib/hono/types';
 import * as betBattleRepository from '@server/lib/repositories/betBattleRepository';
+import { BetBattleServiceError } from '@server/lib/services/BetBattleService';
 import {
-  BetBattleServiceError,
-  MAX_BET_BATTLE_SPIRIT_STONES,
-} from '@server/lib/services/BetBattleService';
+  assertUserGeneratedContentSafe,
+  ContentSafetyError,
+} from '@server/lib/services/ContentSafetyService';
 import {
   cancelBetBattleCommand,
   challengeBetBattleCommand,
@@ -37,12 +38,7 @@ const CreateBetBattleSchema = z.object({
     })
     .optional(),
   stakeType: z.enum(['spirit_stones', 'item']),
-  spiritStones: z
-    .number()
-    .int()
-    .min(0)
-    .max(MAX_BET_BATTLE_SPIRIT_STONES)
-    .optional(),
+  spiritStones: z.number().int().min(0).optional(),
   stakeItem: z
     .object({
       itemType: z.enum(['material', 'artifact', 'consumable']),
@@ -168,6 +164,14 @@ router.post('/create', requireActiveCultivatorRef(), async (c) => {
   try {
     const { minRealm, maxRealm, taunt, stakeType, spiritStones, stakeItem } =
       CreateBetBattleSchema.parse(await c.req.json());
+    if (taunt) {
+      await assertUserGeneratedContentSafe({
+        userId: user.id,
+        source: 'bet_battle_taunt',
+        scene: 2,
+        content: taunt,
+      });
+    }
 
     const committed = await createBetBattleCommand({
       actor: {
@@ -194,6 +198,13 @@ router.post('/create', requireActiveCultivatorRef(), async (c) => {
         c,
         { error: error.message },
         statusMap[error.code] || 400,
+      );
+    }
+    if (error instanceof ContentSafetyError) {
+      return jsonWithStatus(
+        c,
+        { error: error.message, code: error.code },
+        error.status,
       );
     }
 

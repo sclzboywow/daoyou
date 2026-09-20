@@ -14,6 +14,7 @@ import {
 } from '@server/lib/services/WechatOpenAbilityService';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
+import rewardedAdRouter from '@server/routes/api/rewarded-ad.router';
 
 const subscribeSchema = z
   .object({
@@ -25,6 +26,7 @@ const giftIdSchema = z.uuid();
 
 const router = new Hono<AppEnv>();
 router.use('*', requireActiveCultivatorRef());
+router.route('/rewarded-ad', rewardedAdRouter);
 
 function actorFromContext(c: Context<AppEnv>) {
   const user = c.get('user');

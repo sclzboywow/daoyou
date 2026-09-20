@@ -4,32 +4,34 @@ import {
 } from '@server/lib/hono/middleware';
 import { jsonWithStatus } from '@server/lib/hono/response';
 import type { AppEnv } from '@server/lib/hono/types';
-import {
-  previewFormulaCraft,
-} from '@server/lib/services/AlchemyFormulaService';
+import { previewFormulaCraft } from '@server/lib/services/AlchemyFormulaService';
 import {
   AlchemyServiceError,
   previewAlchemySelection,
 } from '@server/lib/services/alchemyServiceV2';
+import {
+  assertUserGeneratedContentSafe,
+  ContentSafetyError,
+} from '@server/lib/services/ContentSafetyService';
+import {
+  CraftCommandError,
+  executeCraftCommand,
+  executeCreationConfirmationCommand,
+} from '@server/lib/services/CraftApplicationService';
 import {
   CreationServiceError,
   estimateCost,
   getPendingCreation,
   previewCreationSelection,
 } from '@server/lib/services/creationServiceV2';
-import {
-  getPlayerPreHeavenFates,
-} from '@server/lib/services/cultivator/CultivatorProfileRepository';
-import {
-  CraftCommandError,
-  executeCraftCommand,
-  executeCreationConfirmationCommand,
-} from '@server/lib/services/CraftApplicationService';
-import { toPlayerStateMutationResponse } from '@server/lib/services/ResourceMutationResponse';
+import { readCraftReadinessFacts } from '@server/lib/services/cultivator/CultivatorFactsReader';
+import { getPlayerPreHeavenFates } from '@server/lib/services/cultivator/CultivatorProfileRepository';
 import {
   QiInsufficientError,
   QiServiceError,
 } from '@server/lib/services/QiService';
+import { toPlayerStateMutationResponse } from '@server/lib/services/ResourceMutationResponse';
+import { SELF_CREATED_SKILL_CREATION_FROZEN_ERROR } from '@shared/config/selfCreatedSkillFreeze';
 import {
   ALCHEMY_MAX_DOSE,
   CREATION_INPUT_CONSTRAINTS,
@@ -38,54 +40,51 @@ import {
   CREATION_CRAFT_TYPES,
   isCreationCraftType,
 } from '@shared/engine/creation-v2/config/CreationCraftPolicy';
-import { SELF_CREATED_SKILL_CREATION_FROZEN_ERROR } from '@shared/config/selfCreatedSkillFreeze';
-import {
-  EQUIPMENT_SLOT_VALUES,
-  type Quality,
-} from '@shared/types/constants';
+import { EQUIPMENT_SLOT_VALUES, type Quality } from '@shared/types/constants';
 import { ALCHEMY_MODE_VALUES } from '@shared/types/consumable';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { readCraftReadinessFacts } from '@server/lib/services/cultivator/CultivatorFactsReader';
 
 const SUPPORTED_CRAFT_TYPES = [...CREATION_CRAFT_TYPES, 'alchemy'] as const;
 const { minQuantityPerMaterial, maxQuantityPerMaterial } =
   CREATION_INPUT_CONSTRAINTS;
 
-const CraftSchema = z.object({
-  materialIds: z.array(z.string()).optional(),
-  craftType: z.enum(SUPPORTED_CRAFT_TYPES),
-  alchemyMode: z.enum(ALCHEMY_MODE_VALUES).optional(),
-  formulaId: z.string().uuid().optional(),
-  analysisId: z.string().uuid().optional(),
-  materialQuantities: z
-    .record(
-      z.string(),
-      z.number().int().min(minQuantityPerMaterial).max(ALCHEMY_MAX_DOSE),
-    )
-    .optional(),
-  userPrompt: z.string().trim().max(300).optional(),
-  requestedSlot: z.enum(EQUIPMENT_SLOT_VALUES).optional(),
-  requestedTargetPolicy: z
-    .object({
-      team: z.enum(['enemy', 'ally', 'self', 'any']),
-      scope: z.enum(['single', 'aoe', 'random']),
-      maxTargets: z.number().int().min(1).optional(),
-    })
-    .optional(),
-}).superRefine((value, context) => {
-  if (value.craftType !== 'alchemy' && value.materialQuantities) {
-    for (const [id, quantity] of Object.entries(value.materialQuantities)) {
-      if (quantity > maxQuantityPerMaterial) {
-        context.addIssue({
-          code: 'custom',
-          path: ['materialQuantities', id],
-          message: `普通造物单种材料最多投入 ${maxQuantityPerMaterial} 个`,
-        });
+const CraftSchema = z
+  .object({
+    materialIds: z.array(z.string()).optional(),
+    craftType: z.enum(SUPPORTED_CRAFT_TYPES),
+    alchemyMode: z.enum(ALCHEMY_MODE_VALUES).optional(),
+    formulaId: z.string().uuid().optional(),
+    analysisId: z.string().uuid().optional(),
+    materialQuantities: z
+      .record(
+        z.string(),
+        z.number().int().min(minQuantityPerMaterial).max(ALCHEMY_MAX_DOSE),
+      )
+      .optional(),
+    userPrompt: z.string().trim().max(300).optional(),
+    requestedSlot: z.enum(EQUIPMENT_SLOT_VALUES).optional(),
+    requestedTargetPolicy: z
+      .object({
+        team: z.enum(['enemy', 'ally', 'self', 'any']),
+        scope: z.enum(['single', 'aoe', 'random']),
+        maxTargets: z.number().int().min(1).optional(),
+      })
+      .optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.craftType !== 'alchemy' && value.materialQuantities) {
+      for (const [id, quantity] of Object.entries(value.materialQuantities)) {
+        if (quantity > maxQuantityPerMaterial) {
+          context.addIssue({
+            code: 'custom',
+            path: ['materialQuantities', id],
+            message: `普通造物单种材料最多投入 ${maxQuantityPerMaterial} 个`,
+          });
+        }
       }
     }
-  }
-});
+  });
 
 const ConfirmSchema = z.object({
   craftType: z.enum(CREATION_CRAFT_TYPES),
@@ -150,9 +149,7 @@ router.get('/', requireActiveCultivatorRef(), async (c) => {
     if (!fateList) {
       return c.json({ error: '当前没有活跃角色' }, 404);
     }
-    const readiness = await readCraftReadinessFacts(
-      cultivator.cultivatorId,
-    );
+    const readiness = await readCraftReadinessFacts(cultivator.cultivatorId);
     const materialIdsParam = c.req.query('materialIds');
     const materialQuantitiesParam = c.req.query('materialQuantities');
     const craftType = c.req.query('craftType');
@@ -295,6 +292,14 @@ router.post('/', requireActiveCultivatorRef(), async (c) => {
         409,
       );
     }
+    if (parsed.data.userPrompt) {
+      await assertUserGeneratedContentSafe({
+        userId: user.id,
+        source: 'craft_prompt',
+        scene: 2,
+        content: parsed.data.userPrompt,
+      });
+    }
 
     const committed = await executeCraftCommand({
       userId: user.id,
@@ -320,6 +325,13 @@ router.post('/', requireActiveCultivatorRef(), async (c) => {
     }
     if (error instanceof CraftCommandError) {
       return c.json({ error: error.message }, error.status);
+    }
+    if (error instanceof ContentSafetyError) {
+      return jsonWithStatus(
+        c,
+        { error: error.message, code: error.code },
+        error.status,
+      );
     }
     if (error instanceof z.ZodError) {
       return c.json(

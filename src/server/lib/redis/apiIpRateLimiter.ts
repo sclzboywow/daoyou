@@ -61,6 +61,7 @@ export type ApiIpRateLimitResult = {
 };
 
 export type ApiIpRateLimitOptions = {
+  bucket?: string;
   now?: Date;
   windowSeconds?: number;
   maxRequests?: number;
@@ -97,8 +98,8 @@ export function getApiIpRateLimitConfig(options: ApiIpRateLimitOptions = {}) {
   };
 }
 
-function buildRateLimitKey(ip: string): string {
-  return `${KEY_PREFIX}:${ip}`;
+function buildRateLimitKey(ip: string, bucket?: string): string {
+  return bucket ? `${KEY_PREFIX}:${bucket}:${ip}` : `${KEY_PREFIX}:${ip}`;
 }
 
 function parseCount(value: unknown): number {
@@ -162,7 +163,7 @@ export async function checkApiIpRateLimit(
   const rawResult = (await redis.eval(
     CHECK_RATE_LIMIT_SCRIPT,
     1,
-    buildRateLimitKey(ip),
+    buildRateLimitKey(ip, options.bucket),
     nowMs,
     windowMs,
     maxRequests,

@@ -1,4 +1,8 @@
-import { getExecutor, type DbExecutor, type DbTransaction } from '@server/lib/drizzle/db';
+import {
+  getExecutor,
+  type DbExecutor,
+  type DbTransaction,
+} from '@server/lib/drizzle/db';
 import { mails } from '@server/lib/drizzle/schema';
 import {
   redisLockErrorResponse,
@@ -6,6 +10,10 @@ import {
 } from '@server/lib/hono/middleware';
 import { jsonWithStatus } from '@server/lib/hono/response';
 import type { AppEnv } from '@server/lib/hono/types';
+import {
+  assertUserGeneratedContentSafe,
+  ContentSafetyError,
+} from '@server/lib/services/ContentSafetyService';
 import {
   claimAllCultivatorMail,
   claimCultivatorMail,
@@ -15,11 +23,8 @@ import {
   sendCultivatorMail,
 } from '@server/lib/services/PlayerMailApplicationService';
 import { PlayerMailServiceError } from '@server/lib/services/PlayerMailService';
-import type { MailAttachment } from '@server/lib/services/MailService';
 import { toPlayerStateMutationResponse } from '@server/lib/services/ResourceMutationResponse';
-import { sanitizeMaterialForClient } from '@server/lib/services/materialDetailsPrivacy';
 import { MAX_PLAYER_ITEM_QUANTITY } from '@shared/config/itemQuantity';
-import type { Material } from '@shared/types/cultivator';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -72,22 +77,7 @@ mailRouter.get('/', requireActiveCultivatorRef(), async (c) => {
   });
   const hasMore = userMails.length > pageSize;
   return c.json({
-    mails: (hasMore ? userMails.slice(0, pageSize) : userMails).map((mail) => {
-      const attachments = Array.isArray(mail.attachments)
-        ? (mail.attachments as MailAttachment[])
-        : [];
-      return {
-        ...mail,
-        attachments: attachments.map((attachment) =>
-          attachment.type === 'material' && attachment.data
-            ? {
-                ...attachment,
-                data: sanitizeMaterialForClient(attachment.data as Material),
-              }
-            : attachment,
-        ),
-      };
-    }),
+    mails: hasMore ? userMails.slice(0, pageSize) : userMails,
     pagination: { page, pageSize, hasMore },
   });
 });
@@ -98,6 +88,12 @@ mailRouter.post('/send', requireActiveCultivatorRef(), async (c) => {
   if (!user || !cultivator) return c.json({ error: '未授权访问' }, 401);
   try {
     const parsed = SendMailSchema.parse(await c.req.json());
+    await assertUserGeneratedContentSafe({
+      userId: user.id,
+      source: 'player_mail',
+      scene: 2,
+      content: parsed.content,
+    });
     const committed = await sendCultivatorMail({
       actor: {
         userId: user.id,
@@ -116,6 +112,13 @@ mailRouter.post('/send', requireActiveCultivatorRef(), async (c) => {
     }
     if (error instanceof PlayerMailServiceError) {
       return jsonWithStatus(c, { error: error.message }, error.status);
+    }
+    if (error instanceof ContentSafetyError) {
+      return jsonWithStatus(
+        c,
+        { error: error.message, code: error.code },
+        error.status,
+      );
     }
     console.error('mail send api error:', error);
     return c.json({ error: '发送传音失败' }, 500);

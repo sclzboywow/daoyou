@@ -49,6 +49,7 @@ test -f dist/manifest.webmanifest
 test -f dist/icons/icon-192.png
 test -d dist/assets
 cp -a dist/. "$STAGE_DIR/web/"
+chmod -R a+rX "$STAGE_DIR/web"
 
 echo "==> Building server (includes online-battle-resolver worker)"
 bun run build:server

@@ -8,6 +8,7 @@ import type {
   ItemLibraryPayload,
 } from '@shared/lib/itemLibrary';
 import type { SponsorshipTierId } from '@shared/lib/sponsorship';
+import type { AccountLinkRequestStatus } from '@shared/contracts/account';
 import type { TowerPreparedEnemy } from '@shared/lib/tower';
 import type { BattleRecordV3 } from '@shared/types/battle';
 import type { BattleReplayV1 } from '@shared/contracts/battleReplay';
@@ -108,6 +109,83 @@ export const cultivators = pgTable(
     index('cultivators_status_spirit_stones_idx').on(
       table.status,
       table.spirit_stones,
+    ),
+  ],
+);
+
+export const accountLinkRequests = pgTable(
+  'wanjiedaoyou_account_link_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    requesterUserId: uuid('requester_user_id').notNull(),
+    targetUserId: uuid('target_user_id').notNull(),
+    status: varchar('status', { length: 20 })
+      .$type<AccountLinkRequestStatus>()
+      .notNull()
+      .default('pending'),
+    expiresAt: timestamp('expires_at').notNull(),
+    respondedAt: timestamp('responded_at'),
+    primaryUserId: uuid('primary_user_id'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at')
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index('account_link_requests_requester_status_idx').on(
+      table.requesterUserId,
+      table.status,
+      table.createdAt,
+    ),
+    index('account_link_requests_target_status_idx').on(
+      table.targetUserId,
+      table.status,
+      table.createdAt,
+    ),
+    index('account_link_requests_expires_idx').on(table.status, table.expiresAt),
+  ],
+);
+
+export type RewardedAdCallbackStatus = 'pending' | 'reserved' | 'consumed';
+
+export const rewardedAdCallbacks = pgTable(
+  'wanjiedaoyou_rewarded_ad_callbacks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    transactionId: varchar('transaction_id', { length: 160 }).notNull(),
+    callbackUserId: varchar('callback_user_id', { length: 160 }).notNull(),
+    rewardKind: varchar('reward_kind', { length: 32 }).notNull(),
+    rewardAmount: integer('reward_amount').notNull(),
+    customData: text('custom_data'),
+    status: varchar('status', { length: 20 })
+      .$type<RewardedAdCallbackStatus>()
+      .notNull()
+      .default('pending'),
+    reservationToken: uuid('reservation_token'),
+    claimRequestId: varchar('claim_request_id', { length: 120 }),
+    reservedAt: timestamp('reserved_at'),
+    consumedAt: timestamp('consumed_at'),
+    consumerUserId: uuid('consumer_user_id'),
+    consumerCultivatorId: uuid('consumer_cultivator_id'),
+    receivedAt: timestamp('received_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('rewarded_ad_callbacks_transaction_uidx').on(table.transactionId),
+    index('rewarded_ad_callbacks_claim_idx').on(
+      table.callbackUserId,
+      table.rewardKind,
+      table.status,
+      table.receivedAt,
+    ),
+    index('rewarded_ad_callbacks_reservation_idx').on(
+      table.status,
+      table.reservedAt,
+    ),
+    index('rewarded_ad_callbacks_request_idx').on(
+      table.consumerCultivatorId,
+      table.rewardKind,
+      table.claimRequestId,
     ),
   ],
 );

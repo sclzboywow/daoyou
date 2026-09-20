@@ -31,6 +31,11 @@ import {
 } from '@shared/types/identityReshape';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { playerCommandExecutor } from './CommandExecutors';
+import {
+  assertUserGeneratedContentSafe,
+  isProviderContentSafetyError,
+  rejectProviderUnsafeContent,
+} from './ContentSafetyService';
 import { consumeConsumableById } from './cultivator/CultivatorInventoryRepository';
 
 function sessionKey(cultivatorId: string) {
@@ -228,6 +233,7 @@ export function startIdentityReshape(args: {
 }
 
 export async function saveIdentityReshapeDraft(args: {
+  userId: string;
   cultivatorId: string;
   answers: IdentityReshapeAnswer[];
   description: string;
@@ -240,6 +246,12 @@ export async function saveIdentityReshapeDraft(args: {
       retries: 0,
     },
     async () => {
+      await assertUserGeneratedContentSafe({
+        userId: args.userId,
+        source: 'identity_reshape_input',
+        scene: 1,
+        content: args.description,
+      });
       const session = await requireSession(args.cultivatorId);
       if (session.candidate) {
         throw new IdentityReshapeServiceError(
@@ -288,6 +300,7 @@ async function checkActiveName(
 }
 
 export function generateIdentityReshape(args: {
+  userId: string;
   cultivatorId: string;
   answers: IdentityReshapeAnswer[];
   description: string;
@@ -315,6 +328,12 @@ export function generateIdentityReshape(args: {
       ) {
         throw new IdentityReshapeServiceError(400, '请完成当前三道典籍问答');
       }
+      await assertUserGeneratedContentSafe({
+        userId: args.userId,
+        source: 'identity_reshape_input',
+        scene: 1,
+        content: description,
+      });
 
       const cultivator = await getExecutor().query.cultivators.findFirst({
         columns: {
@@ -354,14 +373,37 @@ export function generateIdentityReshape(args: {
         }),
         description,
       });
-      const response = await generateAiObject({
-        system: rendered.system,
-        prompt: rendered.user,
-        schema: IdentityReshapeCandidateSchema,
-        name: '改天换地后的角色文案',
-        sceneId: 'identity-reshape',
-      });
+      let response;
+      try {
+        response = await generateAiObject({
+          system: rendered.system,
+          prompt: rendered.user,
+          schema: IdentityReshapeCandidateSchema,
+          name: '改天换地后的角色文案',
+          sceneId: 'identity-reshape',
+        });
+      } catch (error) {
+        if (isProviderContentSafetyError(error)) {
+          await rejectProviderUnsafeContent({
+            userId: args.userId,
+            source: 'identity_reshape_input',
+            content: description,
+          });
+        }
+        throw error;
+      }
       const candidate = response.output;
+      await assertUserGeneratedContentSafe({
+        userId: args.userId,
+        source: 'identity_reshape_output',
+        scene: 1,
+        content: [
+          candidate.name,
+          candidate.origin,
+          candidate.personality,
+          candidate.background,
+        ],
+      });
       const nameCheck = await checkActiveName(candidate.name);
       const next: IdentityReshapeSessionStore = {
         ...session,

@@ -1,11 +1,12 @@
-import { auth } from '@server/lib/auth/auth';
-import { authUsers } from '@server/lib/auth/schema';
 import {
   isAltchaServerEnabled,
   verifyAltchaPayload,
   type AltchaAction,
 } from '@server/lib/auth/altcha';
+import { auth } from '@server/lib/auth/auth';
+import { authUsers } from '@server/lib/auth/schema';
 import { db } from '@server/lib/drizzle/db';
+import { hasLocalContentViolation } from '@server/lib/services/ContentSafetyService';
 import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { verifyWechatMiniGameLoginCode } from './wechatMiniGameAuth';
@@ -18,13 +19,16 @@ const CAPTCHA_ACTION_BY_PATH = new Map<string, AltchaAction>([
 ]);
 const ADMIN_AUTH_PATH = '/api/auth/admin';
 
-async function readRequestBody(request: Request): Promise<Record<string, unknown>> {
+async function readRequestBody(
+  request: Request,
+): Promise<Record<string, unknown>> {
   const contentType = request.headers.get('content-type') || '';
 
   if (contentType.includes('application/json')) {
-    const body = (await request.clone().json().catch(() => null)) as
-      | Record<string, unknown>
-      | null;
+    const body = (await request
+      .clone()
+      .json()
+      .catch(() => null)) as Record<string, unknown> | null;
 
     return body ?? {};
   }
@@ -97,13 +101,16 @@ async function validateCaptcha(context: Context): Promise<Response | null> {
   return null;
 }
 
-async function validateOtpSignUpName(context: Context): Promise<Response | null> {
+async function validateOtpSignUpName(
+  context: Context,
+): Promise<Response | null> {
   if (context.req.path !== '/api/auth/sign-in/email-otp') {
     return null;
   }
 
   const body = await readRequestBody(context.req.raw);
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  const email =
+    typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const name = typeof body.name === 'string' ? body.name.trim() : '';
 
   if (!email) {
@@ -123,6 +130,24 @@ async function validateOtpSignUpName(context: Context): Promise<Response | null>
   return null;
 }
 
+async function validateAuthDisplayName(
+  context: Context,
+): Promise<Response | null> {
+  if (
+    context.req.path !== '/api/auth/sign-up/email' &&
+    context.req.path !== '/api/auth/sign-in/email-otp' &&
+    context.req.path !== '/api/auth/update-user'
+  ) {
+    return null;
+  }
+  const body = await readRequestBody(context.req.raw);
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (name && hasLocalContentViolation(name)) {
+    return authError('昵称不符合社区规范，请修改后重试');
+  }
+  return null;
+}
+
 export async function handleAuthRequest(context: Context): Promise<Response> {
   if (
     context.req.path === ADMIN_AUTH_PATH ||
@@ -135,6 +160,11 @@ export async function handleAuthRequest(context: Context): Promise<Response> {
     const captchaError = await validateCaptcha(context);
     if (captchaError) {
       return captchaError;
+    }
+
+    const displayNameError = await validateAuthDisplayName(context);
+    if (displayNameError) {
+      return displayNameError;
     }
 
     const otpNameError = await validateOtpSignUpName(context);

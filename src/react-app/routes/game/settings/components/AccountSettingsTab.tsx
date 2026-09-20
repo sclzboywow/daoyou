@@ -19,6 +19,7 @@ import type { AccountSetPasswordResponse } from '@shared/contracts/account';
 import type { ApiFailure } from '@shared/contracts/http';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { CrossPlatformLinkSettings } from './CrossPlatformLinkSettings';
 import {
   SettingsField,
   SettingsMessage,
@@ -277,6 +278,8 @@ export function AccountSettingsTab() {
           value={formatDateTime(user?.createdAt)}
         />
       </SettingsSection>
+
+      <CrossPlatformLinkSettings />
 
       <SettingsSection
         title="密码维护"

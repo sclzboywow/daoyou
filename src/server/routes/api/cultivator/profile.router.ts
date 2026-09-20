@@ -8,9 +8,11 @@ import {
   isValidRedeemCodeFormat,
   normalizeRedeemCode,
 } from '@server/lib/redeem/code';
+import { AttributeResetServiceError } from '@server/lib/services/AttributeResetService';
 import {
-  AttributeResetServiceError,
-} from '@server/lib/services/AttributeResetService';
+  assertUserGeneratedContentSafe,
+  ContentSafetyError,
+} from '@server/lib/services/ContentSafetyService';
 import {
   CreationProductCommandError,
   toggleArtifactLoadout,
@@ -21,12 +23,12 @@ import {
   resetCultivatorAttributes,
   updateCultivatorTitle,
 } from '@server/lib/services/CultivatorProfileApplicationService';
-import { toPlayerStateMutationResponse } from '@server/lib/services/ResourceMutationResponse';
 import { QiService } from '@server/lib/services/QiService';
 import {
   claimRedeemCode,
   RedeemClaimError,
 } from '@server/lib/services/RedeemCodeApplicationService';
+import { toPlayerStateMutationResponse } from '@server/lib/services/ResourceMutationResponse';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -42,15 +44,17 @@ const ClaimRedeemCodeSchema = z.object({
   code: z.string().trim().min(1).max(64),
 });
 
-const AttributeAllocationSchema = z.object({
-  attribute_model_version: z.literal(2),
-  vitality: z.number().int().min(0).default(0),
-  strength: z.number().int().min(0).default(0),
-  spirit: z.number().int().min(0).default(0),
-  endurance: z.number().int().min(0).default(0),
-  speed: z.number().int().min(0).default(0),
-  willpower: z.number().int().min(0).default(0),
-}).strict();
+const AttributeAllocationSchema = z
+  .object({
+    attribute_model_version: z.literal(2),
+    vitality: z.number().int().min(0).default(0),
+    strength: z.number().int().min(0).default(0),
+    spirit: z.number().int().min(0).default(0),
+    endurance: z.number().int().min(0).default(0),
+    speed: z.number().int().min(0).default(0),
+    willpower: z.number().int().min(0).default(0),
+  })
+  .strict();
 
 function isUniqueViolation(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
@@ -116,7 +120,10 @@ router.get('/qi/logs', requireActiveCultivatorRef(), async (c) => {
 
   const page = parsePositiveInt(c.req.query('page'), 1);
   const pageSize = Math.min(100, parsePositiveInt(c.req.query('pageSize'), 20));
-  const data = await QiService.listLogs(cultivator.cultivatorId, { page, pageSize });
+  const data = await QiService.listLogs(cultivator.cultivatorId, {
+    page,
+    pageSize,
+  });
   return c.json({ success: true, data });
 });
 
@@ -128,13 +135,28 @@ router.post('/title', requireActiveCultivatorRef(), async (c) => {
   }
 
   const { title } = TitleSchema.parse(await c.req.json());
-  const committed = await updateCultivatorTitle({
-    userId: user.id,
-    cultivatorId: cultivator.cultivatorId,
-    title: title || null,
-  });
+  try {
+    if (title) {
+      await assertUserGeneratedContentSafe({
+        userId: user.id,
+        source: 'cultivator_title',
+        scene: 2,
+        content: title,
+      });
+    }
+    const committed = await updateCultivatorTitle({
+      userId: user.id,
+      cultivatorId: cultivator.cultivatorId,
+      title: title || null,
+    });
 
-  return c.json(toPlayerStateMutationResponse(committed));
+    return c.json(toPlayerStateMutationResponse(committed));
+  } catch (error) {
+    if (error instanceof ContentSafetyError) {
+      return c.json({ error: error.message, code: error.code }, error.status);
+    }
+    throw error;
+  }
 });
 
 router.post('/attributes/allocate', requireActiveCultivatorRef(), async (c) => {
@@ -174,7 +196,7 @@ router.post('/attributes/allocate', requireActiveCultivatorRef(), async (c) => {
       [
         '角色不存在',
         '未分配属性点不足',
-        '属性不能低于当前境界自然值',
+        '属性不能低于基础值',
         '属性总点数超过当前境界预算',
       ].includes(message)
     ) {

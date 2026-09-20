@@ -2,6 +2,12 @@ import { cultivators } from '@server/lib/drizzle/schema';
 import { createDomainEvent } from '@server/lib/mq/domainEventWriter';
 import { publishTransactionalMessageBestEffort } from '@server/lib/mq/transactionalMessagePublisher';
 import { redisLockKeys, withRedisLock } from '@server/lib/redis/lock';
+import { redis } from '@server/lib/redis';
+import {
+  scaleYieldValue,
+  yieldRewardMultiplier,
+  type YieldRewardMode,
+} from '@shared/lib/rewardedAd';
 import {
   updateCultivationExp,
   updateSpiritStones,
@@ -15,6 +21,7 @@ import { and, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { getExecutor } from '../drizzle/db';
 import { playerCommandExecutor } from './CommandExecutors';
+import { findPlayerMutationRequest } from '@server/lib/repositories/playerStateRepository';
 
 export class YieldCommandError extends Error {
   constructor(
@@ -73,11 +80,44 @@ async function loadYieldFacts(
   };
 }
 
+interface YieldClaimResult {
+  cultivatorName: string;
+  cultivatorRealm: RealmType;
+  amount: number;
+  expGain: number;
+  insightGain: number;
+  materials: GeneratedMaterial[];
+  hours: number;
+  materialCount: number;
+}
+
+const YIELD_CLAIM_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+function yieldClaimCacheKey(cultivatorId: string, idempotencyKey: string) {
+  return `yield:claim:v1:${cultivatorId}:${idempotencyKey}`;
+}
+
+async function readCachedYieldResult(
+  cultivatorId: string,
+  idempotencyKey: string | undefined,
+): Promise<YieldClaimResult | null> {
+  if (!idempotencyKey) return null;
+  const raw = await redis.get(yieldClaimCacheKey(cultivatorId, idempotencyKey));
+  if (!raw) return null;
+  const parsed = JSON.parse(raw) as YieldClaimResult;
+  if (!parsed || typeof parsed.amount !== 'number') {
+    throw new YieldCommandError('这笔历练的领取结果暂时无法重放。', 400);
+  }
+  return parsed;
+}
+
 export async function executeYieldCommand(args: {
   userId: string;
   cultivatorId: string;
+  rewardMode?: YieldRewardMode;
+  idempotencyKey?: string;
 }) {
-  const actionInstanceId = randomUUID();
+  const actionInstanceId = args.idempotencyKey ?? randomUUID();
   let domainEventId: string | undefined;
   const prepared = await withRedisLock(
     {
@@ -88,6 +128,27 @@ export async function executeYieldCommand(args: {
       delayMs: 50,
     },
     async (lease) => {
+      const cached = await readCachedYieldResult(
+        args.cultivatorId,
+        args.idempotencyKey,
+      );
+      if (cached) {
+        return { replayed: true as const, result: cached, committed: null };
+      }
+      if (args.idempotencyKey) {
+        const existing = await findPlayerMutationRequest(
+          args.cultivatorId,
+          'yield_claim',
+          args.idempotencyKey,
+        );
+        if (existing) {
+          return {
+            replayed: true as const,
+            result: existing.result as YieldClaimResult,
+            committed: null,
+          };
+        }
+      }
       const facts = await loadYieldFacts(args.userId, args.cultivatorId);
       if (!facts) {
         throw new YieldCommandError('未找到角色信息', 404);
@@ -102,14 +163,20 @@ export async function executeYieldCommand(args: {
           400,
         );
       }
+      const multiplier = yieldRewardMultiplier(args.rewardMode);
       const operations = YieldCalculator.calculateCultivatorYield({
         realm: facts.realm,
         realmStage: facts.realmStage,
         hoursElapsed,
-      });
-      const materialCount =
-        YieldCalculator.calculateMaterialCount(hoursElapsed);
-      const result = {
+      }).map((operation) => ({
+        ...operation,
+        value: scaleYieldValue(operation.value, multiplier),
+      }));
+      const materialCount = scaleYieldValue(
+        YieldCalculator.calculateMaterialCount(hoursElapsed),
+        multiplier,
+      );
+      const result: YieldClaimResult = {
         cultivatorName: facts.name,
         cultivatorRealm: facts.realm,
         amount:
@@ -131,6 +198,15 @@ export async function executeYieldCommand(args: {
         userId: args.userId,
         cultivatorId: args.cultivatorId,
         source: 'yield_claim',
+        idempotency: args.idempotencyKey
+          ? {
+              key: args.idempotencyKey,
+              fingerprint: JSON.stringify({
+                operation: 'yield_claim',
+                rewardMode: args.rewardMode ?? 'normal',
+              }),
+            }
+          : undefined,
         command: async (tx) => {
           let spiritStones = facts.spiritStones;
           let progress = facts.progress;
@@ -220,7 +296,21 @@ export async function executeYieldCommand(args: {
           };
         },
       });
-      return { committed, result, realm: facts.realm, materialCount };
+      if (args.idempotencyKey) {
+        await redis.set(
+          yieldClaimCacheKey(args.cultivatorId, args.idempotencyKey),
+          JSON.stringify(result),
+          'EX',
+          YIELD_CLAIM_TTL_SECONDS,
+        );
+      }
+      return {
+        replayed: false as const,
+        committed,
+        result,
+        realm: facts.realm,
+        materialCount,
+      };
     },
   );
   publishTransactionalMessageBestEffort(domainEventId, {

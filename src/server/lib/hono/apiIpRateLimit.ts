@@ -1,6 +1,7 @@
 import { getRequestIp } from '@server/lib/http/requestIp';
 import {
   checkApiIpRateLimit,
+  type ApiIpRateLimitOptions,
   type ApiIpRateLimitResult,
 } from '@server/lib/redis/apiIpRateLimiter';
 import type { AppEnv } from './types';
@@ -30,7 +31,9 @@ function applyRateLimitHeadersToResponse(
   );
 }
 
-export function apiIpRateLimit(): MiddlewareHandler<AppEnv> {
+export function apiIpRateLimit(
+  options: ApiIpRateLimitOptions = {},
+): MiddlewareHandler<AppEnv> {
   return async (context, next) => {
     if (context.req.path === '/api/health-check') {
       await next();
@@ -45,7 +48,7 @@ export function apiIpRateLimit(): MiddlewareHandler<AppEnv> {
 
     let result: ApiIpRateLimitResult;
     try {
-      result = await checkApiIpRateLimit(ip);
+      result = await checkApiIpRateLimit(ip, options);
     } catch (error) {
       console.warn('[api-rate-limit] redis check failed; allowing request', error);
       await next();

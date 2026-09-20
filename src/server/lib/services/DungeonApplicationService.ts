@@ -46,7 +46,7 @@ type DungeonCommand =
   | { kind: 'looting-continue' }
   | { kind: 'looting-escape' }
   | { kind: 'battle-abandon'; battleId: string }
-  | { kind: 'battle-execute'; battleId: string; requestId?: string };
+  | { kind: 'battle-execute'; battleId: string; requestId?: string; offerAdHeal?: boolean };
 
 export class DungeonStartError extends Error {
   constructor(
@@ -318,7 +318,7 @@ async function prepareDungeonCommand(
       const result = await dungeonService.executeBattle(
         cultivatorId,
         command.battleId,
-        options,
+        { ...options, offerAdHeal: command.offerAdHeal === true },
       );
       const hooks = result as DungeonDeferredResult;
       return {

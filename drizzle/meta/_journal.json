@@ -267,6 +267,20 @@
       "when": 1788169877173,
       "tag": "0037_wechat_open_abilities",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788770814820,
+      "tag": "0038_unknown_dakota_north",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1789890382233,
+      "tag": "0039_rewarded_ad_callbacks",
+      "breakpoints": true
     }
   ]
 }

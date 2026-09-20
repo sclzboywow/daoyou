@@ -1,5 +1,9 @@
 import { ensureBattleRecordV3Share } from '@server/lib/repositories/battleRecordV3Repository';
 import * as creationProductRepository from '@server/lib/repositories/creationProductRepository';
+import {
+  assertUserGeneratedContentSafe,
+  ContentSafetyError,
+} from '@server/lib/services/ContentSafetyService';
 import { readCultivatorPublicIdentity } from '@server/lib/services/cultivator/CultivatorFactsReader';
 import {
   getCultivatorConsumableById,
@@ -19,10 +23,31 @@ import type {
 export class ChatMessageApplicationError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 404 | 429,
+    readonly status: 400 | 404 | 429 | 503,
     readonly remainingSeconds?: number,
   ) {
     super(message);
+  }
+}
+
+async function moderateChatContent(input: {
+  userId: string;
+  channel: Extract<WorldChatMessageChannel, 'world' | 'sect'>;
+  senderName: string;
+  text?: string;
+}): Promise<void> {
+  try {
+    await assertUserGeneratedContentSafe({
+      userId: input.userId,
+      source: input.channel === 'world' ? 'world_chat' : 'sect_chat',
+      scene: 2,
+      content: [input.senderName, input.text ?? ''],
+    });
+  } catch (error) {
+    if (error instanceof ContentSafetyError) {
+      throw new ChatMessageApplicationError(error.message, error.status);
+    }
+    throw error;
   }
 }
 
@@ -190,6 +215,12 @@ export async function createCultivatorChatMessage(params: {
     if (textLength < 1 || textLength > 100) {
       throw new ChatMessageApplicationError('消息长度需在 1-100 字之间', 400);
     }
+    await moderateChatContent({
+      userId: params.userId,
+      channel: params.channel,
+      senderName: identity.name,
+      text,
+    });
     return params.persist({
       ...senderBase,
       messageType: 'text',
@@ -203,6 +234,12 @@ export async function createCultivatorChatMessage(params: {
     if (countChars(showcaseText) > 100) {
       throw new ChatMessageApplicationError('附言长度需在 100 字以内', 400);
     }
+    await moderateChatContent({
+      userId: params.userId,
+      channel: params.channel,
+      senderName: identity.name,
+      text: showcaseText,
+    });
     const payload = await buildBattleShowcasePayload({
       cultivatorId: params.cultivatorId,
       battleRecordId: params.request.battleRecordId,
@@ -227,6 +264,12 @@ export async function createCultivatorChatMessage(params: {
   if (countChars(showcaseText) > 100) {
     throw new ChatMessageApplicationError('附言长度需在 100 字以内', 400);
   }
+  await moderateChatContent({
+    userId: params.userId,
+    channel: params.channel,
+    senderName: identity.name,
+    text: showcaseText,
+  });
   const payload = await buildItemShowcasePayload({
     cultivatorId: params.cultivatorId,
     itemType: params.request.itemType,

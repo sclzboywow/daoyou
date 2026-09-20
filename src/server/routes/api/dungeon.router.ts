@@ -58,6 +58,7 @@ const BattleIdQuerySchema = z.object({
 const BattleIdBodySchema = z.object({
   battleId: z.string().min(1),
   requestId: z.string().min(1).max(120).optional(),
+  offerAdHeal: z.boolean().optional(),
 });
 
 router.post('/start', requireActiveCultivatorRef(), async (c) => {
@@ -410,13 +411,13 @@ battleRouter.post('/execute/v5', requireActiveCultivatorRef(), async (c) => {
       return c.json({ error: '未授权访问' }, 401);
     }
 
-    const { battleId, requestId } = BattleIdBodySchema.parse(
+    const { battleId, requestId, offerAdHeal } = BattleIdBodySchema.parse(
       await c.req.json(),
     );
     const responsePayload = await executeDungeonCommand({
       userId: user.id,
       cultivatorId: cultivator.cultivatorId,
-      command: { kind: 'battle-execute', battleId, requestId },
+      command: { kind: 'battle-execute', battleId, requestId, offerAdHeal },
     });
     return c.json(responsePayload);
   } catch (error) {

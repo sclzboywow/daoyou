@@ -161,6 +161,10 @@ if [ -d "$WEB_ROOT/assets" ]; then
   cp -an "$WEB_ROOT/assets/." "$WEB_STAGE/assets/"
 fi
 
+# nginx in the web container runs as a non-root worker. Vite copies of public
+# assets can land as 0600, which then 403s logos/favicons/maps.
+chmod -R a+rX "$WEB_STAGE"
+
 if [ ! -f "$RELEASE_ENV" ]; then
   CURRENT_IMAGE="$(docker inspect --format '{{.Config.Image}}' daoyou-hono)"
   CURRENT_BATTLE_IMAGE="$(docker inspect --format '{{.Config.Image}}' daoyou-battle 2>/dev/null || printf '%s' "$BATTLE_IMAGE_TAG")"

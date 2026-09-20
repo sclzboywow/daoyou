@@ -6,6 +6,12 @@ import {
   getCharacterGenerationQuota,
 } from '@server/lib/redis/characterGenerationLimiter';
 import { saveTempCharacter } from '@server/lib/repositories/redisCultivatorRepository';
+import {
+  assertUserGeneratedContentSafe,
+  ContentSafetyError,
+  isProviderContentSafetyError,
+  rejectProviderUnsafeContent,
+} from '@server/lib/services/ContentSafetyService';
 import { generateCultivatorFromAI } from '@server/utils/characterEngine';
 import { normalizeFreeformLlmInput } from '@server/utils/llmPayload';
 import {
@@ -105,6 +111,27 @@ router.post('/', requireUser(), async (c) => {
     );
   }
 
+  try {
+    await assertUserGeneratedContentSafe({
+      userId: user.id,
+      source: 'character_generation_input',
+      scene: 1,
+      content: userInput,
+    });
+  } catch (error) {
+    if (error instanceof ContentSafetyError) {
+      return c.json(
+        {
+          success: false,
+          code: error.code,
+          error: error.message,
+        },
+        error.status,
+      );
+    }
+    throw error;
+  }
+
   const quotaResult = await consumeCharacterGenerationQuota({
     email: user.email,
     ip: getRequestIp(c),
@@ -122,7 +149,49 @@ router.post('/', requireUser(), async (c) => {
     );
   }
 
-  const { cultivator } = await generateCultivatorFromAI(userInput);
+  let cultivator: Awaited<
+    ReturnType<typeof generateCultivatorFromAI>
+  >['cultivator'];
+  try {
+    ({ cultivator } = await generateCultivatorFromAI(userInput));
+  } catch (error) {
+    if (isProviderContentSafetyError(error)) {
+      await rejectProviderUnsafeContent({
+        userId: user.id,
+        source: 'character_generation_input',
+        content: userInput,
+      });
+    }
+    throw error;
+  }
+
+  try {
+    await assertUserGeneratedContentSafe({
+      userId: user.id,
+      source: 'character_generation_output',
+      scene: 1,
+      content: [
+        cultivator.name,
+        cultivator.origin ?? '',
+        cultivator.personality ?? '',
+        cultivator.background ?? '',
+        cultivator.raceNarrative ?? '',
+        cultivator.balance_notes ?? '',
+      ],
+    });
+  } catch (error) {
+    if (error instanceof ContentSafetyError) {
+      return c.json(
+        {
+          success: false,
+          code: error.code,
+          error: error.message,
+        },
+        error.status,
+      );
+    }
+    throw error;
+  }
   const tempCultivatorId = await saveTempCharacter(cultivator);
 
   return c.json<GenerateCharacterResponse>({
