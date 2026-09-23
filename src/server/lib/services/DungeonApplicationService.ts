@@ -1,5 +1,7 @@
 import type { DbTransaction } from '@server/lib/drizzle/db';
 import {
+  DungeonFlowError,
+  DungeonFlowErrorCode,
   dungeonService,
   type DungeonPersistenceSettlement,
 } from '@server/lib/dungeon/service_v2';
@@ -141,6 +143,15 @@ async function assertDungeonStartReady(args: {
   cultivatorId: string;
   mapNodeId: string;
 }): Promise<void> {
+  const activeRun = await dungeonService.getActiveRunState(args.cultivatorId);
+  if (activeRun) {
+    throw new DungeonFlowError(
+      DungeonFlowErrorCode.ALREADY_IN_PROGRESS,
+      '当前已有正在进行的副本，已为你恢复探险状态',
+      409,
+      activeRun,
+    );
+  }
   if (!isSatelliteNode(args.mapNodeId)) {
     throw new DungeonStartError('只有秘境节点可以进行副本挑战', 400);
   }

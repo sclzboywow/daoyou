@@ -106,6 +106,7 @@ const DUNGEON_REWARD_BLUEPRINT_LIMIT = 6;
 export const DungeonFlowErrorCode = {
   NOT_FOUND: 'DUNGEON_NOT_FOUND',
   INVALID_STATE: 'DUNGEON_INVALID_STATE',
+  ALREADY_IN_PROGRESS: 'DUNGEON_ALREADY_IN_PROGRESS',
 } as const;
 
 export type DungeonFlowErrorCode =
@@ -116,6 +117,7 @@ export class DungeonFlowError extends Error {
     public code: DungeonFlowErrorCode,
     message: string,
     public status: 404 | 409,
+    public state?: DungeonState | null,
   ) {
     super(message);
     this.name = 'DungeonFlowError';
@@ -550,6 +552,11 @@ export class DungeonService {
     return row;
   }
 
+  async getActiveRunState(cultivatorId: string): Promise<DungeonState | null> {
+    if (!(await this.loadActiveRun(cultivatorId))) return null;
+    return this.getState(cultivatorId);
+  }
+
   private async markRecoverable(
     cultivatorId: string,
     state: DungeonState,
@@ -905,7 +912,12 @@ export class DungeonService {
     try {
       const existingSession = await this.loadActiveRun(cultivatorId);
       if (existingSession) {
-        throw new Error('当前已有正在进行的副本，请先完成或放弃');
+        throw new DungeonFlowError(
+          DungeonFlowErrorCode.ALREADY_IN_PROGRESS,
+          '当前已有正在进行的副本，已为你恢复探险状态',
+          409,
+          await this.getState(cultivatorId),
+        );
       }
 
       // 只有卫星地图节点可以进行副本挑战

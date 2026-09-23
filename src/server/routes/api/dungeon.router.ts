@@ -94,7 +94,11 @@ router.post('/start', requireActiveCultivatorRef(), async (c) => {
     if (error instanceof DungeonFlowError) {
       return jsonWithStatus(
         c,
-        { error: error.message, code: error.code },
+        {
+          error: error.message,
+          code: error.code,
+          ...(error.state ? { state: error.state } : {}),
+        },
         error.status,
       );
     }
