@@ -142,7 +142,7 @@ router.post('/:nodeId/sessions/:sessionId/interact', async (c) => {
       command,
       abortSignal: c.req.raw.signal,
     });
-    return streamSseEvents(c, async (stream, isAborted) => {
+    return streamSseEvents(c, async (stream, isAborted, signal) => {
       await stream.writeSSE({
         data: JSON.stringify({
           type: 'resolved',
@@ -162,7 +162,7 @@ router.post('/:nodeId/sessions/:sessionId/interact', async (c) => {
           context: prepared.replyContext,
           proposal: prepared.proposal,
           negotiationOutcome: prepared.negotiationOutcome,
-          abortSignal: c.req.raw.signal,
+          abortSignal: signal,
         });
         for await (const chunk of reply.textStream) {
           if (isAborted()) {

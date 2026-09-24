@@ -72,7 +72,7 @@ yieldRouter.post('/', requireActiveCultivatorRef(), async (c) => {
       idempotencyKey,
     });
     if (reservation) await consumeRewardedAdCredit(reservation);
-    return streamSseEvents(c, async (stream) => {
+    return streamSseEvents(c, async (stream, _isAborted, signal) => {
       await stream.writeSSE({
         data: JSON.stringify({ type: 'result', data: prepared.result }),
       });
@@ -116,7 +116,7 @@ yieldRouter.post('/', requireActiveCultivatorRef(), async (c) => {
         const aiStreamResult = streamAiText({
           system,
           prompt,
-          abortSignal: c.req.raw.signal,
+          abortSignal: signal,
           sceneId: 'yield-story',
         });
         for await (const chunk of aiStreamResult.textStream) {
