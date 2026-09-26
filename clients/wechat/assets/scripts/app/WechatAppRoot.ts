@@ -17,6 +17,7 @@ import { authFlow, type AuthFlowState } from './AuthFlow';
 import { gameApi } from '../game/GameApi';
 import { gameStateStore, type GameStateSnapshot } from '../game/GameStateStore';
 import type { InventorySummary } from '../game/GameTypes';
+import { StageOneController } from '../stage-one/StageOneController';
 
 const { ccclass } = _decorator;
 const UI_LAYER = Layers.Enum.UI_2D;
@@ -40,17 +41,16 @@ export class WechatAppRoot extends Component {
   private currentTab: 'home' | 'inventory' = 'home';
   private unsubscribeState: (() => void) | null = null;
   private titleInput: EditBox | null = null;
+  private stageOne: StageOneController | null = null;
 
   async start(): Promise<void> {
-    this.renderLoading('正在连接云梦界…');
-    const state = await authFlow.tryWechatSignIn();
-    await this.routeAuthState(state);
+    this.stageOne = new StageOneController(this.node);
+    await this.stageOne.start();
   }
 
   onDestroy(): void {
-    this.unsubscribeState?.();
-    this.unsubscribeState = null;
-    gameStateStore.disconnectRealtime();
+    this.stageOne?.destroy();
+    this.stageOne = null;
   }
 
   private async routeAuthState(state: AuthFlowState): Promise<void> {
