@@ -3,6 +3,11 @@ import type { MiddlewareHandler } from 'hono';
 import { isAllowedPublicWebOrigin, normalizeOrigin } from './origins';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const WECHAT_MINI_GAME_AUTH_PATHS = new Set([
+  '/api/auth/sign-in/wechat-mini-game',
+  '/api/auth/sign-up/wechat-mini-game',
+  '/api/auth/link/wechat-mini-game',
+]);
 
 function getApiSelfOrigin() {
   return normalizeOrigin(process.env.BETTER_AUTH_URL);
@@ -25,6 +30,11 @@ function isAllowedWriteOrigin(origin: string | undefined | null) {
 export function unsafeRequestOriginGuard(): MiddlewareHandler<AppEnv> {
   return async (context, next) => {
     if (!UNSAFE_METHODS.has(context.req.method.toUpperCase())) {
+      await next();
+      return;
+    }
+
+    if (WECHAT_MINI_GAME_AUTH_PATHS.has(context.req.path)) {
       await next();
       return;
     }

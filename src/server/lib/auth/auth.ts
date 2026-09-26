@@ -54,6 +54,33 @@ function fallbackDisplayName(email: string, name?: string | null) {
   return prefix?.trim() || '玩家';
 }
 
+const WECHAT_MINI_GAME_AUTH_PATHS = new Set([
+  '/api/auth/sign-in/wechat-mini-game',
+  '/api/auth/sign-up/wechat-mini-game',
+  '/api/auth/link/wechat-mini-game',
+]);
+
+function getTrustedOrigins(request?: Request) {
+  const origins = getPublicWebOrigins();
+  if (!request) return origins;
+
+  let pathname = '';
+  try {
+    pathname = new URL(request.url).pathname;
+  } catch {
+    return origins;
+  }
+
+  const isWechatMiniGameAuthPath = Array.from(
+    WECHAT_MINI_GAME_AUTH_PATHS,
+  ).some((path) => pathname === path || pathname.endsWith(path));
+  if (!isWechatMiniGameAuthPath) return origins;
+
+  const origin = request.headers.get('origin')?.trim();
+  if (origin && !origins.includes(origin)) origins.push(origin);
+  return origins;
+}
+
 const zhAuthTranslations = {
   USER_NOT_FOUND: '未找到该用户',
   FAILED_TO_CREATE_SESSION: '登录失败，请稍后重试',
@@ -92,7 +119,7 @@ export const authSchemaName = BETTER_AUTH_SCHEMA_NAME;
 export const auth = betterAuth({
   baseURL: getRequiredEnv('BETTER_AUTH_URL'),
   secret: getRequiredEnv('BETTER_AUTH_SECRET'),
-  trustedOrigins: getPublicWebOrigins(),
+  trustedOrigins: getTrustedOrigins,
   database: drizzleAdapter(db, {
     provider: 'pg',
     schema: betterAuthSchema,
