@@ -7,6 +7,7 @@ export const apiCorsOptions = {
     'Authorization',
     'Idempotency-Key',
     'x-altcha-payload',
+    'x-wechat-login-code',
     'x-llm-api-key',
     'x-llm-model',
     'x-llm-provider',

@@ -24,7 +24,8 @@
     "sponsors:fetch": "node ./node_modules/sponsorkit/dist/cli.mjs --force",
     "sponsors:render": "bun run scripts/render-sponsors.ts",
     "sponsors:sync": "bun run sponsors:fetch && bun run sponsors:render && bun run sponsors:check",
-    "test": "vitest run"
+    "test": "vitest run",
+    "wechat:check": "bun run scripts/check-wechat-architecture.mjs"
   },
   "dependencies": {
     "@ai-sdk/alibaba": "^2.0.45",

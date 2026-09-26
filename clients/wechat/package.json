@@ -1,0 +1,9 @@
+{
+  "name": "wanjiedaoyou-wechat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "云梦界微信小游戏客户端（Cocos Creator 3.8.8）",
+  "creator": {
+    "version": "3.8.8"
+  }
+}
