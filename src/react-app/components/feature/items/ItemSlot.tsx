@@ -185,10 +185,7 @@ export function ItemSlot({
         }}
         onPointerLeave={(e) => {
           if (e.pointerType === 'mouse') leave();
-          else if (e.pointerType === 'touch') {
-            touchMoved.current = true;
-            cancelTouch();
-          }
+          else if (e.pointerType === 'touch') cancelTouch();
         }}
         onContextMenu={(e) => {
           if (quickOnTouch && pointer.current === 'touch') e.preventDefault();

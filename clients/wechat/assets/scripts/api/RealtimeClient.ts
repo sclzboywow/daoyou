@@ -24,6 +24,9 @@ export class RealtimeClient {
     });
     this.socket = socket;
 
+    socket.onOpen(() => {
+      if (this.socket === socket) this.emit({ type: 'socket.open' });
+    });
     socket.onMessage((message) => {
       if (typeof message.data !== 'string') return;
       try {
@@ -31,17 +34,23 @@ export class RealtimeClient {
         if (event.type === 'ping') {
           socket.send({ data: JSON.stringify({ type: 'pong' }) });
         }
-        for (const listener of this.listeners) listener(event);
+        this.emit(event);
       } catch {
         // Ignore malformed frames. The server also bounds/validates client frames.
       }
     });
 
-    socket.onClose(() => {
-      if (this.socket === socket) this.socket = null;
+    socket.onClose((event) => {
+      if (this.socket === socket) {
+        this.socket = null;
+        this.emit({ type: 'socket.closed', payload: event });
+      }
     });
-    socket.onError(() => {
-      if (this.socket === socket) this.socket = null;
+    socket.onError((error) => {
+      if (this.socket === socket) {
+        this.socket = null;
+        this.emit({ type: 'socket.error', payload: error });
+      }
     });
   }
 
@@ -51,8 +60,13 @@ export class RealtimeClient {
   }
 
   close(): void {
-    this.socket?.close({ code: 1000, reason: 'client closing' });
+    const socket = this.socket;
     this.socket = null;
+    socket?.close({ code: 1000, reason: 'client closing' });
+  }
+
+  private emit(event: RealtimeEvent): void {
+    for (const listener of this.listeners) listener(event);
   }
 }
 
