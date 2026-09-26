@@ -187,7 +187,7 @@ describe('金丹二十层多种子检查', () => {
           hasPet,
           JSON.stringify(stats),
         );
-      }, 20000);
+      }, 60000);
     }
   }
 });

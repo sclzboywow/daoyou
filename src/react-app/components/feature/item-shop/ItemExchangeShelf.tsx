@@ -74,6 +74,7 @@ export function ItemExchangeShelf({
               item={shop.item!}
               className="w-full"
               quantityLabel="奖励"
+              iconPurpose="interface"
               badge={shop.remainingPurchases === 0 ? '已罄' : undefined}
             >
               {() => (

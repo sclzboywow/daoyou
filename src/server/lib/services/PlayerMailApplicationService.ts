@@ -22,6 +22,61 @@ type MailActor = {
   userId: string;
   cultivatorId: string;
 };
+function normalizeMailAttachments(input: unknown): MailAttachment[] {
+  if (!Array.isArray(input)) return [];
+  return input.map((raw) => {
+    if (!raw || typeof raw !== 'object') return raw as MailAttachment;
+    const attachment = raw as Record<string, unknown>;
+    const data =
+      attachment.data && typeof attachment.data === 'object'
+        ? (attachment.data as Record<string, unknown>)
+        : undefined;
+    const legacyItem =
+      data?.item && typeof data.item === 'object'
+        ? (data.item as Record<string, unknown>)
+        : undefined;
+    const instanceData =
+      legacyItem?.instanceData && typeof legacyItem.instanceData === 'object'
+        ? legacyItem.instanceData
+        : undefined;
+    if (!legacyItem || !instanceData) return raw as MailAttachment;
+    const instanceName =
+      typeof (instanceData as { name?: unknown }).name === 'string'
+        ? (instanceData as { name: string }).name
+        : undefined;
+    const name =
+      typeof attachment.name === 'string' && attachment.name.trim()
+        ? attachment.name
+        : instanceName;
+    if (!name) return raw as MailAttachment;
+    if (
+      attachment.type === 'material' ||
+      attachment.type === 'consumable' ||
+      attachment.type === 'artifact'
+    ) {
+      return {
+        ...attachment,
+        name,
+        data: instanceData,
+      } as unknown as MailAttachment;
+    }
+    if (attachment.type === 'seed') {
+      return {
+        type: 'inventory_v1',
+        name,
+        quantity:
+          typeof attachment.quantity === 'number'
+            ? attachment.quantity
+            : typeof legacyItem.quantity === 'number'
+              ? legacyItem.quantity
+              : 1,
+        inventory: legacyItem,
+      } as unknown as MailAttachment;
+    }
+    return raw as MailAttachment;
+  });
+}
+
 
 export class PlayerMailCommandError extends Error {
   constructor(
@@ -175,7 +230,7 @@ export function claimCultivatorMail(args: {
       if (mail.isClaimed) {
         throw new PlayerMailCommandError('Already claimed', 400);
       }
-      const attachments = (mail.attachments as MailAttachment[]) || [];
+      const attachments = normalizeMailAttachments(mail.attachments);
       return playerCommandExecutor.execute<
         | { message: string }
         | {
@@ -203,7 +258,7 @@ export function claimCultivatorMail(args: {
           });
           if (!current)
             throw new PlayerMailCommandError('邮件已领取或不存在', 400);
-          const attachments = (current.attachments as MailAttachment[]) || [];
+          const attachments = normalizeMailAttachments(current.attachments);
           const gains = attachmentsToResourceOperations(attachments);
           if (attachments.length === 0) {
             return {
@@ -290,9 +345,13 @@ export function claimAllCultivatorMail(args: { actor: MailActor }) {
               eq(mails.isClaimed, false),
             ),
           });
+          const normalizedPendingMails = pendingMails.map((mail) => ({
+            ...mail,
+            attachments: normalizeMailAttachments(mail.attachments),
+          }));
           const { claimable, skipped } = await selectClaimableBeastMails(
             args.actor.cultivatorId,
-            pendingMails.filter(
+            normalizedPendingMails.filter(
               (mail) =>
                 ((mail.attachments as MailAttachment[]) || []).length > 0,
             ),

@@ -1,4 +1,5 @@
 import { GameIcon } from '@app/components/ui/GameIcon';
+import type { GameImagePurpose } from '@app/components/ui/GameImage';
 import { cn } from '@shared/lib/cn';
 import {
   useEffect,
@@ -36,6 +37,7 @@ export function ItemSlot({
   onQuickAction,
   quickOnTouch,
   children,
+  iconPurpose = 'artwork',
   comparisonItem,
   quantityLabel = '持有',
   guideAnchor,
@@ -50,6 +52,7 @@ export function ItemSlot({
   onQuickAction?: () => void;
   quickOnTouch?: boolean;
   children?: (close: () => void) => ReactNode;
+  iconPurpose?: GameImagePurpose;
   comparisonItem?: DisplayItem;
   quantityLabel?: '持有' | '库存' | '奖励' | '投入' | '产出';
   guideAnchor?: string;
@@ -235,7 +238,7 @@ export function ItemSlot({
           )}
         >
           {presentation ? (
-            <GameIcon value={presentation.icon} purpose="artwork" />
+            <GameIcon value={presentation.icon} purpose={iconPurpose} />
           ) : (
             emptyIcon
           )}
