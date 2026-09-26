@@ -145,6 +145,8 @@ export function ItemSlot({
         aria-haspopup={item ? 'dialog' : undefined}
         className={cn(
           'bg-paper border-ink/20 hover:border-crimson/50 @container relative aspect-square min-h-0 min-w-0 cursor-pointer overflow-hidden border text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2',
+          quickOnTouch &&
+            'touch-manipulation select-none [-webkit-touch-callout:none]',
           selected && 'outline-crimson/50 outline outline-offset-1',
           disabled && 'cursor-default opacity-60',
           className,
@@ -165,6 +167,7 @@ export function ItemSlot({
         onPointerMove={(e) => {
           if (
             e.pointerType === 'touch' &&
+            quickOnTouch &&
             (Math.abs(e.clientX - touchStart.current.x) > 10 ||
               Math.abs(e.clientY - touchStart.current.y) > 10)
           ) {
@@ -174,7 +177,7 @@ export function ItemSlot({
         }}
         onPointerUp={cancelTouch}
         onPointerCancel={() => {
-          touchMoved.current = true;
+          if (quickOnTouch) touchMoved.current = true;
           cancelTouch();
         }}
         onPointerEnter={(e) => {
@@ -188,7 +191,7 @@ export function ItemSlot({
           else if (e.pointerType === 'touch') cancelTouch();
         }}
         onContextMenu={(e) => {
-          if (quickOnTouch && pointer.current === 'touch') e.preventDefault();
+          if (quickOnTouch) e.preventDefault();
         }}
         onFocus={(e) => {
           if (e.currentTarget.matches(':focus-visible')) show();
