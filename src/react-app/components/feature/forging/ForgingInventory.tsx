@@ -1,5 +1,7 @@
 import {
+  inventoryFilterActive,
   matchesInventoryFilters,
+  type InventoryFilter,
   type InventoryKind,
 } from '@app/components/feature/items/inventoryFilterModel';
 import { InkButton } from '@app/components/ui/InkButton';
@@ -17,13 +19,13 @@ export function ForgingInventory({
   fixedFilter = false,
 }: {
   session: ForgingSession;
-  filter: ForgeFilter;
-  onFilter: (filter: ForgeFilter) => void;
+  filter: InventoryFilter;
+  onFilter: (filter: InventoryFilter) => void;
   selected?: string;
   onChoose: (item: ForgeItem) => void;
   fixedFilter?: boolean;
 }) {
-  const search = session.storage.search;
+  const activeFilter = fixedFilter ? { kind: 'blueprint' as const } : filter;
   return (
     <CraftInventoryPanel
       source={session.source}
@@ -31,11 +33,9 @@ export function ForgingInventory({
       view={session.inventory}
       loading={session.inventoryLoading}
       error={session.source === 'storage' ? session.storage.error : ''}
-      search={search}
-      kind={fixedFilter ? 'blueprint' : filter}
+      filter={activeFilter}
       kindDisabled={fixedFilter}
-      onSearch={session.storage.setSearch}
-      onKind={(value) => {
+      onFilter={(value) => {
         onFilter(value);
         session.storage.setPage(0);
       }}
@@ -50,22 +50,16 @@ export function ForgingInventory({
       </p>
       <InventoryItems
         items={
-          session.source === 'storage' ||
-          (!fixedFilter && filter === 'all' && !search)
+          session.source === 'storage' || !inventoryFilterActive(activeFilter)
             ? (session.inventory?.items ?? [])
             : (session.inventory?.items ?? []).filter((item) =>
-                matchesInventoryFilters(
-                  item,
-                  search,
-                  fixedFilter ? 'blueprint' : filter,
-                ),
+                matchesInventoryFilters(item, activeFilter),
               )
         }
         location={session.source}
         quickTouchHint
         compact={
-          session.source === 'bag' &&
-          (filter !== 'all' || !!search || fixedFilter)
+          session.source === 'bag' && inventoryFilterActive(activeFilter)
         }
         slotProps={(item) => {
           const used =

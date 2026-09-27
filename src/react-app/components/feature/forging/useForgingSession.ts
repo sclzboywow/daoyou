@@ -1,4 +1,4 @@
-import type { InventoryKind } from '@app/components/feature/items/inventoryFilterModel';
+import type { InventoryFilter } from '@app/components/feature/items/inventoryFilterModel';
 import { useInventoryBag } from '@app/lib/resources/bag';
 import { useCraftStorage } from '@app/lib/resources/craftStorage';
 import { consumeResourceMutation } from '@app/lib/resources/mutations';
@@ -23,10 +23,10 @@ export type ForgeItem = InventoryView['items'][number];
 const endpoint = '/api/combat-v6/forging';
 const emptyMaterials = (): (string | null)[] => Array(5).fill(null);
 
-export function useForgingSession(kind: InventoryKind) {
+export function useForgingSession(filter: InventoryFilter) {
   const bagQuery = useInventoryBag();
   const [source, setSource] = useState<'bag' | 'storage'>('bag');
-  const storage = useCraftStorage(kind, source === 'storage');
+  const storage = useCraftStorage(filter, source === 'storage');
   const inventory = source === 'bag' ? bagQuery.data : storage.view;
   const [chosenItems, setChosenItems] = useState<Map<string, ForgeItem>>(
     new Map(),

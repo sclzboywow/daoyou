@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { InkButton } from '../../ui/InkButton';
 import { InventoryFilters } from './InventoryFilters';
 import { InventoryHeader } from './InventoryHeader';
-import type { InventoryKind } from './inventoryFilterModel';
+import type { InventoryFilter } from './inventoryFilterModel';
 
 export function CraftInventoryPanel({
   source,
@@ -11,10 +11,8 @@ export function CraftInventoryPanel({
   view,
   loading,
   error,
-  search,
-  onSearch,
-  kind,
-  onKind,
+  filter,
+  onFilter,
   kindDisabled = false,
   onPage,
   onReload,
@@ -25,10 +23,8 @@ export function CraftInventoryPanel({
   view?: InventoryView;
   loading: boolean;
   error?: string;
-  search: string;
-  onSearch: (search: string) => void;
-  kind: InventoryKind;
-  onKind: (kind: InventoryKind) => void;
+  filter: InventoryFilter;
+  onFilter: (filter: InventoryFilter) => void;
   kindDisabled?: boolean;
   onPage: (page: number) => void;
   onReload: () => void;
@@ -70,10 +66,8 @@ export function CraftInventoryPanel({
         ))}
       </div>
       <InventoryFilters
-        search={search}
-        kind={kind}
-        onSearch={onSearch}
-        onKind={onKind}
+        value={filter}
+        onChange={onFilter}
         kindDisabled={kindDisabled}
       />
       {error ? (

@@ -1,6 +1,7 @@
 import {
+  inventoryFilterActive,
   matchesInventoryFilters,
-  type InventoryKind,
+  type InventoryFilter,
 } from '@app/components/feature/items/inventoryFilterModel';
 import { GameSceneFrame } from '@app/components/game-shell/GameSceneFrame';
 import { InkModal } from '@app/components/layout/InkModal';
@@ -99,8 +100,8 @@ export function InscriptionRoom({ ownerId }: { ownerId: string }) {
   );
   const [bagOpen, setBagOpen] = useState(false);
   const [source, setSource] = useState<'bag' | 'storage'>('bag');
-  const [kind, setKind] = useState<InventoryKind>('material');
-  const storage = useCraftStorage(kind, source === 'storage');
+  const [filter, setFilter] = useState<InventoryFilter>({ kind: 'material' });
+  const storage = useCraftStorage(filter, source === 'storage');
   const [chosenItems, setChosenItems] = useState<Map<string, Item>>(new Map());
   const [selectionError, setSelectionError] = useState('');
   const [confirmation, setConfirmation] = useState<{
@@ -200,7 +201,7 @@ export function InscriptionRoom({ ownerId }: { ownerId: string }) {
   function openBag(target?: 'equipment' | 'inscription') {
     if (target) {
       setPicker(target);
-      setKind(target);
+      setFilter({ kind: target });
     }
     if (window.matchMedia('(max-width: 767px)').matches) setBagOpen(true);
     else document.getElementById('inscription-materials')?.focus();
@@ -278,7 +279,7 @@ export function InscriptionRoom({ ownerId }: { ownerId: string }) {
       setSocket(0);
       setSocketAction('engrave');
       setPicker('inscription');
-      setKind('inscription');
+      setFilter({ kind: 'inscription' });
     } else setInscriptionRef(refOf(item));
     setChosenItems((current) => new Map(current).set(item.id, item));
     setBagOpen(false);
@@ -337,11 +338,9 @@ export function InscriptionRoom({ ownerId }: { ownerId: string }) {
       view={pickerView}
       loading={source === 'bag' ? session.bag.isRefreshing : storage.loading}
       error={pickerError}
-      search={storage.search}
-      onSearch={storage.setSearch}
-      kind={kind}
-      onKind={(value) => {
-        setKind(value);
+      filter={filter}
+      onFilter={(value) => {
+        setFilter(value);
         storage.setPage(0);
       }}
       onPage={storage.setPage}
@@ -387,14 +386,14 @@ export function InscriptionRoom({ ownerId }: { ownerId: string }) {
         )}
       <InventoryItems
         items={
-          source === 'bag' && (storage.search || kind !== 'all')
+          source === 'bag' && inventoryFilterActive(filter)
             ? (pickerView?.items ?? []).filter((item) =>
-                matchesInventoryFilters(item, storage.search, kind),
+                matchesInventoryFilters(item, filter),
               )
             : (pickerView?.items ?? [])
         }
         location={source}
-        compact={source === 'bag' && (!!storage.search || kind !== 'all')}
+        compact={source === 'bag' && inventoryFilterActive(filter)}
         quickTouchHint
         slotProps={(item) => {
           const reason = item ? itemProblem(item) : null;
@@ -610,13 +609,14 @@ export function InscriptionRoom({ ownerId }: { ownerId: string }) {
                         disabled={session.locked}
                         onChange={() => {
                           setTab(mode.value as Tab);
-                          setKind(
-                            mode.value === 'draw'
-                              ? 'material'
-                              : mode.value === 'strengthen'
-                                ? 'inscription'
-                                : 'equipment',
-                          );
+                          setFilter({
+                            kind:
+                              mode.value === 'draw'
+                                ? 'material'
+                                : mode.value === 'strengthen'
+                                  ? 'inscription'
+                                  : 'equipment',
+                          });
                           setActiveSlot(0);
                           setSelectionError('');
                         }}

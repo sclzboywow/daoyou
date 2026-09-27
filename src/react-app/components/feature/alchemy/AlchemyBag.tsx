@@ -1,6 +1,8 @@
 import {
+  defaultInventoryFilter,
+  inventoryFilterActive,
   matchesInventoryFilters,
-  type InventoryKind,
+  type InventoryFilter,
 } from '@app/components/feature/items/inventoryFilterModel';
 import { InkButton } from '@app/components/ui/InkButton';
 import { useInventoryBag } from '@app/lib/resources/bag';
@@ -27,12 +29,11 @@ export function AlchemyBag({
   const session = useAlchemyCraftSession();
   const bagQuery = useInventoryBag();
   const [source, setSource] = useState<'bag' | 'storage'>('bag');
-  const [kind, setKind] = useState<InventoryKind>('all');
-  const storage = useCraftStorage(kind, source === 'storage');
+  const [filter, setFilter] = useState<InventoryFilter>(defaultInventoryFilter);
+  const storage = useCraftStorage(filter, source === 'storage');
   const reloadStorage = storage.reload;
   const view = source === 'bag' ? bagQuery.data : storage.view;
   const error = source === 'bag' ? bagQuery.error : storage.error;
-  const search = storage.search;
   useEffect(() => {
     if (session.phase === 'result') reloadStorage();
   }, [session.phase, reloadStorage]);
@@ -56,11 +57,9 @@ export function AlchemyBag({
       view={view}
       loading={source === 'bag' ? bagQuery.isRefreshing : storage.loading}
       error={error}
-      search={search}
-      kind={kind}
-      onSearch={storage.setSearch}
-      onKind={(value) => {
-        setKind(value);
+      filter={filter}
+      onFilter={(value) => {
+        setFilter(value);
         storage.setPage(0);
       }}
       onPage={storage.setPage}
@@ -70,14 +69,14 @@ export function AlchemyBag({
     >
       <InventoryItems
         items={
-          source === 'bag' && (search || kind !== 'all')
+          source === 'bag' && inventoryFilterActive(filter)
             ? (view?.items ?? []).filter((item) =>
-                matchesInventoryFilters(item, search, kind),
+                matchesInventoryFilters(item, filter),
               )
             : (view?.items ?? [])
         }
         location={source}
-        compact={source === 'bag' && (!!search || kind !== 'all')}
+        compact={source === 'bag' && inventoryFilterActive(filter)}
         quickTouchHint
         slotProps={(item) => {
           const material = groups.find((g) =>
