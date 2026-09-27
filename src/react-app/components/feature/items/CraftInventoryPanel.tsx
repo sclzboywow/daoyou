@@ -1,0 +1,106 @@
+import type { InventoryView } from '@shared/contracts/inventory';
+import type { ReactNode } from 'react';
+import { InkButton } from '../../ui/InkButton';
+import { InventoryFilters } from './InventoryFilters';
+import { InventoryHeader } from './InventoryHeader';
+import type { InventoryKind } from './inventoryFilterModel';
+
+export function CraftInventoryPanel({
+  source,
+  onSource,
+  view,
+  loading,
+  error,
+  search,
+  onSearch,
+  kind,
+  onKind,
+  kindDisabled = false,
+  onPage,
+  onReload,
+  children,
+}: {
+  source: 'bag' | 'storage';
+  onSource: (source: 'bag' | 'storage') => void;
+  view?: InventoryView;
+  loading: boolean;
+  error?: string;
+  search: string;
+  onSearch: (search: string) => void;
+  kind: InventoryKind;
+  onKind: (kind: InventoryKind) => void;
+  kindDisabled?: boolean;
+  onPage: (page: number) => void;
+  onReload: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-3 text-sm">
+      <InventoryHeader
+        title={source === 'bag' ? '储物袋' : '储藏室'}
+        capacity={
+          source === 'bag' ? (
+            <>{view?.used ?? '—'} / 40</>
+          ) : (
+            <>{view?.total ?? '—'} 格</>
+          )
+        }
+        actions={
+          <InkButton disabled={loading} onClick={onReload}>
+            刷新
+          </InkButton>
+        }
+      />
+      <div className="flex gap-4" aria-label="物品位置">
+        {(
+          [
+            ['bag', '储物袋'],
+            ['storage', '储藏室'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={source === value}
+            onClick={() => onSource(value)}
+            className="text-ink-secondary hover:text-crimson aria-pressed:text-crimson aria-pressed:border-crimson/60 min-h-10 cursor-pointer border-b border-transparent px-1"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <InventoryFilters
+        search={search}
+        kind={kind}
+        onSearch={onSearch}
+        onKind={onKind}
+        kindDisabled={kindDisabled}
+      />
+      {error ? (
+        <p role="alert">{error}</p>
+      ) : !view ? (
+        <p role="status">正在读取{source === 'bag' ? '储物袋' : '储藏室'}……</p>
+      ) : null}
+      {children}
+      {source === 'storage' && view && view.total > 40 ? (
+        <div className="flex items-center justify-between">
+          <InkButton
+            disabled={loading || view.page === 0}
+            onClick={() => onPage(view.page - 1)}
+          >
+            上一页
+          </InkButton>
+          <span className="font-mono">
+            {view.page + 1} / {Math.ceil(view.total / 40)}
+          </span>
+          <InkButton
+            disabled={loading || (view.page + 1) * 40 >= view.total}
+            onClick={() => onPage(view.page + 1)}
+          >
+            下一页
+          </InkButton>
+        </div>
+      ) : null}
+    </div>
+  );
+}

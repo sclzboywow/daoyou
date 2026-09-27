@@ -266,12 +266,18 @@ export function useForgingSession(kind: InventoryKind) {
   return {
     view,
     inventory,
+    inventoryLoading:
+      source === 'bag' ? bagQuery.isRefreshing : storage.loading,
     source,
     setSource(next: 'bag' | 'storage') {
       if (next === 'storage') storage.reload();
       setSource(next);
     },
     storage,
+    reloadInventory: () => {
+      if (source === 'bag') void bagQuery.reload();
+      else storage.reload();
+    },
     blueprint,
     cost,
     byId,
