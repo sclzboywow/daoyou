@@ -132,7 +132,7 @@ export async function createCultivatorChatMessage(params: {
       throw new ChatMessageApplicationError('灵兽不属于当前角色', 404);
     if (beast.revision !== request.revision)
       throw new ChatMessageApplicationError(
-        '灵兽已变化，请刷新后重新选择',
+        '灵兽已有变化，请重新选择',
         409,
       );
     const payload = {

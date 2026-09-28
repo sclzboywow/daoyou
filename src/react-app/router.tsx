@@ -957,7 +957,7 @@ export const router = createBrowserRouter(
                 {
                   id: 'beast-codex',
                   presentation: 'workflow',
-                  summary: '查阅满资质、满成长与天生技能，并前往出没之地。',
+                  summary: '查阅资质、技能与出没之地。',
                 },
                 '灵兽图鉴',
               )}
