@@ -31,7 +31,7 @@ export default defineConfig((): UserConfig => {
     resolve: { alias },
     define: { __APP_BUILD_ID__: JSON.stringify(buildId) },
     plugins: [react(), tailwindcss(), appVersionManifestPlugin(buildId)],
-    build: { outDir: 'dist', emptyOutDir: true },
+    build: { outDir: 'dist-web', emptyOutDir: true },
     server: {
       host: process.env.HOST ?? '127.0.0.1',
       port: Number(process.env.WEB_PORT ?? 5173),

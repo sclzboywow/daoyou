@@ -10,3 +10,9 @@ yarn-debug.log*
 
 .env*
 /env/
+
+# Runtime-managed assets are mounted separately and must not enter the app image.
+/certbot/
+/dist-web/
+/dist-web.*/
+/dist-site/
