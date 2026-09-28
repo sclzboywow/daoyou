@@ -132,7 +132,7 @@ function CoreSkillMark() {
     <div className="text-ink-secondary mt-1 flex items-center justify-center text-xs">
       <span>必带</span>
       <InkTooltip label="必带说明">
-        必带每次都会出现，其余天生技能可以同时凑齐。
+        必带每次都会出现。其余天生技能各自一半机会获得，可以同时凑齐。
       </InkTooltip>
     </div>
   );
