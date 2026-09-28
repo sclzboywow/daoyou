@@ -127,6 +127,9 @@ export const auth = betterAuth({
     transaction: true,
   }),
   advanced: {
+    ipAddress: {
+      ipAddressHeaders: ['cf-connecting-ip', 'x-real-ip', 'x-forwarded-for'],
+    },
     crossSubDomainCookies: getCookieDomainConfig(),
     defaultCookieAttributes: getCrossSiteCookieConfig(),
     database: {
