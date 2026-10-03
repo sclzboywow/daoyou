@@ -1,3 +1,4 @@
+import {contentSafetyInputGuard,contentSafetyDisplayGuard} from '@server/lib/contentSafety/middleware';
 import { handleAuthRequest } from '@server/lib/auth/hono';
 import { apiIpRateLimit } from '@server/lib/hono/apiIpRateLimit';
 import { jsonError, redisLockErrorResponse } from '@server/lib/hono/middleware';
@@ -45,10 +46,12 @@ app.use('*', async (context, next) => {
 });
 
 app.use('/api/*', apiIpRateLimit());
+app.use('/api/*', contentSafetyInputGuard);
 app.all('/api/auth/*', handleAuthRequest);
 app.use('/api/*', jsonError());
 app.use('/internal/*', jsonError());
 
+app.use('/api/*', contentSafetyDisplayGuard);
 app.route('/api', apiRouter);
 app.route('/internal', internalRouter);
 

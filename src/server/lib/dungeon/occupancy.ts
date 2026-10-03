@@ -1,6 +1,7 @@
 import { db, type DbExecutor } from '@server/lib/drizzle/db';
 import { dungeonRuns } from '@server/lib/drizzle/schema';
 import { and, eq, inArray, isNotNull, ne, or } from 'drizzle-orm';
+import {isSettledDungeonBattle} from '@shared/lib/dungeon/battleOccupancy';
 
 export async function hasActiveDungeon(owner: string) {
   const rows = await db
@@ -19,7 +20,7 @@ export async function hasActiveDungeon(owner: string) {
 /** 已开战或正在结算。探索、休整和待迎战只保留进度，不构成战斗占用。 */
 export async function hasDungeonBattle(owner: string, q: DbExecutor = db) {
   const rows = await q
-    .select({ id: dungeonRuns.id })
+    .select({ battlePayload: dungeonRuns.battlePayload })
     .from(dungeonRuns)
     .where(
       and(
@@ -30,7 +31,6 @@ export async function hasDungeonBattle(owner: string, q: DbExecutor = db) {
           inArray(dungeonRuns.status, ['IN_BATTLE', 'SETTLING']),
         ),
       ),
-    )
-    .limit(1);
-  return rows.length > 0;
+    );
+  return rows.some(row=>!isSettledDungeonBattle(row.battlePayload));
 }

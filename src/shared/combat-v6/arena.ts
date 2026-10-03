@@ -20,6 +20,7 @@ import { canCollectCommand } from '@shared/engine/combat-v6/core/units';
 import { DAO_RAGE_RESOURCE_ID } from '@shared/engine/combat-v6/equipment/special-ids';
 import { daoyouRulesetV6 } from '@shared/engine/combat-v6/rules-daoyou';
 import { COMBAT_V6_SEAL_CURVE_ARENA_VERSIONS } from '@shared/engine/combat-v6/version';
+import { huntParticipantSucceeded } from '../hunts/settlement';
 import { controlledUnits, validatePetCommand } from './controlled-commands';
 import { diffUnits } from './playback';
 import {
@@ -42,9 +43,14 @@ export function arenaBattle(
     ruleset: daoyouRulesetV6,
   };
   if (runtime.state) {
+    // AUTO policy changes do not change the battle engine or frozen content.
+    const actual = runtime.state.versions;
+    const expected = COMBAT_V6_SEAL_CURVE_ARENA_VERSIONS;
     if (
-      JSON.stringify(runtime.state.versions) !==
-      JSON.stringify(COMBAT_V6_SEAL_CURVE_ARENA_VERSIONS)
+      actual.engineVersion !== expected.engineVersion ||
+      actual.rulesetVersion !== expected.rulesetVersion ||
+      actual.contentVersion !== expected.contentVersion ||
+      actual.projectionVersion !== expected.projectionVersion
     )
       throw new Error('ARENA_VERSION_MISMATCH');
     return restoreBattle(input, runtime.state, runtime.events ?? []);
@@ -225,11 +231,16 @@ export function arenaView(
         : result.winner === 'draw'
           ? 'draw'
           : result.winner === (viewer?.side ?? 0)
-            ? 'victory'
+            ? runtime.hunt &&
+              viewer &&
+              !huntParticipantSucceeded(state, viewer.unitId)
+              ? 'defeat'
+              : 'victory'
             : 'defeat';
   return {
     apiVersion: COMBAT_V6_TRAINING_API_VERSION,
     protocol: ARENA_V6_PROTOCOL,
+    hunt: runtime.hunt,
     sessionId: runtime.battleId,
     revision: runtime.revision,
     expiresAt: new Date(runtime.expiresAt).toISOString(),

@@ -421,6 +421,20 @@
       "when": 1790578141727,
       "tag": "0059_cloudy_ink",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1790848703404,
+      "tag": "0060_rewarded_ad_tickets",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1790848703405,
+      "tag": "0061_player_journal",
+      "breakpoints": true
     }
   ]
 }

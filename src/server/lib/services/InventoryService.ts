@@ -1,3 +1,4 @@
+import { recordJournalItems } from './JournalSettlement';
 import type {
   InventoryAction,
   InventoryQuerySchema,
@@ -6,6 +7,7 @@ import type {
 import { previewBeastFeeding } from '@shared/engine/combat-v6/beasts/feeding';
 import { refineBeast } from '@shared/engine/combat-v6/beasts/refinement';
 import { BEAST_REFINEMENT } from '@shared/engine/combat-v6/beasts/refinement-config';
+import { rejuvenateBeast } from '@shared/engine/combat-v6/beasts/rejuvenation';
 import {
   compileDaoEquipmentSpecialLoadoutV1,
   type DaoEquipmentInstanceV1,
@@ -23,6 +25,8 @@ import {
   type ItemGrant,
 } from '@shared/inventory';
 import { changeEquipmentLocation } from '@shared/inventory/equipment-location';
+import { INVENTORY_KINDS } from '@shared/inventory/sorting';
+import { BEAST_REJUVENATION } from '@shared/items/definitions/beast-rejuvenation';
 import { ConsumableFactsSchema } from '@shared/items/definitions/consumables';
 import { MaterialFactsSchema } from '@shared/items/definitions/materials';
 import { SeedFactsSchema } from '@shared/items/definitions/seeds';
@@ -167,6 +171,12 @@ export async function readInventory(
           query.materialType,
         )
       : undefined,
+    query.kind === 'material' && query.element
+      ? eq(
+          sql<string>`${inventoryItems.instanceData}->>'element'`,
+          query.element,
+        )
+      : undefined,
     query.recycleCategory
       ? inArray(
           inventoryItems.definitionId,
@@ -194,10 +204,24 @@ export async function readInventory(
       ? inArray(recycleQuality, recycleRanks)
       : undefined,
   );
+  const recentOrder = [desc(inventoryItems.updatedAt), desc(inventoryItems.id)];
+  const kindOrder = sql`case ${sql.join(
+    INVENTORY_KINDS.filter(([kind]) => kind !== 'all').map(([kind], index) =>
+      sql`when ${inArray(
+        inventoryItems.definitionId,
+        ITEM_DEFINITIONS.filter((item) => item.kind === kind).map((item) => item.id),
+      )} then ${index}`,
+    ),
+    sql` `,
+  )} end`;
   const order =
-    query.location === 'bag'
-      ? [asc(inventoryItems.slotIndex), asc(inventoryItems.id)]
-      : [desc(inventoryItems.updatedAt), desc(inventoryItems.id)];
+    query.sort === 'quantity'
+      ? [desc(inventoryItems.quantity), ...recentOrder]
+      : query.sort === 'kind'
+        ? [asc(kindOrder), ...recentOrder]
+        : query.sort === 'updatedAt' || query.location === 'storage'
+          ? recentOrder
+          : [asc(inventoryItems.slotIndex), asc(inventoryItems.id)];
   const [requestedRows, totals, usage] = await runDbTasks(executor, [
     () =>
       executor
@@ -240,6 +264,7 @@ export async function readInventory(
   return {
     items: rows.map((row) => ({
       ...inventoryItemOf(row),
+      updatedAt: row.updatedAt.toISOString(),
       name:
         row.definitionId === 'equipment.v6' ||
         row.definitionId === 'material.v1' ||
@@ -251,6 +276,7 @@ export async function readInventory(
     })),
     equippedItems: equipped.map((row) => ({
       ...inventoryItemOf(row),
+      updatedAt: row.updatedAt.toISOString(),
       name: (row.instanceData as DaoEquipmentInstanceV1).name,
       equipped: true,
     })),
@@ -307,6 +333,7 @@ export async function saveInventoryPlan(
     else
       await tx.insert(inventoryItems).values({ ...next, cultivatorId: owner });
   }
+  recordJournalItems(tx, owner, before, after);
 }
 export async function grantInventory(
   owner: string,
@@ -380,7 +407,13 @@ function transferInventoryItem(
   location: 'bag' | 'storage',
 ) {
   if (item.location === location) throw new InventoryError('物品已在该位置');
-  const next = items.filter((entry) => entry.id !== item.id);
+  const next = items
+    .filter((entry) => entry.id !== item.id)
+    .map((entry) =>
+      item.definitionId === 'consumable.v1'
+        ? normalizeConsumableStack(entry)
+        : entry,
+    );
   if (itemDefinition(item.definitionId).stackLimit > 1)
     return addItems(
       next,
@@ -398,7 +431,9 @@ function transferInventoryItem(
       location,
       false,
       () => item.id,
-      item.stackKey,
+      item.definitionId === 'consumable.v1'
+        ? inventoryStackKey(item.definitionId, item.instanceData)
+        : item.stackKey,
     ).map((entry) =>
       entry.id === item.id ? { ...entry, revision: item.revision + 1 } : entry,
     );
@@ -409,6 +444,14 @@ function transferInventoryItem(
     ...next,
     { ...item, location, slotIndex, revision: item.revision + 1 },
   ];
+}
+
+function normalizeConsumableStack(item: InventoryItem): InventoryItem {
+  if (item.definitionId !== 'consumable.v1') return item;
+  const stackKey = inventoryStackKey(item.definitionId, item.instanceData);
+  return stackKey === item.stackKey
+    ? item
+    : { ...item, stackKey, revision: item.revision + 1 };
 }
 
 export async function mutateInventory(owner: string, input: InventoryAction) {
@@ -462,7 +505,12 @@ export async function mutateInventory(owner: string, input: InventoryAction) {
             item.stackKey
               ? [and(
                   eq(inventoryItems.definitionId, item.definitionId),
-                  eq(inventoryItems.stackKey, item.stackKey),
+                  eq(
+                    inventoryItems.stackKey,
+                    item.definitionId === 'consumable.v1'
+                      ? inventoryStackKey(item.definitionId, item.instanceData)!
+                      : item.stackKey,
+                  ),
                   sql`${inventoryItems.quantity} < ${itemDefinition(item.definitionId).stackLimit}`,
                 )]
               : [],
@@ -539,7 +587,12 @@ export async function mutateInventory(owner: string, input: InventoryAction) {
                   eq(inventoryItems.cultivatorId, owner),
                   eq(inventoryItems.location, 'storage'),
                   eq(inventoryItems.definitionId, source.definitionId),
-                  eq(inventoryItems.stackKey, source.stackKey ?? ''),
+                  eq(
+                    inventoryItems.stackKey,
+                    source.definitionId === 'consumable.v1'
+                      ? inventoryStackKey(source.definitionId, source.instanceData)!
+                      : source.stackKey ?? '',
+                  ),
                   sql`${inventoryItems.quantity} < ${itemDefinition(source.definitionId).stackLimit}`,
                 ),
               )
@@ -580,7 +633,7 @@ export async function mutateInventory(owner: string, input: InventoryAction) {
             )
           )
             throw new InventoryError('背包已变化，请刷新');
-          next = sortBag(next);
+          next = sortBag(next.map(normalizeConsumableStack));
         } else if (item) {
           const equipped = await tx
             .select()
@@ -603,6 +656,12 @@ export async function mutateInventory(owner: string, input: InventoryAction) {
             if (target?.id === item.id) {
               lease.assertHeld();
               return { data: result, state };
+            }
+            if (target && item.definitionId === 'consumable.v1') {
+              const normalizedItem = normalizeConsumableStack(item);
+              const normalizedTarget = normalizeConsumableStack(target);
+              item.stackKey = normalizedItem.stackKey;
+              target.stackKey = normalizedTarget.stackKey;
             }
             if (target && sameStack(item, target)) {
               const amount = Math.min(
@@ -738,6 +797,41 @@ export async function mutateInventory(owner: string, input: InventoryAction) {
               newSkillCount: refined.skills.length,
             };
             item.quantity -= dew.consumeQuantity;
+            item.revision++;
+            if (!item.quantity) next = next.filter((i) => i.id !== item.id);
+          } else if (input.action === 'rejuvenate') {
+            if (
+              item.definitionId !== BEAST_REJUVENATION.id ||
+              (item.location !== 'bag' && item.location !== 'storage') ||
+              item.quantity < 1
+            )
+              throw new InventoryError('请选择储物袋或储藏室中的化生果');
+            const roster = await readBeastRoster(owner, tx);
+            const beast = roster.beasts.find(
+              (b) =>
+                b.id === input.beastId && b.revision === input.beastRevision,
+            );
+            if (!beast) throw new InventoryError('灵兽已有变化，请重新查看');
+            if (
+              !beast.level &&
+              !beast.exp &&
+              Object.values(beast.allocatedAttributes).every(
+                (point) => point === 0,
+              )
+            )
+              throw new InventoryError('灵兽已是初生状态');
+            const rejuvenated = rejuvenateBeast(beast);
+            await tx
+              .update(cultivatorBeasts)
+              .set({ individual: beastIndividualData(rejuvenated) })
+              .where(
+                and(
+                  eq(cultivatorBeasts.id, beast.id),
+                  eq(cultivatorBeasts.cultivatorId, owner),
+                ),
+              );
+            result = { level: rejuvenated.level };
+            item.quantity--;
             item.revision++;
             if (!item.quantity) next = next.filter((i) => i.id !== item.id);
           } else if (input.action === 'equip') {

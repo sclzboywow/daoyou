@@ -1,4 +1,5 @@
 import { getJetStreamClient } from '@server/lib/nats';
+import { runWechatOpenAbilityMaintenance } from '@server/lib/services/WechatQiSubscriptionService';
 import {
   parseBackgroundCommandEnvelope,
   type BackgroundCommandEnvelope,
@@ -37,6 +38,7 @@ let cancelRestartWait: (() => void) | undefined;
 const activeHandlers = new Set<Promise<void>>();
 
 const handlers = {
+  'wechat.qi-full': () => runWechatOpenAbilityMaintenance(),
   'auction.expire': () => runAuctionExpireJob(),
   'ranking.rewards.distribute': (command) =>
     runRankRewardsJob(new Date(command.requestedAt)),

@@ -165,6 +165,7 @@ async function publicView(
   };
 }
 export async function getTowerView(owner: string) {
+  await getTowerBattle(owner);
   const [run, [row]] = await Promise.all([
     read(owner),
     db
@@ -453,11 +454,49 @@ function battleView(run: Run, after = -1): TowerSessionView {
     latestEventSeq: battle.snapshot.events.length - 1,
   };
 }
+function isStaleAutoPolicyError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message === '自动策略版本不匹配，请先结束旧版本战局再切换'
+  );
+}
+
+async function repairStaleTowerBattle(owner: string, runId: string, battleId: string) {
+  return locked(owner, async (lease) => {
+    const run = await read(owner);
+    if (!run || run.runId !== runId || run.battle?.id !== battleId) return null;
+    try {
+      battleView(run);
+      return run;
+    } catch (error) {
+      if (!isStaleAutoPolicyError(error)) throw error;
+    }
+    if (run.battle.snapshot.state.phase === 'ended' && !run.battle.settled)
+      throw new TowerV6Error('旧战斗已结束，结算需维护处理');
+    await redis.set(
+      'tower:repair-backup:' + run.runId + ':' + run.battle.id,
+      JSON.stringify(run), 'EX', 7 * 86400, 'NX',
+    );
+    delete run.battle;
+    delete run.battleId;
+    if (run.status === 'WAITING_BATTLE') run.status = 'READY';
+    run.reason = 'content_updated';
+    run.revision++;
+    await save(owner, run, lease);
+    return run;
+  });
+}
+
 export async function getTowerBattle(owner: string, id?: string, after = -1) {
   const run = await read(owner);
-  return run?.battle && (!id || run.battle.id === id)
-    ? battleView(run, after)
-    : null;
+  if (!run?.battle || (id && run.battle.id !== id)) return null;
+  try {
+    return battleView(run, after);
+  } catch (error) {
+    if (!isStaleAutoPolicyError(error)) throw error;
+    await repairStaleTowerBattle(owner, run.runId, run.battle.id);
+    return null;
+  }
 }
 export async function completeTower(
   actor: Actor,

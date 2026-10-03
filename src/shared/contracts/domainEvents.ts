@@ -7,6 +7,7 @@ import {
 import { ALCHEMY_MODE_VALUES } from '@shared/types/consumable';
 import { z } from 'zod';
 import { ItemGrantSchema } from '../inventory';
+import { InventoryEquipmentSchema } from '../inventory/equipment';
 import { BeastTradePreviewSchema } from './beastTrade';
 import { CombatV6BattleFinishedDataV1Schema } from './combatV6Runtime';
 import { SystemMailAudienceSnapshotSchema } from './systemMail';
@@ -28,6 +29,7 @@ export const DOMAIN_EVENT_TYPES = [
   'mail.created',
   'cultivator.mail-audience.observed',
   'craft.item.created',
+  'equipment.forged',
   'market.material.revealed',
   'ranking.position.changed',
   'beast.exceptional.acquired',
@@ -96,7 +98,8 @@ export const DomainEventDataSchemas = {
               }),
             )
             .min(1)
-            .max(8),
+            // A 24-hour claim yields 8 items; a verified ad doubles the frozen snapshot.
+            .max(16),
         })
         .optional(),
     })
@@ -189,6 +192,12 @@ export const DomainEventDataSchemas = {
       outputs: z.array(z.record(z.string(), z.unknown())).max(8).optional(),
     })
     .strict(),
+  'equipment.forged': z.strictObject({
+    userId: z.uuid(),
+    cultivatorId: z.uuid(),
+    cultivatorName: z.string().min(1).max(100),
+    equipment: InventoryEquipmentSchema,
+  }),
   'market.material.revealed': z
     .object({
       userId: z.uuid(),
@@ -284,6 +293,10 @@ export const DOMAIN_EVENT_DEFINITIONS = {
   'craft.item.created': {
     version: 1,
     subject: `${DOMAIN_EVENT_SUBJECT_PREFIX}.gameplay.craft-item-created.v1`,
+  },
+  'equipment.forged': {
+    version: 1,
+    subject: `${DOMAIN_EVENT_SUBJECT_PREFIX}.gameplay.equipment-forged.v1`,
   },
   'market.material.revealed': {
     version: 1,

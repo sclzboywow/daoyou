@@ -10,8 +10,8 @@ import { createEmptySectCombatProgressV6, createFreshCombatV6MethodLevels } from
 
 describe('宗门技能学习配置', () => {
   it('技能、状态、流派和心法保持基线（含比例伤害分类）', () => {
-    // 包含天衍自身法印与双流派重做；机制行为由专项测试验证。
-    expect(createHash('sha256').update(JSON.stringify(COMBAT_V6_SECT_DEFINITIONS)).digest('hex')).toBe("2df399289489cf42dbdbe37fb504a3230c525fbda25c68545faef2572480e279");
+    // 包含天衍自身法印与双流派重做；同步官方九霄神雷文案（c0b267df）；机制行为由专项测试验证。
+    expect(createHash('sha256').update(JSON.stringify(COMBAT_V6_SECT_DEFINITIONS)).digest('hex')).toBe("3419722218ff4dcf2d494bbee4100ef963a05031aeabb3fd3948b9dbf6779513");
   });
   it('Schema 与编辑器一致', () => {
     expect(z.toJSONSchema(SectSkillLearningShape)).toEqual(schema);

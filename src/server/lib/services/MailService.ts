@@ -26,6 +26,7 @@ export class MailService {
     attachments: MailAttachment[] = [],
     type: 'system' | 'reward' = 'system',
     tx?: DbTransaction,
+    deduplicationKey?: string,
   ) {
     // If there are attachments, force type to reward
     const mailType = attachments.length > 0 ? 'reward' : type;
@@ -35,6 +36,7 @@ export class MailService {
         .insert(mails)
         .values({
           cultivatorId,
+          deduplicationKey,
           title,
           content,
           type: mailType,

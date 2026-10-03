@@ -4,6 +4,7 @@ export const BACKGROUND_COMMAND_STREAM = 'DAOYOU_BACKGROUND_COMMANDS';
 export const BACKGROUND_COMMAND_SUBJECT_PREFIX = 'daoyou.command.cron';
 
 export const BACKGROUND_COMMAND_TYPES = [
+  'wechat.qi-full',
   'auction.expire',
   'ranking.rewards.distribute',
   'market.refresh',
@@ -19,6 +20,11 @@ export const BACKGROUND_COMMAND_TYPES = [
 export type BackgroundCommandType = (typeof BACKGROUND_COMMAND_TYPES)[number];
 
 export const BACKGROUND_COMMAND_DEFINITIONS = {
+  'wechat.qi-full': {
+    version: 1,
+    subject: `${BACKGROUND_COMMAND_SUBJECT_PREFIX}.wechat-qi-full.v1`,
+    scheduleBucketMs: 60_000,
+  },
   'auction.expire': {
     version: 1,
     subject: `${BACKGROUND_COMMAND_SUBJECT_PREFIX}.auction-expire.v1`,

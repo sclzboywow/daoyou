@@ -183,7 +183,7 @@ describe('blueprint forging', () => {
       false,
       nextId,
     );
-    expect(bag.map((i) => i.quantity)).toEqual([99, 2]);
+    expect(bag.map((i) => i.quantity)).toEqual([101]);
     bag = addItems(
       bag,
       {
@@ -195,7 +195,7 @@ describe('blueprint forging', () => {
       false,
       nextId,
     );
-    expect(sameStack(bag[0], bag[2])).toBe(false);
+    expect(sameStack(bag[0], bag[1])).toBe(false);
     expect(sortBag(bag).reduce((n, i) => n + i.quantity, 0)).toBe(103);
     expect(() =>
       addItems(

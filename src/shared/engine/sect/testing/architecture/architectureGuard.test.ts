@@ -41,7 +41,7 @@ describe('宗门插件架构守卫', () => {
 
   it('sect/core 不依赖具体生产宗门、流派、节点或内容目录', () => {
     for (const file of sourceFiles(join(root, 'core')).filter(
-      (path) => !path.includes('/tests/'),
+      (path) => !path.replaceAll('\\', '/').includes('/tests/'),
     )) {
       const source = readFileSync(file, 'utf8');
       const label = relative(root, file);
@@ -82,7 +82,7 @@ describe('宗门插件架构守卫', () => {
 
   it('通用核心不固定流派层数或每层节点数', () => {
     for (const file of sourceFiles(join(root, 'core')).filter(
-      (path) => !path.includes('/tests/'),
+      (path) => !path.replaceAll('\\', '/').includes('/tests/'),
     )) {
       const source = readFileSync(file, 'utf8');
       expect(source, relative(root, file)).not.toMatch(

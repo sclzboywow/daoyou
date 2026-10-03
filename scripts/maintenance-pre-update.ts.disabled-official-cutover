@@ -1,0 +1,203 @@
+import { mkdir } from 'node:fs/promises';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { getExecutor } from '@server/lib/drizzle/db';
+import {
+  auctionListings,
+  betBattles,
+  cultivatorTasks,
+  cultivators,
+  mails,
+  sectMemberships,
+  sectTaskRecords,
+} from '@server/lib/drizzle/schema';
+import { cancelAuctionListing } from '@server/lib/services/AuctionApplicationService';
+import { cancelBetBattle } from '@server/lib/services/BetBattleService';
+import { claimAllCultivatorMail } from '@server/lib/services/PlayerMailApplicationService';
+import { claimTaskRewardCommand } from '@server/lib/services/TaskApplicationService';
+import {
+  executeSectTaskActionCommand,
+} from '@server/lib/services/sect-organization/SectTaskCommand';
+import { productionSectRuntime } from '@shared/engine/sect/content';
+
+const tutorialIds = [
+  'tutorial_starter_supply',
+  'tutorial_first_alchemy',
+  'tutorial_first_dungeon',
+] as const;
+
+type Failure = { operation: string; id: string; error: string };
+
+const outputPath =
+  process.argv[2] ??
+  `/home/ubuntu/backups/major-update-prep-20260924T090143Z/maintenance-audit-20260924T092000Z/execution-receipt-${new Date().toISOString().replaceAll(':', '')}.json`;
+const failures: Failure[] = [];
+const counts = {
+  auctionsSeen: 0,
+  auctionsCancelled: 0,
+  betBattlesSeen: 0,
+  betBattlesCancelled: 0,
+  tutorialTasksSeen: 0,
+  tutorialTasksClaimed: 0,
+  sectTasksSeen: 0,
+  sectTasksClaimed: 0,
+  cultivatorsSeen: 0,
+  mailClaimCalls: 0,
+  mailsClaimed: 0,
+};
+
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function main() {
+  const q = getExecutor();
+  const startedAt = new Date().toISOString();
+  const taskActors = await q
+    .select({ id: cultivators.id, userId: cultivators.userId })
+    .from(cultivators);
+  const userByCultivator = new Map(taskActors.map((row) => [row.id, row.userId]));
+
+  const auctionRows = await q
+    .select({ id: auctionListings.id, sellerId: auctionListings.sellerId })
+    .from(auctionListings)
+    .where(eq(auctionListings.status, 'active'));
+  counts.auctionsSeen = auctionRows.length;
+  for (const row of auctionRows) {
+    try {
+      const seller = userByCultivator.get(row.sellerId);
+      if (!seller) throw new Error('cultivator user not found');
+      await cancelAuctionListing({
+        actor: { userId: seller, cultivatorId: row.sellerId },
+        listingId: row.id,
+      });
+      counts.auctionsCancelled += 1;
+    } catch (error) {
+      failures.push({ operation: 'auction-cancel', id: row.id, error: errorText(error) });
+    }
+  }
+
+  const betRows = await q
+    .select({ id: betBattles.id, creatorId: betBattles.creatorId })
+    .from(betBattles)
+    .where(eq(betBattles.status, 'pending'));
+  counts.betBattlesSeen = betRows.length;
+  for (const row of betRows) {
+    try {
+      await cancelBetBattle(row.id, row.creatorId);
+      counts.betBattlesCancelled += 1;
+    } catch (error) {
+      failures.push({ operation: 'bet-battle-cancel', id: row.id, error: errorText(error) });
+    }
+  }
+
+  const taskRows = await q
+    .select({ id: cultivatorTasks.id, cultivatorId: cultivatorTasks.cultivatorId })
+    .from(cultivatorTasks)
+    .where(
+      and(
+        eq(cultivatorTasks.status, 'completed'),
+        inArray(cultivatorTasks.definitionId, [...tutorialIds]),
+      ),
+    );
+  counts.tutorialTasksSeen = taskRows.length;
+  for (const row of taskRows) {
+    const userId = userByCultivator.get(row.cultivatorId);
+    if (!userId) {
+      failures.push({ operation: 'tutorial-task-claim', id: row.id, error: 'cultivator user not found' });
+      continue;
+    }
+    try {
+      await claimTaskRewardCommand({ userId, cultivatorId: row.cultivatorId, taskId: row.id });
+      counts.tutorialTasksClaimed += 1;
+    } catch (error) {
+      failures.push({ operation: 'tutorial-task-claim', id: row.id, error: errorText(error) });
+    }
+  }
+
+  const sectRows = await q
+    .select({
+      id: sectTaskRecords.id,
+      taskId: sectTaskRecords.taskId,
+      cultivatorId: sectMemberships.cultivatorId,
+      userId: cultivators.userId,
+    })
+    .from(sectTaskRecords)
+    .innerJoin(sectMemberships, eq(sectTaskRecords.membershipId, sectMemberships.id))
+    .innerJoin(cultivators, eq(sectMemberships.cultivatorId, cultivators.id))
+    .where(and(eq(sectTaskRecords.status, 'completed'), isNull(sectTaskRecords.claimedAt)));
+  counts.sectTasksSeen = sectRows.length;
+  for (const row of sectRows) {
+    try {
+      await executeSectTaskActionCommand({
+        userId: row.userId,
+        cultivatorId: row.cultivatorId,
+        taskId: row.taskId,
+        actionKey: 'claim',
+        requestId: `maintenance-sect-claim-${row.id}`,
+        input: {},
+        source: 'maintenance_pre_update_sect_claim',
+        idempotency: {
+          key: `maintenance:sect-claim:${row.id}`,
+          fingerprint: `${row.cultivatorId}:${row.id}`,
+        },
+        runtime: productionSectRuntime,
+      });
+      counts.sectTasksClaimed += 1;
+    } catch (error) {
+      failures.push({ operation: 'sect-task-claim', id: row.id, error: errorText(error) });
+    }
+  }
+
+  const allCultivators = await q
+    .select({ id: cultivators.id, userId: cultivators.userId })
+    .from(cultivators);
+  counts.cultivatorsSeen = allCultivators.length;
+  for (const row of allCultivators) {
+    try {
+      const result = await claimAllCultivatorMail({
+        actor: { userId: row.userId, cultivatorId: row.id },
+      });
+      counts.mailClaimCalls += 1;
+      counts.mailsClaimed += result.result.claimedCount;
+    } catch (error) {
+      failures.push({ operation: 'mail-claim-all', id: row.id, error: errorText(error) });
+    }
+  }
+
+  const finalActiveAuctions = await q
+    .select({ id: auctionListings.id })
+    .from(auctionListings)
+    .where(eq(auctionListings.status, 'active'));
+  const finalPendingBets = await q
+    .select({ id: betBattles.id })
+    .from(betBattles)
+    .where(eq(betBattles.status, 'pending'));
+  const finalSectUnclaimed = await q
+    .select({ id: sectTaskRecords.id })
+    .from(sectTaskRecords)
+    .where(and(eq(sectTaskRecords.status, 'completed'), isNull(sectTaskRecords.claimedAt)));
+  const finalRewardMails = await q
+    .select({ id: mails.id })
+    .from(mails)
+    .where(and(eq(mails.isClaimed, false), eq(mails.type, 'reward')));
+
+  const receipt = {
+    operation: 'major-update-prep-maintenance',
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    counts,
+    failures,
+    final: {
+      activeAuctions: finalActiveAuctions.length,
+      pendingBetBattles: finalPendingBets.length,
+      unclaimedSectTasks: finalSectUnclaimed.length,
+      unclaimedRewardMails: finalRewardMails.length,
+    },
+  };
+  await mkdir(outputPath.slice(0, outputPath.lastIndexOf('/')), { recursive: true });
+  await Bun.write(outputPath, JSON.stringify(receipt, null, 2));
+  console.log(JSON.stringify(receipt, null, 2));
+  process.exitCode = failures.length === 0 ? 0 : 2;
+}
+
+await main();

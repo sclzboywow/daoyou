@@ -6,6 +6,7 @@ import {
   dungeonRuns,
 } from '@server/lib/drizzle/schema';
 import { redisLockKeys, withRedisLock } from '@server/lib/redis/lock';
+import { redis } from '@server/lib/redis';
 import {
   beastFromRow,
   beastIndividualData,
@@ -239,9 +240,24 @@ function view(payload: DungeonBattlePayload, after = -1): DungeonSessionView {
     latestEventSeq: snapshot.events.length - 1,
   };
 }
+function isStaleAutoPolicyError(error: unknown) { return error instanceof Error && error.message === "自动策略版本不匹配，请先结束旧版本战局再切换"; }
+
+async function finishStaleDungeonRun(owner: string, runId: string) {
+  const [run] = await db.select({ runState: dungeonRuns.runState }).from(dungeonRuns).where(and(eq(dungeonRuns.id, runId), eq(dungeonRuns.cultivatorId, owner))).limit(1);
+  if (!run) return;
+  const state = run.runState && typeof run.runState === "object" ? (run.runState as Record<string, unknown>) : {};
+  await db.update(dungeonRuns).set({ status: "FINISHED", runState: { ...state, status: "FINISHED", isFinished: true, activeBattleId: undefined, statusReason: "自动策略版本升级，旧战局已结束" }, pendingAction: null, activeBattleId: null, battlePayload: null, endedAt: new Date() }).where(and(eq(dungeonRuns.id, runId), eq(dungeonRuns.cultivatorId, owner), ne(dungeonRuns.status, "FINISHED")));
+  await redis.del(`dungeon:active:${owner}`);
+}
+
 export async function getDungeonBattle(owner: string, id?: string, after = -1) {
   const found = await readRun(owner, id);
-  return found ? view(found.payload, after) : null;
+  if (!found) return null;
+  try { return view(found.payload, after); } catch (error) {
+    if (!isStaleAutoPolicyError(error)) throw error;
+    await finishStaleDungeonRun(owner, found.run.id);
+    return null;
+  }
 }
 export async function changeDungeonBattle(
   actor: { userId: string; cultivatorId: string },

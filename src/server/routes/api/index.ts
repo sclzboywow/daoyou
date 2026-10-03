@@ -1,4 +1,11 @@
+import contentSafetyRouter from './content-safety.router';
+import wechatMessagePushRouter from './wechat-message-push.router';
+import wechatSubscriptionsRouter from './wechat-subscriptions.router';
+import huntsRouter from './hunts.router';
+import playerJournalRouter from './player-journal.router';
 import { artifactMigrationRouter } from './artifact-migration';
+import wechatRewardedAdCallbackRouter from './wechat-rewarded-ad-callback.router';
+import rewardedAdsRouter from './rewarded-ads.router';
 import { manualMigrationRouter } from './manual-migration';
 import divinationRouter from './divination.router';
 import type { AppEnv } from '@server/lib/hono/types';
@@ -56,6 +63,7 @@ import enlightenmentRouter from './enlightenment.router';
 import inscriptionsRouter from './inscriptions.router';
 
 const apiRouter = new Hono<AppEnv>();
+apiRouter.route('/content-safety',contentSafetyRouter);
 
 apiRouter.get('/health-check', async (c) => {
   const [redis, nats] = await Promise.all([
@@ -91,11 +99,17 @@ apiRouter.get('/health-check', async (c) => {
 });
 
 apiRouter.route('/player', playerRouter);
+apiRouter.route('/wechat', wechatRewardedAdCallbackRouter);
+apiRouter.route('/wechat', wechatSubscriptionsRouter);
+apiRouter.route('/wechat/message-push', wechatMessagePushRouter);
+apiRouter.route('/rewarded-ads', rewardedAdsRouter);
+apiRouter.route('/player-journal', playerJournalRouter);
 apiRouter.route('/account', accountRouter);
 apiRouter.route('/admin', adminRouter);
 apiRouter.route('/alchemy', alchemyFormulasRouter);
 apiRouter.route('/auction', auctionRouter);
 apiRouter.route('/arena', arenaRouter);
+apiRouter.route('/hunts', huntsRouter);
 apiRouter.route('/battle-records', battleRecordsRouter);
 apiRouter.route('/black-market', blackMarketRouter);
 apiRouter.route('/captcha', captchaRouter);

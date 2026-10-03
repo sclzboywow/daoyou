@@ -35,6 +35,48 @@ describe('domain event contracts', () => {
     ).toBe(false);
   });
 
+  it('accepts the complete doubled 24-hour snapshot and rejects overflow or mismatched counts', () => {
+    const schema = DomainEventDataSchemas['yield.claimed'];
+    const data = {
+      cultivatorId: CULTIVATOR_ID,
+      actionInstanceId: EVENT_ID,
+      realm: '炼气',
+      materialCount: 16,
+      rewardSnapshot: {
+        poolId: 'yield',
+        poolVersion: 1,
+        items: Array.from({ length: 16 }, () => ({
+          definitionId: 'blueprint.head.10',
+          quantity: 1,
+        })),
+      },
+    };
+    expect(schema.parse(data)).toEqual(data);
+    expect(schema.safeParse({ ...data, materialCount: 15 }).success).toBe(
+      false,
+    );
+    expect(
+      schema.safeParse({
+        ...data,
+        materialCount: 17,
+        rewardSnapshot: {
+          ...data.rewardSnapshot,
+          items: [...data.rewardSnapshot.items, data.rewardSnapshot.items[0]],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        ...data,
+        materialCount: 8,
+        rewardSnapshot: {
+          ...data.rewardSnapshot,
+          items: data.rewardSnapshot.items.slice(0, 8),
+        },
+      }).success,
+    ).toBe(true);
+  });
+
   it('parses a versioned event envelope', () => {
     const definition = DOMAIN_EVENT_DEFINITIONS['alchemy.craft.completed'];
     const event = parseDomainEventEnvelope({

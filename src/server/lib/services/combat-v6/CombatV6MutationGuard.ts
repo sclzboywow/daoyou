@@ -1,7 +1,7 @@
 import { hasActiveCombat } from './CombatOccupancy';
 
 const sensitive =
-  /^(consumable_use|inn_recovery|body_cultivation|marrow_wash|fate_reshape|active_reincarnate|profile_attribute|task_challenge|tower_battle|retreat_|ranking_challenge|product_equip|artifact_equip|sect[._-]|dungeon|spirit_field)/;
+  /^(rewarded_ad_recovery|consumable_use|inn_recovery|body_cultivation|marrow_wash|fate_reshape|active_reincarnate|profile_attribute|task_challenge|tower_battle|retreat_|ranking_challenge|product_equip|artifact_equip|sect[._-]|dungeon|spirit_field)/;
 export class CombatV6MutationLockedError extends Error {
   readonly code = 'WILD_SETTLEMENT_LOCKED';
   readonly status = 409;

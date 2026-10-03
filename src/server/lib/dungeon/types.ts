@@ -21,7 +21,7 @@ const ShortTextSchema = z.string().trim().min(2).max(60);
 
 const NarrativeSchema = z.string().trim().min(12).max(240);
 
-const RoundNarrativeSchema = z.string().trim().min(300).max(900);
+const RoundNarrativeSchema = z.string().trim().min(120).max(900);
 
 const DungeonBattleMetadataSchema = z.object({
   race: z.enum(ENEMY_RACE_VALUES).describe('敌人种族'),
@@ -288,19 +288,7 @@ const DungeonCostsLlmSchema = z
       .max(1)
       .describe('必然触发的单场战斗；没有则为空数组'),
   })
-  .superRefine((costs, ctx) => {
-    const total =
-      costs.resources.length +
-      costs.materials.length +
-      costs.stat_losses.length +
-      costs.battles.length;
-    if (total > 2) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: '每个选项最多包含两项代价',
-      });
-    }
-  });
+;
 
 const DungeonOptionLlmSchema = z.object({
   text: ShortTextSchema.describe('面向玩家的行动、手段与目的'),
@@ -329,22 +317,6 @@ export function createDungeonRoundLlmSchema(maxRewardCount: number) {
         .max(100)
         .describe('进入本轮剧情后的累计危险值'),
     })
-    .superRefine((round, ctx) => {
-      const highRiskCosts = round.options[1]?.costs;
-      const highRiskCostCount = highRiskCosts
-        ? highRiskCosts.resources.length +
-          highRiskCosts.materials.length +
-          highRiskCosts.stat_losses.length +
-          highRiskCosts.battles.length
-        : 0;
-      if (highRiskCostCount === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['options', 1, 'costs'],
-          message: '高风险选项必须包含至少一项真实代价',
-        });
-      }
-    });
 }
 
 // Settlement info from AI

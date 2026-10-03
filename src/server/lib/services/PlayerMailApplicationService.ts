@@ -1,3 +1,5 @@
+import { describeJournal } from './JournalSettlement';
+import { findPlayerMutationRequest } from '@server/lib/repositories/playerStateRepository';
 import { getExecutor } from '@server/lib/drizzle/db';
 import { mails } from '@server/lib/drizzle/schema';
 import { redisLockKeys, withRedisLock } from '@server/lib/redis/lock';
@@ -195,6 +197,7 @@ export function sendCultivatorMail(args: {
         attachment: args.attachment,
         tx,
       });
+      describeJournal(tx, args.actor.cultivatorId, `寄给${result.recipientName}`);
       const resourceChanges: ResourceChangeDescriptor[] = [
         {
           resourceTopic: 'inventory.bag',
@@ -227,7 +230,9 @@ export function claimCultivatorMail(args: {
     async (lease) => {
       const mail = await mailsQuery(args.actor.cultivatorId, args.mailId);
       if (!mail) throw new PlayerMailCommandError('Mail not found', 404);
-      if (mail.isClaimed) {
+      if (mail.isClaimed && !(await findPlayerMutationRequest(
+        args.actor.cultivatorId, 'mail_claim', `mail-claim:${args.mailId}`,
+      ))) {
         throw new PlayerMailCommandError('Already claimed', 400);
       }
       const attachments = normalizeMailAttachments(mail.attachments);
@@ -258,6 +263,7 @@ export function claimCultivatorMail(args: {
           });
           if (!current)
             throw new PlayerMailCommandError('邮件已领取或不存在', 400);
+          describeJournal(tx, args.actor.cultivatorId, current.title);
           const attachments = normalizeMailAttachments(current.attachments);
           const gains = attachmentsToResourceOperations(attachments);
           if (attachments.length === 0) {
@@ -316,7 +322,7 @@ export function claimCultivatorMail(args: {
   );
 }
 
-export function claimAllCultivatorMail(args: { actor: MailActor }) {
+export function claimAllCultivatorMail(args: { actor: MailActor; requestId: string }) {
   return withRedisLock(
     {
       key: redisLockKeys.cultivatorMutation(args.actor.cultivatorId),
@@ -336,6 +342,7 @@ export function claimAllCultivatorMail(args: { actor: MailActor }) {
         userId: args.actor.userId,
         cultivatorId: args.actor.cultivatorId,
         source: 'mail_claim_all',
+        idempotency: { key: args.requestId, fingerprint: 'mail-claim-all' },
         allowEmpty: true,
         command: async (tx) => {
           const pendingMails = await tx.query.mails.findMany({
@@ -358,6 +365,7 @@ export function claimAllCultivatorMail(args: { actor: MailActor }) {
             tx,
           );
           const mailIds = claimable.map((mail) => mail.id);
+          describeJournal(tx, args.actor.cultivatorId, `${mailIds.length}封`);
           const attachments = claimable.flatMap(
             (mail) => (mail.attachments as MailAttachment[]) || [],
           );

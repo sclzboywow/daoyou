@@ -40,6 +40,7 @@ export function registerInternalCronJobs(
   }
 
   scheduledTasks = [
+    Bun.cron('* * * * *', () => runScheduledJob('wechat.qi-full')),
     Bun.cron(AUCTION_EXPIRE_SCHEDULE, () => runScheduledJob('auction.expire')),
     Bun.cron(RANK_REWARDS_SCHEDULE, () =>
       runScheduledJob('ranking.rewards.distribute'),
@@ -70,6 +71,7 @@ export function registerInternalCronJobs(
   schedulerRegistered = true;
 
   console.info('[cron] registered Bun cron jobs', {
+    qiFullReminder: '* * * * *',
     auctionExpire: AUCTION_EXPIRE_SCHEDULE,
     rankRewardsUtc: RANK_REWARDS_SCHEDULE,
     rankRewardsLocal: '00:00 Asia/Shanghai',

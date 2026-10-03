@@ -1,3 +1,4 @@
+import type { PlayerJournalEvent } from '@shared/contracts/playerJournal';
 import type { StoryStatus, StoryTrack } from '@shared/story/schema';
 import type { SystemMailConditions } from '@shared/contracts/systemMail';
 import type { RewardSelection } from '@shared/contracts/adminRewards';
@@ -715,6 +716,25 @@ export const resourceEvents = pgTable(
   ],
 );
 
+// Journal rows are also execution receipts; do not age them out with replay events.
+export const playerJournal = pgTable(
+  'wanjiedaoyou_player_journal',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    cultivatorId: uuid('cultivator_id').notNull()
+      .references(() => cultivators.id, { onDelete: 'cascade' }),
+    operationKey: varchar('operation_key', { length: 160 }).notNull(),
+    requestFingerprint: varchar('request_fingerprint', { length: 128 }),
+    // Null only while the owning transaction is executing; never committed empty.
+    event: jsonb('event').$type<PlayerJournalEvent>(),
+    createdAt: timestamp('created_at', { precision: 3 }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('player_journal_operation_unique').on(table.cultivatorId, table.operationKey),
+    index('player_journal_timeline_idx').on(table.cultivatorId, table.createdAt, table.id),
+  ],
+);
+
 export const playerMutationRequests = pgTable(
   'wanjiedaoyou_player_mutation_requests',
   {
@@ -1127,6 +1147,24 @@ export const combatReplayParticipants = pgTable(
 );
 
 // 邮件/传音玉简表
+// Reward receipts are keyed to the authoritative yield period or battle UUID.
+export const rewardedAdTickets = pgTable('wanjiedaoyou_rewarded_ad_tickets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  cultivatorId: uuid('cultivator_id').notNull().references(()=>cultivators.id,{onDelete:'cascade'}),
+  placement: varchar('placement',{length:16}).notNull(),
+  targetKey: text('target_key').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  consumedAt: timestamp('consumed_at'),
+  verifiedAt: timestamp('verified_at'),
+  transactionId: text('transaction_id'),
+}, table=>[
+  uniqueIndex('rewarded_ad_transaction_uidx').on(table.transactionId),
+  uniqueIndex('rewarded_ad_target_uidx').on(table.cultivatorId,table.placement,table.targetKey),
+  check('rewarded_ad_placement_check',sql`${table.placement} in ('yield','recovery')`),
+]);
+
 // Published campaigns are immutable; mails are the durable per-role delivery receipt.
 export const systemMailCampaigns = pgTable(
   'wanjiedaoyou_system_mail_campaigns',
@@ -1152,6 +1190,7 @@ export const mails = pgTable(
   'wanjiedaoyou_mails',
   {
     systemMailCampaignId: uuid('system_mail_campaign_id').references(() => systemMailCampaigns.id, { onDelete: 'restrict' }),
+    deduplicationKey: varchar('deduplication_key', { length: 180 }),
     id: uuid('id').primaryKey().defaultRandom(),
     cultivatorId: uuid('cultivator_id')
       .references(() => cultivators.id, { onDelete: 'cascade' })
@@ -1165,6 +1204,7 @@ export const mails = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [
+    uniqueIndex('mails_deduplication_key_unique').on(table.deduplicationKey).where(sql`${table.deduplicationKey} is not null`),
     uniqueIndex('mails_campaign_cultivator_unique').on(table.systemMailCampaignId, table.cultivatorId),
     index('mails_cultivator_created_idx').on(
       table.cultivatorId,
@@ -2075,3 +2115,53 @@ export const towerWeeks = pgTable('wanjiedaoyou_tower_weeks', {
   config: jsonb('config').$type<StoredTowerWeek>().notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// Existing production subscription table; restored without a new migration.
+export type WechatSubscriptionIntentStatus =
+  | 'pending'
+  | 'sending'
+  | 'sent'
+  | 'cancelled'
+  | 'failed';
+
+export const wechatSubscriptionIntents = pgTable(
+  'wanjiedaoyou_wechat_subscription_intents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    cultivatorId: uuid('cultivator_id')
+      .references(() => cultivators.id, { onDelete: 'cascade' })
+      .notNull(),
+    kind: varchar('kind', { length: 32 }).$type<'qi_full'>().notNull(),
+    templateId: varchar('template_id', { length: 128 }).notNull(),
+    targetAt: timestamp('target_at').notNull(),
+    status: varchar('status', { length: 20 })
+      .$type<WechatSubscriptionIntentStatus>()
+      .notNull()
+      .default('pending'),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    lastAttemptAt: timestamp('last_attempt_at'),
+    sentAt: timestamp('sent_at'),
+    failureCode: varchar('failure_code', { length: 64 }),
+    failureMessage: text('failure_message'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('wechat_subscription_intents_due_idx').on(
+      table.status,
+      table.targetAt,
+    ),
+    index('wechat_subscription_intents_cultivator_idx').on(
+      table.cultivatorId,
+      table.status,
+    ),
+    uniqueIndex('wechat_subscription_intents_active_uidx')
+      .on(table.cultivatorId, table.kind)
+      .where(sql`${table.status} IN ('pending', 'sending')`),
+  ],
+);
+

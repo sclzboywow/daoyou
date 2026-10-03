@@ -1878,10 +1878,28 @@ export class DungeonService {
       sceneId: 'dungeon-round',
     });
 
+    const normalizedOptions = aiRes.output.options.map((option, index) => {
+      const hasCost =
+        option.costs.resources.length > 0 ||
+        option.costs.materials.length > 0 ||
+        option.costs.stat_losses.length > 0 ||
+        option.costs.battles.length > 0;
+      if (index === 1 && !hasCost) {
+        return {
+          ...option,
+          costs: {
+            ...option.costs,
+            stat_losses: [{ type: 'hp_loss' as const, rank: 'minor' as const }],
+          },
+        };
+      }
+      return option;
+    });
+
     return DungeonRoundSchema.parse({
       scene_description: aiRes.output.scene_description,
       interaction: {
-        options: aiRes.output.options.map((option, index) => {
+        options: normalizedOptions.map((option, index) => {
           const costs: DungeonOptionCost[] = [
             ...option.costs.resources.map((cost) => ({
               type: cost.type,
