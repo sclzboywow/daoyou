@@ -10,6 +10,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { newRewardAttachment } from './MailInventory';
 
 import { WECHAT_GAME_GIFTS } from '@shared/config/wechatGameGifts';
+import { wechatGiftAttachment } from '@shared/wechat/giftRewards';
 import type { WechatGameGiftPayload } from '@shared/wechat/messagePush';
 
 function buildGiftAttachment(
@@ -43,13 +44,18 @@ export async function deliverWechatGameGift(payload: WechatGameGiftPayload) {
   if (payload.isPreview) {
     const previewEntries = await findPublishedItemLibraryByItemIds(
       payload.goods
-        .filter((item) => item.id !== 'spirit_stones')
+        .filter(
+          (item) =>
+            item.id !== 'spirit_stones' &&
+            !wechatGiftAttachment(item.id, item.quantity),
+        )
         .map((item) => item.id),
     );
     const previewEntryMap = new Map(
       previewEntries.map((entry) => [entry.itemId, entry]),
     );
     for (const item of payload.goods) {
+      if (wechatGiftAttachment(item.id, item.quantity)) continue;
       const entry = previewEntryMap.get(item.id);
       if (entry) buildGiftAttachment(entry, item.quantity);
       if (item.id !== 'spirit_stones' && !entry) {
@@ -92,11 +98,17 @@ export async function deliverWechatGameGift(payload: WechatGameGiftPayload) {
 
   const itemEntries = await findPublishedItemLibraryByItemIds(
     payload.goods
-      .filter((item) => item.id !== 'spirit_stones')
+      .filter(
+        (item) =>
+          item.id !== 'spirit_stones' &&
+          !wechatGiftAttachment(item.id, item.quantity),
+      )
       .map((item) => item.id),
   );
   const entryMap = new Map(itemEntries.map((entry) => [entry.itemId, entry]));
   const attachments = payload.goods.map((item) => {
+    const current = wechatGiftAttachment(item.id, item.quantity);
+    if (current) return current;
     if (item.id === 'spirit_stones') {
       return {
         type: 'spirit_stones' as const,

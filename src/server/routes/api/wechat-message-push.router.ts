@@ -31,6 +31,7 @@ router.get('/', (c) => {
   return c.text(echo);
 });
 router.post('/', async (c) => {
+  let stage = 'envelope';
   const contentType = c.req.header('content-type') ?? '';
   const json = contentType.includes('json');
   const result = (code: number, message: string) =>
@@ -61,16 +62,35 @@ router.post('/', async (c) => {
       })
     )
       return result(1, 'Invalid encrypted signature');
-    const message = parseMessagePush(
-      decryptMessagePush(settings.aesKey, encrypt, settings.appId),
+    stage = 'decrypt';
+    const decrypted = decryptMessagePush(
+      settings.aesKey,
+      encrypt,
+      settings.appId,
     );
+    stage = 'parse';
+    const message = parseMessagePush(decrypted);
     // This is the shared WeChat message endpoint; unrelated signed events are ACKed.
     if (!message.gift) return result(0, 'Success');
+    stage = 'delivery';
     await deliverWechatGameGift(message.gift);
     return result(0, 'Success');
-  } catch {
+  } catch (error) {
     // Do not log OpenID, message bodies, tokens or ciphertext.
-    console.warn('[wechat-message-push] delivery rejected or unavailable');
+    const message = error instanceof Error ? error.message : '';
+    const reason = message.startsWith('礼包道具未配置或已下架：')
+      ? 'goods_unavailable'
+      : message === '小游戏礼包未配置'
+        ? 'gift_unconfigured'
+        : message === '礼包接收玩家尚未登录游戏'
+          ? 'account_unlinked'
+          : message === '礼包接收玩家没有 active 角色'
+            ? 'character_missing'
+            : 'invalid_or_unavailable';
+    console.warn('[wechat-message-push] delivery rejected or unavailable', {
+      stage,
+      reason,
+    });
     return result(1, 'Gift delivery failed');
   }
 });

@@ -8,7 +8,9 @@ export function moderationInput(method: string, path: string, input: unknown): s
   if(path==='/api/generate-character') fields=['userInput'];
   else if(path==='/api/world-chat/messages'||path==='/api/sects/current/chat/messages') fields=['textContent'];
   else if(path==='/api/cultivator/mail/send') fields=['content','title'];
-  else if(path==='/api/cultivator/profile/title') fields=['title'];
+  // The production router is mounted at /api/cultivator/title. Keep the
+  // legacy profile path covered too so title edits cannot bypass moderation.
+  else if(path==='/api/cultivator/title'||path==='/api/cultivator/profile/title') fields=['title'];
   else if(path==='/api/craft') fields=['userPrompt'];
   else if(path==='/api/identity-reshape/session'||path==='/api/identity-reshape/generate') fields=['description'];
   else if(path==='/api/bet-battles/create') fields=['taunt'];
@@ -16,7 +18,7 @@ export function moderationInput(method: string, path: string, input: unknown): s
   else if(path==='/api/feedback') fields=['content','title'];
   else if(path==='/api/combat-v6/beasts/rename') fields=['name'];
   else if(path==='/api/auth/update-user') fields=['name'];
-  else if(['/api/auth/sign-up/email','/api/auth/sign-up/wechat-mini-game','/api/auth/sign-in/email-otp'].includes(path)) fields=['name','displayName'];
+  else if(['/api/auth/sign-up/email','/api/auth/sign-up/wechat-mini-game','/api/auth/sign-in/email-otp','/api/auth/email-otp/send-verification-otp'].includes(path)) fields=['name','displayName'];
   const result=fields.flatMap(field=>typeof body[field]==='string'?[body[field] as string]:[]);
   if(path==='/api/world-chat/messages'||path==='/api/sects/current/chat/messages'){
     const payload=body.payload as {text?:unknown}|undefined;

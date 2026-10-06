@@ -13,7 +13,7 @@ export const contentSafetyInputGuard:MiddlewareHandler<AppEnv>=async(c,next)=>{
   if(!content.length)return next();
   // New accounts have no session/OpenID yet. Keep Better Auth's OTP/captcha
   // flow intact while enforcing the same local dictionary on display names.
-  if(['/api/auth/sign-up/email','/api/auth/sign-up/wechat-mini-game','/api/auth/sign-in/email-otp'].includes(c.req.path)){
+  if(['/api/auth/sign-up/email','/api/auth/sign-up/wechat-mini-game','/api/auth/sign-in/email-otp','/api/auth/email-otp/send-verification-otp'].includes(c.req.path)){
     if(content.some(value=>findLocalContentViolation(value)))return c.json({success:false,error:'内容不符合社区规范，请修改后重试',code:'CONTENT_REJECTED'},400);
     return next();
   }
